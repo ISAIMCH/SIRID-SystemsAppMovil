@@ -11,6 +11,7 @@ import type { Routine } from './types';
 export default function DashboardScreen() {
   const { user } = useAuth();
   const isClient = user?.role === 'Cliente';
+  const isAdmin = user?.role === 'Admin';
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [routineError, setRoutineError] = useState('');
@@ -92,9 +93,14 @@ export default function DashboardScreen() {
               <ActionButton onPress={() => router.push('/(main)/routines')}>Ver mis rutinas</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/access')}>Abrir código de acceso</ActionButton>
             </View>
+          ) : isAdmin ? (
+            <View style={styles.actionStack}>
+              <ActionButton onPress={() => router.push('/(main)/staff')}>Agregar Coach o Cliente</ActionButton>
+              <ActionButton secondary onPress={() => router.push('/(main)/routines')}>Consultar rutinas</ActionButton>
+            </View>
           ) : (
             <View style={styles.actionStack}>
-              <ActionButton onPress={() => router.push('/(main)/clients')}>Asignar clientes</ActionButton>
+              <ActionButton onPress={() => router.push('/(main)/clients')}>Ver mis clientes</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/routines')}>Consultar rutinas</ActionButton>
             </View>
           )}

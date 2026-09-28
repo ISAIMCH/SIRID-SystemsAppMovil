@@ -7,6 +7,7 @@ import { palette } from '@/features/gymgo/theme';
 export default function AppTabs() {
   const { user } = useAuth();
   const isClient = user?.role === 'Cliente';
+  const isAdmin = user?.role === 'Admin';
 
   return (
     <Tabs
@@ -54,10 +55,20 @@ export default function AppTabs() {
       <Tabs.Screen
         name="clients"
         options={{
-          title: isClient ? 'Clientes' : 'Asignaciones',
-          href: isClient ? null : undefined,
+          title: 'Clientes',
+          href: isClient || isAdmin ? null : undefined,
           tabBarIcon: ({ color }) => (
             <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="staff"
+        options={{
+          title: 'Personal',
+          href: isAdmin ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'person.badge.plus', android: 'person_add', web: 'person_add' }} tintColor={color} size={22} />
           ),
         }}
       />
