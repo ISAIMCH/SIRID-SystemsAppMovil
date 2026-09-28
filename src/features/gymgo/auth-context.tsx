@@ -14,10 +14,19 @@ export type GymGoUser = {
   isActive: boolean;
   goal?: string;
   experienceLevel?: 'principiante' | 'intermedio' | 'avanzado';
+  availableTrainingDays?: number[];
+  preferredTrainingTime?: string;
+  restrictions?: string;
+  preferredZones?: string[];
   membership?: {
     status: 'pending' | 'active' | 'suspended' | 'expired';
     startsAt?: string;
     expiresAt?: string;
+    planName?: string;
+    price?: number;
+    currency?: string;
+    durationDays?: number;
+    autoRenew?: boolean;
   };
   assignedCoach?: string | null;
 };
@@ -26,8 +35,20 @@ type AuthContextValue = {
   user: GymGoUser | null;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (name: string, email: string, password: string) => Promise<void>;
+  signUp: (input: ClientRegistration) => Promise<void>;
   signOut: () => Promise<void>;
+};
+
+export type ClientRegistration = {
+  name: string;
+  email: string;
+  password: string;
+  goal?: string;
+  experienceLevel?: GymGoUser['experienceLevel'];
+  availableTrainingDays?: number[];
+  preferredTrainingTime?: string;
+  restrictions?: string;
+  preferredZones?: string[];
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -67,11 +88,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setUser(response.data.user);
   }
 
-  async function signUp(name: string, email: string, password: string) {
+  async function signUp(input: ClientRegistration) {
     const response = await api.post<{ token: string; user: GymGoUser }>('/auth/register', {
-      name: name.trim(),
-      email: email.trim().toLowerCase(),
-      password,
+      ...input,
+      name: input.name.trim(),
+      email: input.email.trim().toLowerCase(),
     });
     await writeAccessToken(response.data.token);
     setUser(response.data.user);

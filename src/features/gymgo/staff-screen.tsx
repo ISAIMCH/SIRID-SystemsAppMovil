@@ -10,6 +10,12 @@ import { palette } from './theme';
 type ManagedRole = 'Coach' | 'Cliente';
 type CreatedUser = { id: string; name: string; email: string; role: ManagedRole };
 
+const clientGoals = ['ganar masa muscular', 'perder grasa', 'definición', 'fuerza', 'acondicionamiento'];
+const clientDays = [
+  { value: 1, label: 'L' }, { value: 2, label: 'M' }, { value: 3, label: 'X' },
+  { value: 4, label: 'J' }, { value: 5, label: 'V' }, { value: 6, label: 'S' }, { value: 0, label: 'D' },
+];
+
 export default function StaffScreen() {
   const { user } = useAuth();
   const [role, setRole] = useState<ManagedRole>('Coach');
@@ -17,6 +23,11 @@ export default function StaffScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [goal, setGoal] = useState('');
+  const [experienceLevel, setExperienceLevel] = useState<'principiante' | 'intermedio' | 'avanzado' | ''>('');
+  const [availableTrainingDays, setAvailableTrainingDays] = useState<number[]>([]);
+  const [planName, setPlanName] = useState('');
+  const [planPrice, setPlanPrice] = useState('');
+  const [planDurationDays, setPlanDurationDays] = useState('30');
   const [coachId, setCoachId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -50,6 +61,28 @@ export default function StaffScreen() {
       setError('El ID del Coach debe contener 24 caracteres hexadecimales.');
       return;
     }
+    if (role === 'Cliente' && !goal) {
+      setError('Selecciona el objetivo deportivo del cliente.');
+      return;
+    }
+    if (role === 'Cliente' && !experienceLevel) {
+      setError('Selecciona el nivel de experiencia del cliente.');
+      return;
+    }
+    if (role === 'Cliente' && availableTrainingDays.length === 0) {
+      setError('Selecciona al menos un día disponible.');
+      return;
+    }
+    const price = Number(planPrice);
+    const durationDays = Number(planDurationDays);
+    if (role === 'Cliente' && (!planName.trim() || !planPrice.trim() || !Number.isFinite(price) || price < 0)) {
+      setError('Configura nombre y precio válido para la membresía del cliente.');
+      return;
+    }
+    if (role === 'Cliente' && (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 730)) {
+      setError('La duración del plan debe ser de 1 a 730 días.');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -61,7 +94,12 @@ export default function StaffScreen() {
         ...(role === 'Cliente'
           ? {
               membershipStatus: 'pending',
-              ...(goal.trim() ? { goal: goal.trim() } : {}),
+              goal,
+              experienceLevel,
+              availableTrainingDays,
+              membershipPlanName: planName.trim(),
+              membershipPrice: price,
+              membershipDurationDays: durationDays,
               ...(coachId.trim() ? { assignedCoach: coachId.trim() } : {}),
             }
           : {}),
@@ -72,6 +110,11 @@ export default function StaffScreen() {
       setEmail('');
       setPassword('');
       setGoal('');
+      setExperienceLevel('');
+      setAvailableTrainingDays([]);
+      setPlanName('');
+      setPlanPrice('');
+      setPlanDurationDays('30');
       setCoachId('');
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, 'No se pudo crear la cuenta. Intenta de nuevo.'));
@@ -137,14 +180,54 @@ export default function StaffScreen() {
         />
         {role === 'Cliente' ? (
           <>
-            <Field label="Objetivo de entrenamiento (opcional)" value={goal} onChangeText={setGoal} />
+            <View style={styles.profileGroup}>
+              <Text style={styles.label}>Objetivo deportivo</Text>
+              <View style={styles.options}>
+                {clientGoals.map((option) => (
+                  <Choice key={option} label={option} selected={goal === option} onPress={() => setGoal(option)} />
+                ))}
+              </View>
+            </View>
+            <View style={styles.profileGroup}>
+              <Text style={styles.label}>Nivel de experiencia</Text>
+              <View style={styles.options}>
+                {(['principiante', 'intermedio', 'avanzado'] as const).map((option) => (
+                  <Choice key={option} label={option} selected={experienceLevel === option} onPress={() => setExperienceLevel(option)} />
+                ))}
+              </View>
+            </View>
+            <View style={styles.profileGroup}>
+              <Text style={styles.label}>Días disponibles para entrenar</Text>
+              <View style={styles.dayOptions}>
+                {clientDays.map((day) => {
+                  const selected = availableTrainingDays.includes(day.value);
+                  return (
+                    <Pressable
+                      key={day.value}
+                      accessibilityRole="checkbox"
+                      accessibilityLabel={['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][day.value]}
+                      accessibilityState={{ checked: selected }}
+                      onPress={() => setAvailableTrainingDays((current) => (
+                        selected ? current.filter((value) => value !== day.value) : [...current, day.value]
+                      ))}
+                      style={[styles.dayChip, selected && styles.optionSelected]}>
+                      <Text style={[styles.dayText, selected && styles.optionTextSelected]}>{day.label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+            <SectionTitle>Plan de membresía</SectionTitle>
+            <Field label="Nombre del plan" placeholder="Mensualidad" value={planName} onChangeText={setPlanName} />
+            <Field label="Precio (MXN)" keyboardType="decimal-pad" value={planPrice} onChangeText={setPlanPrice} />
+            <Field label="Duración (días)" keyboardType="number-pad" value={planDurationDays} onChangeText={setPlanDurationDays} />
             <Field
               label="ID del Coach (opcional)"
               autoCapitalize="none"
               value={coachId}
               onChangeText={setCoachId}
             />
-            <Notice>El Cliente se crea con membresía pendiente. Actívala antes de permitirle generar un QR de acceso.</Notice>
+            <Notice>El Cliente se crea con membresía pendiente. El plan, precio y duración habilitan la solicitud de pago; apruébala en Pago y membresía para activar el acceso.</Notice>
           </>
         ) : (
           <Notice>Comparte las credenciales iniciales con el Coach de forma segura para que pueda iniciar sesión.</Notice>
@@ -165,8 +248,30 @@ export default function StaffScreen() {
   );
 }
 
+function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      onPress={onPress}
+      style={[styles.choice, selected && styles.optionSelected]}>
+      <Text style={[styles.choiceText, selected && styles.optionTextSelected]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   intro: { gap: 8 },
+  profileGroup: { gap: 8 },
+  label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
+  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  choice: { minHeight: 36, justifyContent: 'center', borderWidth: 1, borderColor: palette.line, borderRadius: 7, backgroundColor: palette.surface, paddingHorizontal: 10, paddingVertical: 6 },
+  choiceText: { color: palette.ink, fontSize: 11, fontWeight: '700' },
+  optionSelected: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
+  optionTextSelected: { color: palette.white },
+  dayOptions: { flexDirection: 'row', justifyContent: 'space-between', gap: 7 },
+  dayChip: { width: 38, height: 38, borderWidth: 1, borderColor: palette.line, borderRadius: 19, backgroundColor: palette.surface, justifyContent: 'center', alignItems: 'center' },
+  dayText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
   roleSelector: { flexDirection: 'row', gap: 10 },
   roleOption: {
     flex: 1,

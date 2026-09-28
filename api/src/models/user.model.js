@@ -9,6 +9,11 @@ const membershipSchema = new mongoose.Schema({
   },
   startsAt: Date,
   expiresAt: Date,
+  planName: { type: String, trim: true, maxlength: 80 },
+  price: { type: Number, min: 0 },
+  currency: { type: String, uppercase: true, trim: true, maxlength: 3, default: 'MXN' },
+  durationDays: { type: Number, min: 1, max: 730, default: 30 },
+  autoRenew: { type: Boolean, default: false },
 }, { _id: false });
 
 const userSchema = new mongoose.Schema({
@@ -34,6 +39,10 @@ const userSchema = new mongoose.Schema({
   assignedCoach: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   goal: { type: String, trim: true, maxlength: 120 },
   experienceLevel: { type: String, enum: ['principiante', 'intermedio', 'avanzado'] },
+  availableTrainingDays: [{ type: Number, min: 0, max: 6 }],
+  preferredTrainingTime: { type: String, trim: true, maxlength: 80 },
+  restrictions: { type: String, trim: true, maxlength: 1000 },
+  preferredZones: [{ type: String, trim: true, maxlength: 80 }],
   currentlyInside: { type: Boolean, default: false },
 }, { timestamps: true });
 
@@ -57,6 +66,10 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
     assignedCoach: this.assignedCoach,
     goal: this.goal,
     experienceLevel: this.experienceLevel,
+    availableTrainingDays: this.availableTrainingDays,
+    preferredTrainingTime: this.preferredTrainingTime,
+    restrictions: this.restrictions,
+    preferredZones: this.preferredZones,
   };
 };
 

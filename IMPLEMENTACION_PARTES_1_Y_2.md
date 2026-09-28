@@ -17,6 +17,8 @@ El endpoint `GET /health` devuelve el estado de la API. La conexión a MongoDB s
 - **User:** nombre, correo, hash de contraseña, rol, estado de cuenta, datos de perfil, membresía, Coach asignado y estado dentro/fuera del gimnasio. Roles implementados: `Admin`, `Coach` y `Cliente`.
 - **Routine:** objetivo, nivel, duración, días semanales, ejercicios, estado, cliente asignado y autor. Cada ejercicio incluye grupo muscular, series, repeticiones, peso sugerido, descanso y orden.
 - **AccessIoT:** usuario, tipo de evento (`check-in`/`check-out`), origen, lector IoT, identificador único del QR y fecha del evento.
+- **Equipment:** nombre, zona, marca, estado (`available`, `busy`, `out_of_service`) y frecuencia de uso.
+- **Payment:** cliente, plan/precio al solicitar, duración, método en recepción, referencia, estado y Admin procesador.
 
 ### Autenticación y permisos
 
@@ -28,6 +30,8 @@ Las contraseñas se guardan hasheadas con bcrypt. El login entrega un JWT firmad
 | `POST /api/auth/login` | Público | Inicia sesión y devuelve JWT y perfil. |
 | `POST /api/auth/bootstrap-admin` | Temporal, clave de bootstrap | Crea el primer Admin si el bootstrap está habilitado y aún no existe uno. |
 | `POST /api/auth/users` | Admin | Crea un Coach o Cliente; puede vincular el cliente a un Coach. |
+| `GET /api/auth/users?role=Cliente` | Admin o Coach | Lista clientes; Coach solo ve clientes asignados. |
+| `GET /api/auth/users/:id` | Admin o Coach autorizado | Consulta perfil deportivo, membresía y Coach. |
 | `PATCH /api/auth/users/:id/membership` | Admin | Actualiza estado e intervalo de vigencia de la membresía de un Cliente. |
 | `GET /api/auth/me` | JWT | Devuelve el perfil de la sesión actual. |
 | `GET /api/routines` | JWT | Devuelve rutinas visibles para el rol: propias del Cliente, de clientes asignados para Coach o todas para Admin. |
@@ -35,6 +39,12 @@ Las contraseñas se guardan hasheadas con bcrypt. El login entrega un JWT firmad
 | `GET /api/routines/:id` | JWT con autorización | Consulta una rutina propia, de un cliente asignado o Admin. |
 | `PATCH /api/routines/:id` | Admin o Coach autorizado | Modifica una rutina. |
 | `DELETE /api/routines/:id` | Admin o Coach autorizado | Elimina una rutina. |
+| `GET /api/inventory` | JWT | Lista equipos y disponibilidad. |
+| `POST`, `PATCH /api/inventory` | Admin | Crea equipos y actualiza su estado. |
+| `GET /api/billing/me` | Cliente | Consulta membresía e historial propio. |
+| `POST /api/billing/payments` | Cliente | Genera referencia para pagar en recepción. |
+| `GET /api/billing/payments` | Admin | Revisa solicitudes e historial. |
+| `PATCH /api/billing/payments/:id/status` | Admin | Confirma/cancela y activa/renueva la membresía al confirmar. |
 | `POST /api/access/qr` | Cliente con membresía activa | Emite un QR firmado de corta duración. |
 | `POST /api/iot/access` | Dispositivo autenticado | Valida el QR y registra entrada o salida. |
 
@@ -66,9 +76,9 @@ Dependencias móviles añadidas para esta integración: `axios`, `react-native-q
 
 ### Vistas por rol
 
-- **Cliente:** dashboard con estado de membresía y conteo de rutinas, pantalla de acceso con QR renovable y temporizador, y consulta de rutinas con ejercicios, series, repeticiones, peso y descanso.
-- **Admin:** dashboard operativo básico, creación de cuentas de Cliente desde la app y asignación opcional por ID de Coach. Las membresías creadas quedan pendientes y se deben activar antes de permitir el acceso QR.
-- **Coach:** dashboard, rutinas de sus clientes y resumen básico de clientes que se identifican desde las rutinas asignadas.
+- **Cliente:** dashboard con estado de membresía, registro de objetivo/nivel/días/preferencias, QR renovable, consulta de rutinas e historial/pago en recepción.
+- **Admin:** dashboard, alta de Coach/Cliente, configuración inicial de perfil y plan/precio, directorio, inventario y revisión de solicitudes de pago.
+- **Coach:** dashboard, directorio limitado a clientes asignados, rutinas y catálogo de equipos.
 - **Todos los roles:** pueden cerrar sesión. Los tabs visibles dependen del rol recibido desde la API.
 
 El QR en la app se vuelve a solicitar cada 45 segundos, antes de su expiración predeterminada de 60 segundos, y ofrece un botón de reintento si falla la petición.
@@ -111,6 +121,6 @@ npm start
 
 ## Alcance pendiente
 
-La primera y segunda parte son una base funcional conectada a Render, no la implementación de todos los módulos del README. Aún no están desarrollados: login por OTP/correo, flujo de invitación de Coach por email, directorio de clientes con nombres y perfiles, editor de rutinas dentro de la app, métricas reales de demanda y ocupación, historial de entrenamientos, pagos, inventario, mantenimiento, notificaciones push, ventas ni PIN/NFC.
+El módulo de pago actualmente genera una referencia para recepción; el personal Admin confirma o cancela y el servidor actualiza la vigencia de la membresía. No se procesa tarjeta ni existe proveedor online configurado. Aún no están desarrollados: login por OTP/correo, invitación de Coach por email, configuración completa del gimnasio/sucursales, pasarela/renovación automática, creación/edición de rutinas en la app, métricas reales de demanda/ocupación, registro e historial de entrenamientos, rachas, mantenimiento, notificaciones push, ventas ni PIN/NFC.
 
-La app Admin permite crear Clientes, pero la creación de Coach se realiza actualmente por el endpoint protegido de la API. El dashboard indica que las métricas de demanda no están disponibles; no muestra datos ficticios. Antes de producción comercial conviene añadir pruebas de integración de autenticación/QR y revisar las alertas moderadas de dependencias transitivas reportadas por `npm audit` sin forzar actualizaciones incompatibles del SDK Expo.
+El dashboard indica que las métricas de demanda no están disponibles; no muestra datos ficticios. Antes de producción comercial conviene añadir pruebas de integración de inventario, pagos, membresías y QR, e integrar un proveedor de pago antes de habilitar cobros online.

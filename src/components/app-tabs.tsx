@@ -8,6 +8,7 @@ export default function AppTabs() {
   const { user } = useAuth();
   const isClient = user?.role === 'Cliente';
   const isAdmin = user?.role === 'Admin';
+  const canManageClients = user?.role === 'Admin' || user?.role === 'Coach';
 
   return (
     <Tabs
@@ -53,10 +54,38 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
+        name="inventory"
+        options={{
+          title: 'Equipos',
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="billing"
+        options={{
+          title: isAdmin ? 'Pagos' : 'Membresía',
+          href: user?.role === 'Cliente' || isAdmin ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'creditcard.fill', android: 'credit_card', web: 'credit_card' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="clients"
         options={{
-          title: 'Clientes',
-          href: isClient || isAdmin ? null : undefined,
+          href: null,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="directory"
+        options={{
+          title: 'Directorio',
+          href: canManageClients ? undefined : null,
           tabBarIcon: ({ color }) => (
             <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor={color} size={22} />
           ),

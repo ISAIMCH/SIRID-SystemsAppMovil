@@ -1136,7 +1136,7 @@ El cliente es el eje principal de la experiencia de la app porque interactúa co
 
 ## Backend API (Node.js, Express y MongoDB)
 
-El backend independiente está en `api/`. Está organizado por configuración, modelos, controladores, rutas y middleware. La API implementa registro de clientes, bootstrap protegido del primer Admin, creación de Coach/Cliente por Admin, login JWT, autorización de rutinas y acceso QR IoT. Los clientes nuevos quedan con membresía `pending`; un Admin debe activarla antes de que el acceso QR sea aceptado.
+El backend independiente está en `api/`. Está organizado por configuración, modelos, controladores, rutas y middleware. La API implementa registro de clientes con perfil deportivo, bootstrap protegido del primer Admin, creación de Coach/Cliente por Admin, login JWT, rutinas, directorio protegido, catálogo de equipos, membresías, solicitudes de pago en recepción y acceso QR IoT. Los clientes nuevos quedan con membresía `pending`; un Admin puede asignarles plan y precio, y un pago confirmado activa o renueva la membresía.
 
 ### Ejecución local
 
@@ -1174,12 +1174,20 @@ Para crear el primer Admin, mantén `ENABLE_ADMIN_BOOTSTRAP=true` temporalmente 
 | `POST` | `/api/auth/login` | Público | Entrega JWT y perfil seguro |
 | `POST` | `/api/auth/bootstrap-admin` | Público, habilitación temporal + clave | Crea el primer Admin |
 | `POST` | `/api/auth/users` | Admin | Crea Coach o Cliente y asigna coach |
+| `GET` | `/api/auth/users?role=Cliente` | Admin o Coach | Lista clientes; Coach solo ve los suyos |
+| `GET` | `/api/auth/users/:id` | Admin o Coach autorizado | Consulta perfil, membresía y Coach del cliente |
 | `PATCH` | `/api/auth/users/:id/membership` | Admin | Activa, suspende o actualiza vigencia de membresía |
 | `GET` | `/api/auth/me` | JWT | Devuelve el usuario autenticado |
 | `GET`, `POST`, `PATCH`, `DELETE` | `/api/routines` | JWT y rol según operación | Consulta, crea, modifica y elimina rutinas |
+| `GET` | `/api/inventory` | JWT | Consulta equipos, zona, marca, estado y frecuencia de uso |
+| `POST`, `PATCH` | `/api/inventory` | Admin | Da de alta equipos y actualiza su disponibilidad |
+| `GET` | `/api/billing/me` | Cliente | Consulta membresía e historial propio |
+| `POST` | `/api/billing/payments` | Cliente | Genera referencia para pagar en recepción |
+| `GET` | `/api/billing/payments` | Admin | Revisa solicitudes e historial de pagos |
+| `PATCH` | `/api/billing/payments/:id/status` | Admin | Confirma o cancela; al confirmar activa o renueva membresía |
 | `POST` | `/api/access/qr` | Cliente con membresía activa | Emite QR firmado de corta duración |
 | `POST` | `/api/iot/access` | Dispositivo con `x-device-key` | Valida QR, bloquea reuso y registra check-in/check-out |
 
 El hardware envía `{"qrToken":"...","deviceId":"lector-entrada"}` a `/api/iot/access` usando HTTPS y el header `x-device-key`. Cada QR vence en 60 segundos por defecto y solo puede consumirse una vez. La transición check-in/check-out y su registro se ejecutan en una transacción MongoDB; por ello Atlas debe ofrecer despliegue replica set, como en sus clústeres administrados.
 
-Verificación local del backend: desde `api/`, ejecuta `npm test`. Esta entrega cubre los módulos de autenticación, roles, rutinas y acceso QR solicitados; pagos, OTP/correo, inventario, notificaciones y analítica descritos en el README quedan fuera de estos dos pasos.
+Verificación local del backend: desde `api/`, ejecuta `npm test`. Continúan pendientes OTP/correo, configuración completa de sucursales/planes, pasarela de pago y renovación automática, edición de rutinas desde la app, métricas reales de demanda, historial de entrenamiento y rachas, mantenimiento, notificaciones push, ventas y acceso PIN/NFC.

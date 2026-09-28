@@ -16,6 +16,12 @@ const registrationSchema = credentialsSchema.extend({
   phone: z.string().trim().max(30).optional(),
   goal: z.string().trim().max(120).optional(),
   experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+  availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
+    .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
+    .optional(),
+  preferredTrainingTime: z.string().trim().max(80).optional(),
+  restrictions: z.string().trim().max(1000).optional(),
+  preferredZones: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
 });
 
 function createUserToken(user) {
@@ -92,6 +98,9 @@ async function createManagedUser(req, res) {
     membershipStatus: z.enum(['pending', 'active', 'suspended', 'expired']).optional(),
     membershipStartsAt: z.coerce.date().optional(),
     membershipExpiresAt: z.coerce.date().optional(),
+    membershipPlanName: z.string().trim().min(1).max(80).optional(),
+    membershipPrice: z.coerce.number().min(0).max(1000000).optional(),
+    membershipDurationDays: z.coerce.number().int().min(1).max(730).default(30),
     assignedCoach: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   }).superRefine((data, context) => {
     if (data.membershipStatus === 'active' && !data.membershipExpiresAt) {
@@ -119,6 +128,10 @@ async function createManagedUser(req, res) {
       status: input.membershipStatus ?? 'pending',
       startsAt: input.membershipStartsAt,
       expiresAt: input.membershipExpiresAt,
+      planName: input.membershipPlanName,
+      price: input.membershipPrice,
+      currency: 'MXN',
+      durationDays: input.membershipDurationDays,
     },
   });
   await user.setPassword(input.password);
@@ -127,11 +140,63 @@ async function createManagedUser(req, res) {
   res.status(201).json({ user: user.toSafeJSON() });
 }
 
+function serializeDirectoryUser(user) {
+  const coach = user.assignedCoach;
+  return {
+    id: String(user._id),
+    name: user.name,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    isActive: user.isActive,
+    goal: user.goal,
+    experienceLevel: user.experienceLevel,
+    membership: user.membership,
+    assignedCoach: coach ? {
+      id: String(coach._id),
+      name: coach.name,
+      email: coach.email,
+    } : null,
+  };
+}
+
+async function listDirectoryUsers(req, res) {
+  const input = z.object({ role: z.enum(['Cliente']).optional() }).parse(req.query);
+  const filter = { role: input.role ?? 'Cliente' };
+  if (req.user.role === 'Coach') filter.assignedCoach = req.user.id;
+
+  const users = await User.find(filter)
+    .select('name email phone role isActive goal experienceLevel membership assignedCoach')
+    .populate('assignedCoach', 'name email')
+    .sort({ name: 1 })
+    .lean();
+
+  res.json({ users: users.map(serializeDirectoryUser) });
+}
+
+async function getDirectoryUser(req, res) {
+  const client = await User.findOne({ _id: req.params.id, role: 'Cliente' })
+    .select('name email phone role isActive goal experienceLevel membership assignedCoach')
+    .populate('assignedCoach', 'name email')
+    .lean();
+
+  if (!client) throw new HttpError(404, 'Cliente no encontrado.');
+  if (req.user.role === 'Coach' && String(client.assignedCoach?._id) !== req.user.id) {
+    throw new HttpError(404, 'Cliente no encontrado.');
+  }
+
+  res.json({ user: serializeDirectoryUser(client) });
+}
+
 async function updateMembership(req, res) {
   const input = z.object({
     status: z.enum(['pending', 'active', 'suspended', 'expired']),
     startsAt: z.coerce.date().optional(),
     expiresAt: z.coerce.date().optional(),
+    planName: z.string().trim().min(1).max(80).optional(),
+    price: z.number().min(0).max(1000000).optional(),
+    durationDays: z.number().int().min(1).max(730).optional(),
+    autoRenew: z.boolean().optional(),
   }).parse(req.body);
   const user = await User.findOne({ _id: req.params.id, role: 'Cliente' });
   if (!user) throw new HttpError(404, 'Cliente no encontrado.');
@@ -145,7 +210,13 @@ async function updateMembership(req, res) {
     throw new HttpError(400, 'El vencimiento debe ser posterior al inicio.');
   }
 
-  user.membership = { status: input.status, startsAt, expiresAt };
+  user.membership = {
+    ...user.membership.toObject(),
+    status: input.status,
+    startsAt,
+    expiresAt,
+    ...input,
+  };
   await user.save();
   res.json({ user: user.toSafeJSON() });
 }
@@ -172,6 +243,8 @@ module.exports = {
   registerClient,
   bootstrapAdmin,
   createManagedUser,
+  listDirectoryUsers,
+  getDirectoryUser,
   updateMembership,
   login,
   getCurrentUser,

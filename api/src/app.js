@@ -6,6 +6,8 @@ const env = require('./config/env');
 const authRoutes = require('./routes/auth.routes');
 const routineRoutes = require('./routes/routine.routes');
 const accessRoutes = require('./routes/access.routes');
+const inventoryRoutes = require('./routes/inventory.routes');
+const billingRoutes = require('./routes/billing.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -31,6 +33,8 @@ app.use('/api/auth/bootstrap-admin', rateLimit({ windowMs: 60 * 60 * 1000, limit
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/billing', billingRoutes);
 app.use('/api', accessRoutes);
 app.use(notFound);
 app.use(errorHandler);
