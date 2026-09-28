@@ -68,9 +68,10 @@ export default function ClientsScreen() {
 
   const clientsWithRoutines = new Map<string, Routine[]>();
   for (const routine of routines) {
-    const clientRoutines = clientsWithRoutines.get(routine.assignedTo) ?? [];
+    const clientId = typeof routine.assignedTo === 'string' ? routine.assignedTo : routine.assignedTo._id;
+    const clientRoutines = clientsWithRoutines.get(clientId) ?? [];
     clientRoutines.push(routine);
-    clientsWithRoutines.set(routine.assignedTo, clientRoutines);
+    clientsWithRoutines.set(clientId, clientRoutines);
   }
 
   return (
@@ -112,7 +113,11 @@ export default function ClientsScreen() {
             <Surface key={clientId} style={styles.clientRow}>
               <View style={styles.clientAvatar}><Text style={styles.avatarText}>{clientRoutines[0].title.slice(0, 1).toUpperCase()}</Text></View>
               <View style={styles.clientDetails}>
-                <Text style={styles.clientName}>Cliente · {clientId.slice(-6).toUpperCase()}</Text>
+                <Text style={styles.clientName}>
+                  {typeof clientRoutines[0].assignedTo === 'string'
+                    ? `Cliente · ${clientId.slice(-6).toUpperCase()}`
+                    : clientRoutines[0].assignedTo.name}
+                </Text>
                 <Text style={styles.clientMeta}>{clientRoutines.length} rutinas · {clientRoutines[0].goal ?? 'Objetivo por definir'}</Text>
               </View>
               <Text style={styles.clientArrow}>›</Text>

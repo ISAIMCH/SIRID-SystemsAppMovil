@@ -102,6 +102,11 @@ export default function DashboardScreen() {
               <ActionButton onPress={() => router.push('/(main)/staff')}>Agregar Coach o Cliente</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/routines')}>Consultar rutinas</ActionButton>
             </View>
+          ) : user?.role === 'Coach' ? (
+            <View style={styles.actionStack}>
+              <ActionButton onPress={() => router.push('/(main)/routine-create')}>Crear rutina</ActionButton>
+              <ActionButton secondary onPress={() => router.push('/directory' as Href)}>Ver directorio</ActionButton>
+            </View>
           ) : (
             <View style={styles.actionStack}>
               <ActionButton onPress={() => router.push('/directory' as Href)}>Ver mi directorio</ActionButton>

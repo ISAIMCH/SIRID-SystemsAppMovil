@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const exerciseSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
-  equipment: { type: String, trim: true, maxlength: 100 },
+  equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment' },
+  day: { type: Number, required: true, min: 0, max: 6, default: 0 },
   sets: { type: Number, required: true, min: 1, max: 50 },
   reps: { type: String, required: true, trim: true, maxlength: 30 },
   suggestedWeight: { type: Number, min: 0, max: 1000 },

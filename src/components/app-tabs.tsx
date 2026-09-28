@@ -53,6 +53,7 @@ export default function AppTabs() {
           ),
         }}
       />
+      <Tabs.Screen name="routine-create" options={{ href: null }} />
       <Tabs.Screen
         name="inventory"
         options={{
