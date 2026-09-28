@@ -1,32 +1,66 @@
-import { NativeTabs } from 'expo-router/unstable-native-tabs';
-import { useColorScheme } from 'react-native';
+import { Tabs } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 
-import { Colors } from '@/constants/theme';
+import { useAuth } from '@/features/gymgo/auth-context';
+import { palette } from '@/features/gymgo/theme';
 
 export default function AppTabs() {
-  const scheme = useColorScheme();
-  const colors = Colors[scheme === 'unspecified' ? 'light' : scheme];
+  const { user } = useAuth();
+  const isClient = user?.role === 'Cliente';
 
   return (
-    <NativeTabs
-      backgroundColor={colors.background}
-      indicatorColor={colors.backgroundElement}
-      labelStyle={{ selected: { color: colors.text } }}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/home.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-
-      <NativeTabs.Trigger name="explore">
-        <NativeTabs.Trigger.Label>Explore</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon
-          src={require('@/assets/images/tabIcons/explore.png')}
-          renderingMode="template"
-        />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: palette.green,
+        tabBarInactiveTintColor: palette.muted,
+        tabBarStyle: {
+          backgroundColor: palette.surface,
+          borderTopColor: palette.line,
+          height: 62,
+          paddingTop: 6,
+          paddingBottom: 6,
+        },
+        sceneStyle: { backgroundColor: palette.paper },
+      }}>
+      <Tabs.Screen
+        name="index"
+        options={{
+          title: 'Inicio',
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'house.fill', android: 'home', web: 'home' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="access"
+        options={{
+          title: 'Acceso QR',
+          href: isClient ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'qrcode', android: 'qr_code_2', web: 'qr_code_2' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="routines"
+        options={{
+          title: 'Rutinas',
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="clients"
+        options={{
+          title: isClient ? 'Clientes' : 'Asignaciones',
+          href: isClient ? null : undefined,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+    </Tabs>
   );
 }
