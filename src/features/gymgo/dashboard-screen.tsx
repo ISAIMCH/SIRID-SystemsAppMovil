@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, type Href } from 'expo-router';
 
 import { api, getApiErrorMessage } from './api';
@@ -7,6 +7,25 @@ import { useAuth } from './auth-context';
 import { ActionButton, AppHeader, Eyebrow, Notice, SectionTitle, Surface } from './ui';
 import { palette } from './theme';
 import type { Routine } from './types';
+import ClientQrCard from './client-qr-card';
+
+type OperationsDashboard = {
+  period: 'day' | 'week';
+  today: { checkIns: number; checkOuts: number };
+  currentOccupancy: number;
+  dailyAttendance: { date: string; checkIns: number; checkOuts: number }[];
+  hourlyDemand: { hour: number; checkIns: number }[];
+  peakHour: { hour: number; checkIns: number } | null;
+  equipmentByZone: { zone: string; total: number; available: number; busy: number; outOfService: number }[];
+};
+
+type WorkoutStats = {
+  currentStreak: number;
+  totalSessions: number;
+  completedThisWeek: number;
+  totalVolumeKg: number;
+  lastWorkoutAt: string | null;
+};
 
 export default function DashboardScreen() {
   const { user } = useAuth();
@@ -15,6 +34,10 @@ export default function DashboardScreen() {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [routineError, setRoutineError] = useState('');
+  const [operations, setOperations] = useState<OperationsDashboard | null>(null);
+  const [workoutStats, setWorkoutStats] = useState<WorkoutStats | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(true);
+  const [summaryError, setSummaryError] = useState('');
 
   useEffect(() => {
     let isCurrent = true;
@@ -30,6 +53,27 @@ export default function DashboardScreen() {
       });
     return () => { isCurrent = false; };
   }, []);
+
+  useEffect(() => {
+    let isCurrent = true;
+    const summaryRequest = isClient
+      ? api.get<WorkoutStats>('/workouts/me/stats')
+      : api.get<OperationsDashboard>('/analytics/dashboard', { params: { period: 'week' } });
+
+    summaryRequest
+      .then((response) => {
+        if (!isCurrent) return;
+        if (isClient) setWorkoutStats(response.data as WorkoutStats);
+        else setOperations(response.data as OperationsDashboard);
+      })
+      .catch((error: unknown) => {
+        if (isCurrent) setSummaryError(getApiErrorMessage(error, 'No se pudieron cargar las estadísticas.'));
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingSummary(false);
+      });
+    return () => { isCurrent = false; };
+  }, [isClient]);
 
   const activeRoutineCount = routines.filter((routine) => routine.status === 'active').length;
   const roleHeading = isClient ? 'Tu semana, a tu ritmo.' : user?.role === 'Admin' ? 'Tu gimnasio, en foco.' : 'Entrena con estrategia.';
@@ -56,6 +100,8 @@ export default function DashboardScreen() {
           ) : null}
         </View>
 
+        {isClient ? <ClientQrCard /> : null}
+
         {isClient ? (
           <View style={styles.metricRow}>
             <Surface style={styles.metric}>
@@ -68,23 +114,75 @@ export default function DashboardScreen() {
                 {user?.membership?.status ?? 'pendiente'}
               </Text>
             </Surface>
+            <Surface style={styles.metric}>
+              <Text style={styles.metricLabel}>Racha actual</Text>
+              <Text style={styles.metricValue}>{isLoadingSummary ? '—' : workoutStats?.currentStreak ?? 0}</Text>
+              <Text style={styles.metricHint}>días programados</Text>
+            </Surface>
           </View>
         ) : (
           <View style={styles.metricRow}>
             <Surface style={styles.metric}>
-              <Text style={styles.metricLabel}>Rutinas activas</Text>
-              <Text style={styles.metricValue}>{isLoading ? '—' : activeRoutineCount}</Text>
-              <Text style={styles.metricHint}>{user?.role === 'Coach' ? 'de tus clientes' : 'en la plataforma'}</Text>
+              <Text style={styles.metricLabel}>Entradas hoy</Text>
+              <Text style={styles.metricValue}>{isLoadingSummary ? '—' : operations?.today.checkIns ?? 0}</Text>
+              <Text style={styles.metricHint}>check-in registrados</Text>
             </Surface>
             <Surface style={styles.metric}>
-              <Text style={styles.metricLabel}>Demandas</Text>
-              <Text style={styles.metricValue}>IoT</Text>
-              <Text style={styles.metricHint}>asistencia conectada</Text>
+              <Text style={styles.metricLabel}>Dentro ahora</Text>
+              <Text style={styles.metricValue}>{isLoadingSummary ? '—' : operations?.currentOccupancy ?? 0}</Text>
+              <Text style={styles.metricHint}>clientes presentes</Text>
             </Surface>
           </View>
         )}
 
         {routineError ? <Notice error>{routineError}</Notice> : null}
+        {summaryError ? <Notice error>{summaryError}</Notice> : null}
+
+        {isClient && workoutStats ? (
+          <Surface style={styles.progressPanel}>
+            <SectionTitle>Progreso de entrenamiento</SectionTitle>
+            <View style={styles.progressRow}>
+              <View><Text style={styles.progressValue}>{workoutStats.completedThisWeek}</Text><Text style={styles.metricHint}>sesiones esta semana</Text></View>
+              <View><Text style={styles.progressValue}>{Math.round(workoutStats.totalVolumeKg)} kg</Text><Text style={styles.metricHint}>volumen acumulado</Text></View>
+            </View>
+          </Surface>
+        ) : null}
+
+        {!isClient && operations ? (
+          <Surface style={styles.analyticsPanel}>
+            <View style={styles.analyticsHeader}>
+              <View style={styles.analyticsHeading}>
+                <View style={styles.demandDot} />
+                <Text style={styles.demandTitle}>Demanda horaria · 7 días</Text>
+              </View>
+              <Text style={styles.metricHint}>{operations.today.checkOuts} salidas hoy</Text>
+            </View>
+            {operations.peakHour ? (
+              <Text style={styles.peakLabel}>Hora pico · {String(operations.peakHour.hour).padStart(2, '0')}:00 ({operations.peakHour.checkIns} entradas)</Text>
+            ) : <Text style={styles.demandBody}>Aún no hay suficientes entradas para calcular una hora pico.</Text>}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chart}>
+              {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).map((entry) => {
+                const maximum = Math.max(1, ...operations.hourlyDemand.map((value) => value.checkIns));
+                return (
+                  <View key={entry.hour} style={styles.chartColumn}>
+                    <Text style={styles.chartCount}>{entry.checkIns || ''}</Text>
+                    <View style={[styles.chartBar, { height: Math.max(4, Math.round((entry.checkIns / maximum) * 66)) }]} />
+                    <Text style={styles.chartHour}>{String(entry.hour).padStart(2, '0')}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.zoneList}>
+              {operations.equipmentByZone.map((zone) => (
+                <View key={zone.zone} style={styles.zoneRow}>
+                  <Text style={styles.zoneName}>{zone.zone}</Text>
+                  <Text style={styles.zoneValue}>{zone.available}/{zone.total} disp. · {zone.busy} ocup.</Text>
+                </View>
+              ))}
+              {!operations.equipmentByZone.length ? <Text style={styles.demandBody}>No hay equipos por zona registrados.</Text> : null}
+            </View>
+          </Surface>
+        ) : null}
 
         <View style={styles.section}>
           <SectionTitle>{isClient ? 'Siguiente paso' : 'Operación del gimnasio'}</SectionTitle>
@@ -93,12 +191,14 @@ export default function DashboardScreen() {
               <ActionButton onPress={() => router.push('/(main)/routines')}>Ver mis rutinas</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/access')}>Abrir código de acceso</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/billing')}>Pago y membresía</ActionButton>
+              <ActionButton secondary onPress={() => router.push('/(main)/maintenance')}>Reportar falla de equipo</ActionButton>
             </View>
           ) : isAdmin ? (
             <View style={styles.actionStack}>
               <ActionButton onPress={() => router.push('/directory' as Href)}>Abrir directorio</ActionButton>
               <ActionButton onPress={() => router.push('/(main)/inventory')}>Inventario / Equipos</ActionButton>
               <ActionButton onPress={() => router.push('/(main)/billing')}>Revisar pagos</ActionButton>
+              <ActionButton onPress={() => router.push('/(main)/maintenance')}>Alertas de mantenimiento</ActionButton>
               <ActionButton onPress={() => router.push('/(main)/staff')}>Agregar Coach o Cliente</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/routines')}>Consultar rutinas</ActionButton>
             </View>
@@ -115,23 +215,6 @@ export default function DashboardScreen() {
             </View>
           )}
         </View>
-
-        {!isClient ? (
-          <Surface style={styles.demandPanel}>
-            <View style={styles.demandHeading}>
-              <View style={styles.demandDot} />
-              <Text style={styles.demandTitle}>Demanda horaria</Text>
-            </View>
-            <Text style={styles.demandBody}>
-              La API desplegada aún no expone estadísticas agregadas de asistencia. Los eventos QR ya se registran y esta vista quedará lista para conectarlas.
-            </Text>
-            <View style={styles.demandFooter}>
-              <Text style={styles.demandTag}>ENTRADAS / SALIDAS</Text>
-              <Text style={styles.demandTag}>ZONAS</Text>
-              <Text style={styles.demandTag}>HORAS PICO</Text>
-            </View>
-          </Surface>
-        ) : null}
 
         {isLoading ? <ActivityIndicator color={palette.green} /> : null}
         <View style={styles.footerLine}>
@@ -160,13 +243,25 @@ const styles = StyleSheet.create({
   active: { color: palette.green },
   section: { gap: 14 },
   actionStack: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  demandPanel: { gap: 14 },
-  demandHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  progressPanel: { gap: 14 },
+  progressRow: { flexDirection: 'row', gap: 28 },
+  progressValue: { color: palette.green, fontSize: 22, fontWeight: '800' },
+  analyticsPanel: { gap: 14 },
+  analyticsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  analyticsHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   demandDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.coral },
   demandTitle: { color: palette.ink, fontSize: 17, fontWeight: '800' },
   demandBody: { color: palette.muted, fontSize: 14, lineHeight: 21 },
-  demandFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  demandTag: { color: palette.green, fontSize: 10, fontWeight: '800', backgroundColor: '#E8EEE5', paddingHorizontal: 9, paddingVertical: 6, borderRadius: 5 },
+  peakLabel: { color: palette.green, fontSize: 13, fontWeight: '800' },
+  chart: { alignItems: 'flex-end', gap: 6, paddingTop: 14, paddingBottom: 4 },
+  chartColumn: { width: 22, height: 100, justifyContent: 'flex-end', alignItems: 'center', gap: 4 },
+  chartCount: { height: 12, color: palette.muted, fontSize: 9 },
+  chartBar: { width: 12, borderTopLeftRadius: 4, borderTopRightRadius: 4, backgroundColor: palette.green },
+  chartHour: { color: palette.muted, fontSize: 9 },
+  zoneList: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
+  zoneRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  zoneName: { color: palette.ink, flex: 1, fontSize: 12, fontWeight: '700' },
+  zoneValue: { color: palette.muted, fontSize: 11 },
   footerLine: { borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
   footerText: { color: palette.muted, fontSize: 10, fontWeight: '800' },
 });

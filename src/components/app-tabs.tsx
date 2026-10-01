@@ -64,6 +64,16 @@ export default function AppTabs() {
         }}
       />
       <Tabs.Screen
+        name="maintenance"
+        options={{
+          title: 'Mantenimiento',
+          href: user?.role === 'Cliente' || isAdmin ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <SymbolView name={{ ios: 'wrench.and.screwdriver.fill', android: 'build', web: 'build' }} tintColor={color} size={22} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="billing"
         options={{
           title: isAdmin ? 'Pagos' : 'Membresía',
