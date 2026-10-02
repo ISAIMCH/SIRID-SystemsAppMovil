@@ -35,6 +35,10 @@ const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcon
 
 const TAB_NAMES = Object.keys(TAB_META) as TabName[];
 
+const SECONDARY_SCREENS = ['routine-create', 'clients'];
+
+const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } } as const;
+
 export default function AppTabs() {
   const { user } = useAuth();
   const allowed = user ? ROLE_TABS[user.role] : [];
@@ -65,14 +69,15 @@ export default function AppTabs() {
             name={name}
             options={{
               title: label,
-              href: visible ? undefined : null,
+              ...(visible ? {} : HIDDEN_OPTIONS),
               tabBarIcon: ({ color }) => <MaterialIcons name={icon} size={24} color={color} />,
             }}
           />
         );
       })}
-      <Tabs.Screen name="routine-create" options={{ href: null }} />
-      <Tabs.Screen name="clients" options={{ href: null }} />
+      {SECONDARY_SCREENS.map((name) => (
+        <Tabs.Screen key={name} name={name} options={HIDDEN_OPTIONS} />
+      ))}
     </Tabs>
   );
 }
