@@ -1,7 +1,7 @@
 import { Redirect } from 'expo-router';
 
-import AppTabs from '@/components/app-tabs';
 import { useAuth } from '@/features/gymgo/auth-context';
+import AppTabs from '@/components/app-tabs';
 
 export default function MainLayout() {
   const { user } = useAuth();

@@ -1,14 +1,43 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 
-import { useAuth } from '@/features/gymgo/auth-context';
+import { useAuth, type GymGoRole } from '@/features/gymgo/auth-context';
 import { palette } from '@/features/gymgo/theme';
+
+type TabName =
+  | 'index'
+  | 'access'
+  | 'routines'
+  | 'inventory'
+  | 'maintenance'
+  | 'billing'
+  | 'directory'
+  | 'staff'
+  | 'scanner';
+
+const ROLE_TABS: Record<GymGoRole, TabName[]> = {
+  Cliente: ['index', 'access', 'routines', 'billing'],
+  Coach: ['index', 'routines', 'directory'],
+  Admin: ['index', 'scanner', 'inventory', 'maintenance', 'billing', 'directory', 'staff'],
+};
+
+const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
+  index: { title: 'Inicio', icon: 'home' },
+  access: { title: 'Acceso QR', icon: 'qr-code-2' },
+  routines: { title: 'Rutinas', icon: 'fitness-center' },
+  inventory: { title: 'Equipos', icon: 'inventory-2' },
+  maintenance: { title: 'Mantenim.', icon: 'build' },
+  billing: { title: 'Membresía', icon: 'credit-card' },
+  directory: { title: 'Directorio', icon: 'groups' },
+  staff: { title: 'Personal', icon: 'person-add' },
+  scanner: { title: 'Escáner', icon: 'qr-code-scanner' },
+};
+
+const TAB_NAMES = Object.keys(TAB_META) as TabName[];
 
 export default function AppTabs() {
   const { user } = useAuth();
-  const isClient = user?.role === 'Cliente';
-  const isAdmin = user?.role === 'Admin';
-  const canManageClients = user?.role === 'Admin' || user?.role === 'Coach';
+  const allowed = user ? ROLE_TABS[user.role] : [];
 
   return (
     <Tabs
@@ -25,94 +54,25 @@ export default function AppTabs() {
         },
         sceneStyle: { backgroundColor: palette.paper },
       }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'house.fill', android: 'home', web: 'home' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="access"
-        options={{
-          title: 'Acceso QR',
-          href: isClient ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'qrcode', android: 'qr_code_2', web: 'qr_code_2' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="routines"
-        options={{
-          title: 'Rutinas',
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
+      {TAB_NAMES.map((name) => {
+        const { title, icon } = TAB_META[name];
+        const visible = allowed.includes(name);
+        const label = name === 'billing' && user?.role === 'Admin' ? 'Pagos' : title;
+
+        return (
+          <Tabs.Screen
+            key={name}
+            name={name}
+            options={{
+              title: label,
+              href: visible ? undefined : null,
+              tabBarIcon: ({ color }) => <MaterialIcons name={icon} size={24} color={color} />,
+            }}
+          />
+        );
+      })}
       <Tabs.Screen name="routine-create" options={{ href: null }} />
-      <Tabs.Screen
-        name="inventory"
-        options={{
-          title: 'Equipos',
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'dumbbell.fill', android: 'fitness_center', web: 'fitness_center' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="maintenance"
-        options={{
-          title: 'Mantenimiento',
-          href: user?.role === 'Cliente' || isAdmin ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'wrench.and.screwdriver.fill', android: 'build', web: 'build' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="billing"
-        options={{
-          title: isAdmin ? 'Pagos' : 'Membresía',
-          href: user?.role === 'Cliente' || isAdmin ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'creditcard.fill', android: 'credit_card', web: 'credit_card' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="clients"
-        options={{
-          href: null,
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="directory"
-        options={{
-          title: 'Directorio',
-          href: canManageClients ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'person.2.fill', android: 'group', web: 'group' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="staff"
-        options={{
-          title: 'Personal',
-          href: isAdmin ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <SymbolView name={{ ios: 'person.badge.plus', android: 'person_add', web: 'person_add' }} tintColor={color} size={22} />
-          ),
-        }}
-      />
-      <Tabs.Screen name="scanner" options={{ href: null }} />
+      <Tabs.Screen name="clients" options={{ href: null }} />
     </Tabs>
   );
 }
