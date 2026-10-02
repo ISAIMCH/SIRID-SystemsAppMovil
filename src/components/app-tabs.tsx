@@ -13,10 +13,11 @@ type TabName =
   | 'billing'
   | 'directory'
   | 'staff'
-  | 'scanner';
+  | 'scanner'
+  | 'store';
 
 const ROLE_TABS: Record<GymGoRole, TabName[]> = {
-  Cliente: ['index', 'access', 'routines', 'billing'],
+  Cliente: ['index', 'access', 'routines', 'store', 'billing'],
   Coach: ['index', 'routines', 'directory'],
   Admin: ['index', 'scanner', 'inventory', 'maintenance', 'billing', 'directory', 'staff'],
 };
@@ -31,11 +32,12 @@ const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcon
   directory: { title: 'Directorio', icon: 'groups' },
   staff: { title: 'Personal', icon: 'person-add' },
   scanner: { title: 'Escáner', icon: 'qr-code-scanner' },
+  store: { title: 'Tienda', icon: 'storefront' },
 };
 
 const TAB_NAMES = Object.keys(TAB_META) as TabName[];
 
-const SECONDARY_SCREENS = ['routine-create', 'clients'];
+const SECONDARY_SCREENS = ['routine-create', 'clients', 'profile'];
 
 const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } } as const;
 

@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 import { palette } from './theme';
-import type { Routine } from './types';
+import type { Exercise, Routine } from './types';
 
 const levelNames = {
   principiante: 'Principiante',
@@ -21,6 +21,66 @@ export default function RoutinesScreen() {
   const [error, setError] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
   const [substituteExerciseId, setSubstituteExerciseId] = useState<string | null>(null);
+  const [setLogs, setSetLogs] = useState<Record<string, { reps: string; weight: string }[]>>({});
+  const [savingDay, setSavingDay] = useState<string | null>(null);
+  const [savedDays, setSavedDays] = useState<string[]>([]);
+  const [logMessage, setLogMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const startedAt = useRef<number | null>(null);
+
+  function updateSet(exercise: Exercise, setIndex: number, field: 'reps' | 'weight', value: string) {
+    const key = exercise._id;
+    if (!key) return;
+    startedAt.current ??= Date.now();
+    const cleaned = value.replace(/[^0-9.,]/g, '').slice(0, 6);
+    setSetLogs((current) => {
+      const rows = Array.from({ length: exercise.sets }, (_, index) => current[key]?.[index] ?? { reps: '', weight: '' });
+      rows[setIndex] = { ...rows[setIndex], [field]: cleaned };
+      return { ...current, [key]: rows };
+    });
+  }
+
+  async function saveSession(routine: Routine, day: number, dayExercises: Exercise[]) {
+    const dayKey = `${routine._id}-${day}`;
+    const exercises = dayExercises.flatMap((exercise) => {
+      if (!exercise._id) return [];
+      const sets = (setLogs[exercise._id] ?? [])
+        .filter((entry) => entry.reps.trim() !== '')
+        .map((entry) => ({
+          reps: Math.round(Number(entry.reps.replace(',', '.'))),
+          weightKg: Number(entry.weight.replace(',', '.')) || 0,
+          restSeconds: exercise.restSeconds,
+        }));
+      return sets.length ? [{ routineExerciseId: exercise._id, sets }] : [];
+    });
+    if (!exercises.length) {
+      setLogMessage({ text: 'Anota las repeticiones de al menos una serie.', error: true });
+      return;
+    }
+
+    setLogMessage(null);
+    setSavingDay(dayKey);
+    try {
+      const minutes = minutesSince(startedAt.current);
+      await api.post('/workouts', {
+        routineId: routine._id,
+        trainingDay: day,
+        durationMinutes: Math.min(600, minutes),
+        exercises,
+      });
+      setSavedDays((current) => [...current, dayKey]);
+      setSetLogs((current) => {
+        const next = { ...current };
+        dayExercises.forEach((exercise) => { if (exercise._id) delete next[exercise._id]; });
+        return next;
+      });
+      startedAt.current = null;
+      setLogMessage({ text: 'Sesión guardada. Tus estadísticas se actualizaron.', error: false });
+    } catch (requestError) {
+      setLogMessage({ text: getApiErrorMessage(requestError, 'No se pudo guardar la sesión.'), error: true });
+    } finally {
+      setSavingDay(null);
+    }
+  }
 
   useEffect(() => {
     let isCurrent = true;
@@ -48,6 +108,7 @@ export default function RoutinesScreen() {
       ) : null}
       <SectionTitle>{routines.length ? `${routines.length} planes` : 'Tu plan de entrenamiento'}</SectionTitle>
       {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : null}
+      {logMessage ? <Notice error={logMessage.error}>{logMessage.text}</Notice> : null}
       {error ? (
         <View style={styles.feedback}>
           <Notice error>{error}</Notice>
@@ -97,6 +158,36 @@ export default function RoutinesScreen() {
                           </Text>
                         </View>
                       </View>
+                      {user?.role === 'Cliente' && routine.status === 'active' && exercise._id ? (
+                        <View style={styles.setTable}>
+                          {Array.from({ length: exercise.sets }, (_, setIndex) => {
+                            const entry = setLogs[exercise._id as string]?.[setIndex];
+                            return (
+                              <View key={setIndex} style={styles.setRow}>
+                                <Text style={styles.setLabel}>Serie {setIndex + 1}</Text>
+                                <TextInput
+                                  keyboardType="numeric"
+                                  value={entry?.reps ?? ''}
+                                  onChangeText={(value) => updateSet(exercise, setIndex, 'reps', value)}
+                                  placeholder={exercise.reps}
+                                  placeholderTextColor={palette.muted}
+                                  style={styles.setInput}
+                                />
+                                <Text style={styles.setUnit}>reps</Text>
+                                <TextInput
+                                  keyboardType="decimal-pad"
+                                  value={entry?.weight ?? ''}
+                                  onChangeText={(value) => updateSet(exercise, setIndex, 'weight', value)}
+                                  placeholder={exercise.suggestedWeight !== undefined ? String(exercise.suggestedWeight) : '0'}
+                                  placeholderTextColor={palette.muted}
+                                  style={styles.setInput}
+                                />
+                                <Text style={styles.setUnit}>kg</Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      ) : null}
                       {user?.role === 'Cliente' ? (
                         <Pressable
                           accessibilityRole="button"
@@ -114,6 +205,17 @@ export default function RoutinesScreen() {
                   );
                 })}
                 {!dayExercises.length ? <Text style={styles.noExercises}>Sin ejercicios programados.</Text> : null}
+                {user?.role === 'Cliente' && routine.status === 'active' && dayExercises.length ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={savingDay === `${routine._id}-${day}`}
+                    onPress={() => void saveSession(routine, day, dayExercises)}
+                    style={[styles.finishButton, savingDay === `${routine._id}-${day}` && styles.finishDisabled]}>
+                    {savingDay === `${routine._id}-${day}`
+                      ? <ActivityIndicator color={palette.deepGreen} />
+                      : <Text style={styles.finishText}>{savedDays.includes(`${routine._id}-${day}`) ? 'Guardar otra sesión' : 'Finalizar y guardar sesión'}</Text>}
+                  </Pressable>
+                ) : null}
               </View>
             );
           })}
@@ -140,7 +242,7 @@ function getExercisesForDay(routine: Routine, day: number) {
 const styles = StyleSheet.create({
   feedback: { gap: 8 },
   retry: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
-  routine: { gap: 14 },
+  routine: { gap: 14, borderRadius: 24, borderWidth: 0, padding: 20, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
   titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
   title: { color: palette.ink, flex: 1, fontSize: 19, lineHeight: 25, fontWeight: '800' },
   status: { overflow: 'hidden', borderRadius: 5, paddingHorizontal: 8, paddingVertical: 5, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
@@ -164,4 +266,15 @@ const styles = StyleSheet.create({
   replaceText: { color: palette.green, fontSize: 11, fontWeight: '800' },
   replaceNotice: { color: palette.muted, fontSize: 11, lineHeight: 16, marginLeft: 35 },
   noExercises: { color: palette.muted, fontSize: 12, paddingLeft: 4 },
+  setTable: { gap: 6, marginLeft: 35 },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  setLabel: { width: 54, color: palette.muted, fontSize: 12, fontWeight: '700' },
+  setInput: { width: 62, height: 38, borderRadius: 12, backgroundColor: '#F2F4EE', color: palette.ink, textAlign: 'center', fontSize: 15, fontWeight: '700' },
+  setUnit: { color: palette.muted, fontSize: 11, marginRight: 6 },
+  finishButton: { minHeight: 48, borderRadius: 16, backgroundColor: palette.neon, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  finishDisabled: { opacity: 0.6 },
+  finishText: { color: palette.deepGreen, fontSize: 14, fontWeight: '800' },
 });
+function minutesSince(start: number | null) {
+  return start ? Math.round((Date.now() - start) / 60000) : 0;
+}

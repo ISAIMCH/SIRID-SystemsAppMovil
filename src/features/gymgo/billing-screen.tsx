@@ -5,6 +5,7 @@ import { Redirect } from 'expo-router';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
+import { IconBadge } from './fit-ui';
 import { palette } from './theme';
 
 type PaymentStatus = 'pending' | 'paid' | 'cancelled';
@@ -122,6 +123,7 @@ function ClientMembership() {
         <>
           <Surface style={styles.planCard}>
             <Text style={styles.planEyebrow}>PLAN ACTUAL</Text>
+            <IconBadge name="workspace-premium" color={palette.neon} size={48} />
             <View style={styles.planTitleRow}>
               <Text style={styles.planName}>{membership.planName ?? 'Plan por asignar'}</Text>
               <Text style={[styles.membershipStatus, membership.status === 'active' && styles.paidStatus]}>
@@ -174,7 +176,7 @@ function ClientMembership() {
               </View>
               <View style={styles.historyAmount}>
                 <Text style={styles.paymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
-                <Text style={[styles.historyStatus, payment.status === 'paid' && styles.paidStatus]}>
+                <Text style={[styles.historyStatus, payment.status === 'paid' && styles.historyPaid]}>
                   {paymentStatusLabels[payment.status]}
                 </Text>
               </View>
@@ -305,18 +307,18 @@ const styles = StyleSheet.create({
   loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   feedback: { gap: 10 },
   retry: { color: palette.green, fontSize: 14, fontWeight: '800', paddingVertical: 6 },
-  planCard: { gap: 12, backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
-  planEyebrow: { color: palette.lime, fontSize: 10, fontWeight: '800' },
+  planCard: { gap: 12, backgroundColor: '#0F2A24', borderColor: '#0F2A24', borderRadius: 24, padding: 22, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 5 },
+  planEyebrow: { color: palette.neon, fontSize: 10, fontWeight: '800' },
   planTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
   planName: { flex: 1, color: palette.white, fontSize: 21, fontWeight: '800' },
-  membershipStatus: { color: palette.lime, fontSize: 12, fontWeight: '800' },
-  paidStatus: { color: palette.green },
+  membershipStatus: { color: palette.neon, fontSize: 12, fontWeight: '800', backgroundColor: '#19D98B26', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden' },
+  paidStatus: { color: palette.neon },
   planPrice: { color: palette.white, fontSize: 15, fontWeight: '700' },
-  dateRow: { flexDirection: 'row', gap: 24, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#49665D' },
+  dateRow: { flexDirection: 'row', gap: 24, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#2F4A42' },
   dateItem: { gap: 4 },
   dateLabel: { color: '#C4D2C6', fontSize: 11 },
   dateValue: { color: palette.white, fontSize: 13, fontWeight: '700' },
-  pendingCard: { gap: 8, borderColor: '#D6DDAA', backgroundColor: '#F6F7E9' },
+  pendingCard: { gap: 8, borderWidth: 0, borderRadius: 24, backgroundColor: '#FFF3E8', padding: 20 },
   pendingTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' },
   pendingBody: { color: palette.muted, fontSize: 13 },
   reference: { color: palette.green, fontSize: 22, fontWeight: '900' },
@@ -324,12 +326,13 @@ const styles = StyleSheet.create({
   paymentAmount: { color: palette.ink, fontSize: 14, fontWeight: '800' },
   paymentAction: { gap: 10 },
   helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
-  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 14 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 16, borderRadius: 24, borderWidth: 0, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.07, shadowRadius: 14, elevation: 3 },
   historyInfo: { flex: 1, gap: 4 },
   historyName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
   historyMeta: { color: palette.muted, fontSize: 11 },
   historyAmount: { alignItems: 'flex-end', gap: 4 },
   historyStatus: { color: palette.coral, fontSize: 11, fontWeight: '700' },
+  historyPaid: { color: palette.green },
   adminPayment: { gap: 10 },
   adminPaymentDetails: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

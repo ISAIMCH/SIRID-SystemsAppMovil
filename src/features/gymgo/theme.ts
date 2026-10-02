@@ -10,4 +10,8 @@ export const palette = {
   line: '#DCE1D8',
   danger: '#B0443C',
   white: '#FFFFFF',
+  neon: '#19D98B',
+  cyan: '#18B7E8',
+  orange: '#FF8A3D',
+  violet: '#7C5CFF',
 };

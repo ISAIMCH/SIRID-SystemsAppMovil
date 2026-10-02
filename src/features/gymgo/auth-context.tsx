@@ -18,6 +18,8 @@ export type GymGoUser = {
   preferredTrainingTime?: string;
   restrictions?: string;
   preferredZones?: string[];
+  weightKg?: number;
+  heightCm?: number;
   membership?: {
     status: 'pending' | 'active' | 'suspended' | 'expired';
     startsAt?: string;
@@ -37,6 +39,7 @@ type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: ClientRegistration) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: (user: GymGoUser) => void;
 };
 
 export type ClientRegistration = {
@@ -104,7 +107,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );

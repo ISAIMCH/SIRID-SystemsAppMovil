@@ -13,5 +13,6 @@ router.get('/users/:id', authenticate, authorize('Admin', 'Coach'), asyncHandler
 router.post('/users', authenticate, authorize('Admin'), asyncHandler(controller.createManagedUser));
 router.patch('/users/:id/membership', authenticate, authorize('Admin'), asyncHandler(controller.updateMembership));
 router.get('/me', authenticate, asyncHandler(controller.getCurrentUser));
+router.patch('/me/physical', authenticate, authorize('Cliente'), asyncHandler(controller.updatePhysicalProfile));
 
 module.exports = router;

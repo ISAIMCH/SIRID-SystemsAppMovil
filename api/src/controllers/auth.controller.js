@@ -239,6 +239,16 @@ async function getCurrentUser(req, res) {
   res.json({ user: req.user.toSafeJSON() });
 }
 
+async function updatePhysicalProfile(req, res) {
+  const input = z.object({
+    weightKg: z.number().min(20).max(400),
+    heightCm: z.number().min(80).max(260),
+  }).parse(req.body);
+
+  const user = await User.findByIdAndUpdate(req.user.id, { $set: input }, { new: true, runValidators: true });
+  res.json({ user: user.toSafeJSON() });
+}
+
 module.exports = {
   registerClient,
   bootstrapAdmin,
@@ -248,4 +258,5 @@ module.exports = {
   updateMembership,
   login,
   getCurrentUser,
+  updatePhysicalProfile,
 };

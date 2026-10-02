@@ -43,6 +43,8 @@ const userSchema = new mongoose.Schema({
   preferredTrainingTime: { type: String, trim: true, maxlength: 80 },
   restrictions: { type: String, trim: true, maxlength: 1000 },
   preferredZones: [{ type: String, trim: true, maxlength: 80 }],
+  weightKg: { type: Number, min: 20, max: 400 },
+  heightCm: { type: Number, min: 80, max: 260 },
   currentlyInside: { type: Boolean, default: false },
 }, { timestamps: true });
 
@@ -70,6 +72,8 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
     preferredTrainingTime: this.preferredTrainingTime,
     restrictions: this.restrictions,
     preferredZones: this.preferredZones,
+    weightKg: this.weightKg,
+    heightCm: this.heightCm,
   };
 };
 
