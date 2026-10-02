@@ -1,0 +1,13 @@
+export const palette = {
+  paper: '#F4F4EC',
+  surface: '#FFFDF7',
+  ink: '#1C2A25',
+  green: '#245448',
+  deepGreen: '#173B32',
+  lime: '#D8ED8A',
+  coral: '#D57960',
+  muted: '#747D75',
+  line: '#DCE1D8',
+  danger: '#B0443C',
+  white: '#FFFFFF',
+};

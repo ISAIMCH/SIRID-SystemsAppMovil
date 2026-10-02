@@ -1,14 +1,13 @@
-import { router, type Href } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, type Href } from 'expo-router';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import ClientQrCard from './client-qr-card';
+import { ActionButton, AppHeader, Eyebrow, Notice, SectionTitle, Surface } from './ui';
 import { palette } from './theme';
 import type { Routine } from './types';
-import { ActionButton, AppHeader, Eyebrow, Notice, SectionTitle, Surface } from './ui';
+import ClientQrCard from './client-qr-card';
 
 type OperationsDashboard = {
   period: 'day' | 'week';
@@ -93,17 +92,6 @@ export default function DashboardScreen() {
               ? user?.goal ? `Objetivo: ${user.goal}` : 'Tus rutinas y tu acceso están a un toque.'
               : 'Una vista clara de la actividad y el equipo del gimnasio.'}
           </Text>
-          {isAdmin ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Abrir escáner de recepción"
-              onPress={() => router.push('/(main)/scanner')}
-              style={styles.scannerCta}>
-              <SymbolView name={{ ios: 'qrcode', android: 'qr_code_scanner', web: 'qr_code_scanner' }} tintColor={palette.deepGreen} size={22} />
-              <Text style={styles.scannerCtaText}>Escáner de recepción</Text>
-              <Text style={styles.scannerCtaArrow}>→</Text>
-            </Pressable>
-          ) : null}
           {isClient ? (
             <Pressable onPress={() => router.push('/(main)/access')} style={styles.qrLink}>
               <Text style={styles.qrLinkText}>Mostrar acceso QR</Text>
@@ -207,6 +195,7 @@ export default function DashboardScreen() {
             </View>
           ) : isAdmin ? (
             <View style={styles.actionStack}>
+              <ActionButton onPress={() => router.push('/(main)/scanner')}>Escáner de recepción</ActionButton>
               <ActionButton onPress={() => router.push('/directory' as Href)}>Abrir directorio</ActionButton>
               <ActionButton onPress={() => router.push('/(main)/inventory')}>Inventario / Equipos</ActionButton>
               <ActionButton onPress={() => router.push('/(main)/billing')}>Revisar pagos</ActionButton>
@@ -243,9 +232,6 @@ const styles = StyleSheet.create({
   hero: { backgroundColor: palette.deepGreen, borderRadius: 10, minHeight: 205, padding: 22, justifyContent: 'center', gap: 12 },
   heroTitle: { color: palette.white, fontSize: 30, lineHeight: 36, fontWeight: '800', maxWidth: 420 },
   heroDetail: { color: '#DFE8DF', fontSize: 14, lineHeight: 21 },
-  scannerCta: { minHeight: 50, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: palette.lime, paddingHorizontal: 15 },
-  scannerCtaText: { color: palette.deepGreen, fontSize: 14, fontWeight: '800', flexShrink: 1 },
-  scannerCtaArrow: { color: palette.deepGreen, fontSize: 20, fontWeight: '800' },
   qrLink: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingTop: 4 },
   qrLinkText: { color: palette.lime, fontSize: 14, fontWeight: '800' },
   arrow: { color: palette.lime, fontSize: 20, fontWeight: '700' },

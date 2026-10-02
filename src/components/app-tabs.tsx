@@ -112,6 +112,7 @@ export default function AppTabs() {
           ),
         }}
       />
+      <Tabs.Screen name="scanner" options={{ href: null }} />
     </Tabs>
   );
 }

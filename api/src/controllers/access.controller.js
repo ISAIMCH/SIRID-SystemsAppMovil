@@ -74,7 +74,12 @@ async function registerQrAccess(req, res) {
         qrJti: payload.jti,
       }], { session });
 
-      result = { event: access.event, occurredAt: access.occurredAt, userId: user.id };
+      result = {
+        event: access.event,
+        occurredAt: access.occurredAt,
+        userId: user.id,
+        userName: user.name,
+      };
     });
   } finally {
     await session.endSession();
