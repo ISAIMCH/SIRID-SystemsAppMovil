@@ -9,7 +9,8 @@ export type DirectoryClient = {
   name: string;
   email: string;
   phone?: string;
-  role: 'Cliente';
+  address?: string;
+  role: 'Cliente' | 'Coach';
   isActive: boolean;
   goal?: string;
   experienceLevel?: 'principiante' | 'intermedio' | 'avanzado';

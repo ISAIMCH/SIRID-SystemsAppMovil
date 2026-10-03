@@ -1,16 +1,24 @@
+import { MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle, Surface } from './ui';
-import { palette } from './theme';
 import type { DirectoryClient } from './directory-types';
+import { FloatingCard } from './fit-ui';
+import { palette } from './theme';
+import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
+
+type Segment = 'Cliente' | 'Coach';
+
+const membershipLabels = { active: 'Activa', pending: 'Pendiente', suspended: 'Suspendida', expired: 'Vencida' } as const;
 
 export default function DirectoryScreen() {
   const { user } = useAuth();
-  const [clients, setClients] = useState<DirectoryClient[]>([]);
+  const isAdmin = user?.role === 'Admin';
+  const [segment, setSegment] = useState<Segment>('Cliente');
+  const [people, setPeople] = useState<DirectoryClient[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -18,40 +26,58 @@ export default function DirectoryScreen() {
 
   useEffect(() => {
     let isCurrent = true;
-
-    async function loadDirectory() {
-      setIsLoading(true);
-      setError('');
-      try {
-        const response = await api.get<{ users: DirectoryClient[] }>('/auth/users', {
-          params: { role: 'Cliente' },
-        });
-        if (isCurrent) setClients(response.data.users);
-      } catch (requestError) {
+    api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: segment } })
+      .then((response) => {
+        if (isCurrent) setPeople(response.data.users);
+      })
+      .catch((requestError: unknown) => {
         if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudo cargar el directorio.'));
-      } finally {
+      })
+      .finally(() => {
         if (isCurrent) setIsLoading(false);
-      }
-    }
-
-    void loadDirectory();
+      });
     return () => { isCurrent = false; };
-  }, [retryNumber]);
+  }, [segment, retryNumber]);
+
+  function changeSegment(next: Segment) {
+    if (next === segment) return;
+    setPeople([]);
+    setSearch('');
+    setError('');
+    setIsLoading(true);
+    setSegment(next);
+  }
 
   const normalizedSearch = search.trim().toLocaleLowerCase();
-  const filteredClients = clients.filter((client) => (
-    `${client.name} ${client.email} ${client.phone ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
+  const filtered = people.filter((person) => (
+    `${person.name} ${person.email} ${person.phone ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
   ));
+  const noun = segment === 'Cliente' ? 'clientes' : 'coaches';
 
   return (
     <Page>
       <AppHeader
         title="Directorio"
-        detail={user?.role === 'Coach' ? 'Clientes asignados a tu perfil.' : 'Clientes registrados en tu gimnasio.'}
+        detail={user?.role === 'Coach' ? 'Clientes asignados a tu perfil.' : 'Consulta y edita clientes y coaches.'}
       />
 
+      {isAdmin ? (
+        <View accessibilityRole="tablist" style={styles.segments}>
+          {([['Cliente', 'Clientes'], ['Coach', 'Coaches']] as const).map(([value, label]) => (
+            <Pressable
+              key={value}
+              accessibilityRole="button"
+              accessibilityState={{ selected: segment === value }}
+              onPress={() => changeSegment(value)}
+              style={[styles.segment, segment === value && styles.segmentSelected]}>
+              <Text style={[styles.segmentText, segment === value && styles.segmentTextSelected]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
       <Field
-        label="Buscar clientes"
+        label={`Buscar ${noun}`}
         autoCapitalize="none"
         autoCorrect={false}
         placeholder="Nombre, correo o teléfono"
@@ -59,58 +85,50 @@ export default function DirectoryScreen() {
         onChangeText={setSearch}
       />
 
-      <SectionTitle>{isLoading ? 'Cargando clientes' : `${filteredClients.length} clientes`}</SectionTitle>
-
-      {isLoading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={palette.green} size="large" />
-        </View>
-      ) : null}
+      <SectionTitle>{isLoading ? `Cargando ${noun}` : `${filtered.length} ${noun}`}</SectionTitle>
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
 
       {error ? (
         <View style={styles.feedback}>
           <Notice error>{error}</Notice>
-          <ActionButton secondary onPress={() => setRetryNumber((current) => current + 1)}>
+          <ActionButton secondary onPress={() => { setError(''); setIsLoading(true); setRetryNumber((current) => current + 1); }}>
             Intentar de nuevo
           </ActionButton>
         </View>
       ) : null}
 
-      {!isLoading && !error && clients.length === 0 ? (
-        <Notice>Aún no hay clientes registrados en el directorio.</Notice>
-      ) : null}
-      {!isLoading && !error && clients.length > 0 && filteredClients.length === 0 ? (
-        <Notice>No hay clientes que coincidan con esa búsqueda.</Notice>
-      ) : null}
+      {!isLoading && !error && people.length === 0 ? <Notice>Aún no hay {noun} registrados.</Notice> : null}
+      {!isLoading && !error && people.length > 0 && filtered.length === 0 ? <Notice>No hay resultados para esa búsqueda.</Notice> : null}
 
-      {filteredClients.map((client) => (
+      {filtered.map((person) => (
         <Pressable
-          key={client.id}
+          key={person.id}
           accessibilityRole="button"
-          accessibilityLabel={`Ver perfil de ${client.name}`}
-          onPress={() => router.push({
-            pathname: '/(main)/directory/[clientId]',
-            params: { clientId: client.id },
-          })}
+          accessibilityLabel={`Ver perfil de ${person.name}`}
+          onPress={() => router.push({ pathname: '/(main)/directory/[clientId]', params: { clientId: person.id } })}
           style={({ pressed }) => pressed && styles.pressed}>
-          <Surface style={styles.clientRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{client.name.trim().slice(0, 1).toUpperCase()}</Text>
+          <FloatingCard style={styles.row}>
+            <View style={[styles.avatar, person.role === 'Coach' && styles.coachAvatar]}>
+              <Text style={styles.avatarText}>{person.name.trim().slice(0, 1).toUpperCase()}</Text>
             </View>
-            <View style={styles.clientInfo}>
-              <Text style={styles.clientName}>{client.name}</Text>
-              <Text style={styles.clientEmail}>{client.email}</Text>
-              <Text style={styles.coachName}>
-                {client.assignedCoach ? `Coach · ${client.assignedCoach.name}` : 'Sin Coach asignado'}
-              </Text>
+            <View style={styles.info}>
+              <Text style={styles.name}>{person.name}</Text>
+              <Text style={styles.email}>{person.email}</Text>
+              {person.role === 'Cliente' ? (
+                <Text style={styles.coach}>{person.assignedCoach ? `Coach · ${person.assignedCoach.name}` : 'Sin Coach asignado'}</Text>
+              ) : (
+                <Text style={styles.coach}>{person.phone || 'Sin teléfono'}</Text>
+              )}
             </View>
-            <View style={styles.rowAside}>
-              <Text style={[styles.membership, client.membership?.status === 'active' && styles.membershipActive]}>
-                {client.membership?.status ?? 'pendiente'}
-              </Text>
-              <Text style={styles.chevron}>›</Text>
-            </View>
-          </Surface>
+            {person.role === 'Cliente' ? (
+              <View style={[styles.chip, person.membership?.status === 'active' && styles.chipActive]}>
+                <Text style={[styles.chipText, person.membership?.status === 'active' && styles.chipTextActive]}>
+                  {membershipLabels[person.membership?.status ?? 'pending']}
+                </Text>
+              </View>
+            ) : null}
+            <MaterialIcons name="chevron-right" size={22} color={palette.muted} />
+          </FloatingCard>
         </Pressable>
       ))}
     </Page>
@@ -118,18 +136,24 @@ export default function DirectoryScreen() {
 }
 
 const styles = StyleSheet.create({
+  segments: { flexDirection: 'row', backgroundColor: '#E9ECE3', borderRadius: 20, padding: 4 },
+  segment: { flex: 1, borderRadius: 16, paddingVertical: 11, alignItems: 'center' },
+  segmentSelected: { backgroundColor: palette.deepGreen },
+  segmentText: { color: palette.ink, fontSize: 14, fontWeight: '700' },
+  segmentTextSelected: { color: palette.white },
   loading: { minHeight: 120, justifyContent: 'center', alignItems: 'center' },
   feedback: { gap: 10 },
-  clientRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: palette.lime, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: palette.deepGreen, fontSize: 17, fontWeight: '800' },
-  clientInfo: { flex: 1, gap: 3 },
-  clientName: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  clientEmail: { color: palette.muted, fontSize: 12 },
-  coachName: { color: palette.green, fontSize: 11, fontWeight: '700' },
-  rowAside: { alignItems: 'flex-end', gap: 5 },
-  membership: { color: palette.coral, backgroundColor: '#F7E9E3', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 4, fontSize: 9, fontWeight: '800', textTransform: 'uppercase' },
-  membershipActive: { color: palette.green, backgroundColor: '#E6EED7' },
-  chevron: { color: palette.muted, fontSize: 20, lineHeight: 20 },
-  pressed: { opacity: 0.76 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#19D98B26', alignItems: 'center', justifyContent: 'center' },
+  coachAvatar: { backgroundColor: '#18B7E826' },
+  avatarText: { color: palette.deepGreen, fontSize: 18, fontWeight: '800' },
+  info: { flex: 1, gap: 3 },
+  name: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  email: { color: palette.muted, fontSize: 12 },
+  coach: { color: palette.green, fontSize: 11, fontWeight: '700' },
+  chip: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: '#FF8A3D26' },
+  chipActive: { backgroundColor: '#19D98B26' },
+  chipText: { color: palette.orange, fontSize: 10, fontWeight: '800' },
+  chipTextActive: { color: palette.green },
+  pressed: { opacity: 0.78 },
 });

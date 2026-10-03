@@ -3,8 +3,13 @@ const jwt = require('jsonwebtoken');
 const { timingSafeEqual } = require('node:crypto');
 const { z } = require('zod');
 const User = require('../models/user.model');
+const MembershipPlan = require('../models/membership-plan.model');
 const env = require('../config/env');
 const HttpError = require('../utils/http-error');
+
+const phoneSchema = z.string().trim()
+  .transform((value) => value.replace(/[\s()+-]/g, ''))
+  .refine((value) => /^\d{10}$/.test(value), 'El teléfono debe tener 10 dígitos.');
 
 const credentialsSchema = z.object({
   email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()),
@@ -13,7 +18,7 @@ const credentialsSchema = z.object({
 
 const registrationSchema = credentialsSchema.extend({
   name: z.string().trim().min(2).max(100),
-  phone: z.string().trim().max(30).optional(),
+  phone: phoneSchema.optional(),
   goal: z.string().trim().max(120).optional(),
   experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
   availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
@@ -95,6 +100,8 @@ async function bootstrapAdmin(req, res) {
 async function createManagedUser(req, res) {
   const input = registrationSchema.extend({
     role: z.enum(['Coach', 'Cliente']),
+    address: z.string().trim().min(1).max(200).optional(),
+    membershipPlanId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
     membershipStatus: z.enum(['pending', 'active', 'suspended', 'expired']).optional(),
     membershipStartsAt: z.coerce.date().optional(),
     membershipExpiresAt: z.coerce.date().optional(),
@@ -116,6 +123,16 @@ async function createManagedUser(req, res) {
   }
   if (input.role === 'Coach' && input.assignedCoach) {
     throw new HttpError(400, 'No se puede asignar un Coach a otro Coach.');
+  }
+  if (input.role === 'Cliente' && input.address) {
+    throw new HttpError(400, 'La dirección solo aplica a Coaches.');
+  }
+  if (input.role === 'Cliente' && input.membershipPlanId) {
+    const plan = await MembershipPlan.findOne({ _id: input.membershipPlanId, isActive: true });
+    if (!plan) throw new HttpError(400, 'El plan seleccionado no existe o está inactivo.');
+    input.membershipPlanName = plan.name;
+    input.membershipPrice = plan.price;
+    input.membershipDurationDays = plan.durationInDays;
   }
   if (input.assignedCoach) {
     const coach = await User.findOne({ _id: input.assignedCoach, role: 'Coach', isActive: true });
@@ -147,6 +164,7 @@ function serializeDirectoryUser(user) {
     name: user.name,
     email: user.email,
     phone: user.phone,
+    address: user.address,
     role: user.role,
     isActive: user.isActive,
     goal: user.goal,
@@ -161,12 +179,14 @@ function serializeDirectoryUser(user) {
 }
 
 async function listDirectoryUsers(req, res) {
-  const input = z.object({ role: z.enum(['Cliente']).optional() }).parse(req.query);
-  const filter = { role: input.role ?? 'Cliente' };
+  const input = z.object({ role: z.enum(['Cliente', 'Coach']).optional() }).parse(req.query);
+  const role = input.role ?? 'Cliente';
+  if (role === 'Coach' && req.user.role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
+  const filter = { role };
   if (req.user.role === 'Coach') filter.assignedCoach = req.user.id;
 
   const users = await User.find(filter)
-    .select('name email phone role isActive goal experienceLevel membership assignedCoach')
+    .select('name email phone address role isActive goal experienceLevel membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
@@ -175,17 +195,60 @@ async function listDirectoryUsers(req, res) {
 }
 
 async function getDirectoryUser(req, res) {
-  const client = await User.findOne({ _id: req.params.id, role: 'Cliente' })
-    .select('name email phone role isActive goal experienceLevel membership assignedCoach')
+  const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
+    .select('name email phone address role isActive goal experienceLevel membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
 
-  if (!client) throw new HttpError(404, 'Cliente no encontrado.');
-  if (req.user.role === 'Coach' && String(client.assignedCoach?._id) !== req.user.id) {
-    throw new HttpError(404, 'Cliente no encontrado.');
+  if (!client) throw new HttpError(404, 'Usuario no encontrado.');
+  if (req.user.role === 'Coach' && (client.role !== 'Cliente' || String(client.assignedCoach?._id) !== req.user.id)) {
+    throw new HttpError(404, 'Usuario no encontrado.');
   }
 
   res.json({ user: serializeDirectoryUser(client) });
+}
+
+async function updateDirectoryUser(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
+  const input = z.object({
+    name: z.string().trim().min(2).max(100).optional(),
+    email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
+    phone: z.union([phoneSchema, z.literal('')]).optional(),
+    address: z.string().trim().max(200).optional(),
+    assignedCoach: z.string().regex(/^[a-f\d]{24}$/i).nullable().optional(),
+  }).parse(req.body);
+  if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+
+  const user = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } });
+  if (!user) throw new HttpError(404, 'Usuario no encontrado.');
+
+  if (input.email && input.email !== user.email) {
+    if (await User.exists({ email: input.email, _id: { $ne: user._id } })) {
+      throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
+    }
+    user.email = input.email;
+  }
+  if (input.name) user.name = input.name;
+  if (input.phone !== undefined) user.phone = input.phone || undefined;
+  if (input.address !== undefined) {
+    if (user.role !== 'Coach') throw new HttpError(400, 'La dirección solo aplica a Coaches.');
+    user.address = input.address || undefined;
+  }
+  if (input.assignedCoach !== undefined) {
+    if (user.role !== 'Cliente') throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
+    if (input.assignedCoach) {
+      const coach = await User.findOne({ _id: input.assignedCoach, role: 'Coach', isActive: true });
+      if (!coach) throw new HttpError(400, 'El Coach asignado no existe o está inactivo.');
+    }
+    user.assignedCoach = input.assignedCoach;
+  }
+  await user.save();
+
+  const updated = await User.findById(user._id)
+    .select('name email phone address role isActive goal experienceLevel membership assignedCoach')
+    .populate('assignedCoach', 'name email')
+    .lean();
+  res.json({ user: serializeDirectoryUser(updated) });
 }
 
 async function updateMembership(req, res) {
@@ -255,6 +318,7 @@ module.exports = {
   createManagedUser,
   listDirectoryUsers,
   getDirectoryUser,
+  updateDirectoryUser,
   updateMembership,
   login,
   getCurrentUser,

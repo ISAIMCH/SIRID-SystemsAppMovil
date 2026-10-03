@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { router, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -115,6 +116,14 @@ export default function AdminBillingScreen() {
     <Page>
       <AppHeader title="Cobros en recepción" detail="Valida el PIN que te muestra el cliente." />
 
+      <Pressable accessibilityRole="button" onPress={() => router.push('/(main)/plans' as Href)} style={styles.plansLink}>
+        <FloatingCard style={styles.plansCard}>
+          <IconBadge name="workspace-premium" color={palette.violet} />
+          <Text style={styles.plansText}>Planes de membresía</Text>
+          <MaterialIcons name="chevron-right" size={22} color={palette.muted} />
+        </FloatingCard>
+      </Pressable>
+
       <FloatingCard style={styles.pinCard}>
         <View style={styles.pinHeader}>
           <IconBadge name="pin" color={palette.cyan} />
@@ -205,6 +214,9 @@ export default function AdminBillingScreen() {
 }
 
 const styles = StyleSheet.create({
+  plansLink: { alignSelf: 'stretch' },
+  plansCard: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  plansText: { flex: 1, color: palette.ink, fontSize: 15, fontWeight: '800' },
   pinCard: { gap: 14, padding: 22 },
   pinHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pinTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },

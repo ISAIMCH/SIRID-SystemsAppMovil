@@ -8,6 +8,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const Equipment = require('./src/models/equipment.model');
 const Product = require('./src/models/product.model');
+const MembershipPlan = require('./src/models/membership-plan.model');
 const User = require('./src/models/user.model');
 
 const equipmentCatalog = [
@@ -37,6 +38,12 @@ const productCatalog = [
   { name: 'Faja lumbar', category: 'Accesorios', price: 389, stock: 10 },
   { name: 'Shaker 700 ml', category: 'Accesorios', price: 149, stock: 30 },
   { name: 'Guantes de entrenamiento', category: 'Accesorios', price: 219, stock: 14 },
+];
+
+const planCatalog = [
+  { name: 'Mensual', price: 599, durationInDays: 30, specifications: ['Acceso ilimitado', 'Rutina personalizada'], isActive: true },
+  { name: 'Trimestral', price: 1599, durationInDays: 90, specifications: ['Acceso ilimitado', 'Rutina personalizada', 'Ahorro del 11%'], isActive: true },
+  { name: 'Anual', price: 5499, durationInDays: 365, specifications: ['Acceso ilimitado', 'Rutina personalizada', '2 meses gratis'], isActive: true },
 ];
 
 function buildUsers(passwordHash, now) {
@@ -126,6 +133,10 @@ async function seed() {
 
   for (const product of productCatalog) {
     await Product.updateOne({ name: product.name }, { $setOnInsert: product }, { upsert: true, runValidators: true });
+  }
+
+  for (const plan of planCatalog) {
+    await MembershipPlan.updateOne({ name: plan.name }, { $setOnInsert: plan }, { upsert: true, runValidators: true });
   }
 
   const users = buildUsers(passwordHash, now);

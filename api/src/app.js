@@ -12,6 +12,7 @@ const workoutRoutes = require('./routes/workout.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const maintenanceRoutes = require('./routes/maintenance.routes');
 const storeRoutes = require('./routes/store.routes');
+const planRoutes = require('./routes/plan.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -44,6 +45,7 @@ app.use('/api/workouts', workoutRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/store', storeRoutes);
+app.use('/api/plans', planRoutes);
 app.use('/api', accessRoutes);
 app.use(notFound);
 app.use(errorHandler);

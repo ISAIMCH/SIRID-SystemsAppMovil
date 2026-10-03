@@ -10,6 +10,7 @@ export type GymGoUser = {
   name: string;
   email: string;
   phone?: string;
+  address?: string;
   role: GymGoRole;
   isActive: boolean;
   goal?: string;

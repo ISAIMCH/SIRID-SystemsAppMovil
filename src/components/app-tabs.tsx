@@ -39,7 +39,7 @@ const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcon
 
 const TAB_NAMES = Object.keys(TAB_META) as TabName[];
 
-const SECONDARY_SCREENS = ['routine-create', 'clients', 'profile'];
+const SECONDARY_SCREENS = ['routine-create', 'clients', 'profile', 'plans'];
 
 const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } } as const;
 

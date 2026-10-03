@@ -32,3 +32,11 @@ export type Routine = {
   exercises: Exercise[];
   updatedAt: string;
 };
+export type MembershipPlan = {
+  _id: string;
+  name: string;
+  price: number;
+  durationInDays: number;
+  specifications: string[];
+  isActive: boolean;
+};
