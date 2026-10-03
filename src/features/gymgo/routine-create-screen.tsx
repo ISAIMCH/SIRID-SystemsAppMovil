@@ -1,20 +1,25 @@
+import { MaterialIcons } from '@expo/vector-icons';
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Redirect, router } from 'expo-router';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle, Surface } from './ui';
-import { palette } from './theme';
 import type { DirectoryClient } from './directory-types';
+import { FloatingCard, IconBadge } from './fit-ui';
+import { SelectField } from './select-field';
+import { palette } from './theme';
+import type { Exercise, Routine, RoutineTemplate } from './types';
+import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
 
-type EquipmentStatus = 'available' | 'busy' | 'out_of_service';
-type Equipment = { _id: string; name: string; zone: string; status: EquipmentStatus };
+type Equipment = { _id: string; name: string; zone: string; status: 'available' | 'busy' | 'out_of_service' };
 type RoutineLevel = 'principiante' | 'intermedio' | 'avanzado';
 type DraftExercise = {
+  _id?: string;
   name: string;
   muscleGroup: string;
-  equipmentId: string;
+  equipmentId?: string;
+  bodyweight: boolean;
   day: number;
   sets: number;
   reps: string;
@@ -23,20 +28,49 @@ type DraftExercise = {
   order: number;
 };
 
+const BODYWEIGHT = 'bodyweight';
+
 const weekDays = [
   { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mié' },
   { value: 4, label: 'Jue' }, { value: 5, label: 'Vie' }, { value: 6, label: 'Sáb' }, { value: 0, label: 'Dom' },
 ];
-
 const weekDayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const levels: RoutineLevel[] = ['principiante', 'intermedio', 'avanzado'];
 
+function toDraft(exercise: Exercise, order: number): DraftExercise {
+  const equipmentId = typeof exercise.equipmentId === 'object' ? exercise.equipmentId._id : exercise.equipmentId;
+  return {
+    _id: exercise._id,
+    name: exercise.name,
+    muscleGroup: exercise.muscleGroup,
+    equipmentId: exercise.bodyweight ? undefined : equipmentId,
+    bodyweight: Boolean(exercise.bodyweight),
+    day: exercise.day ?? 0,
+    sets: exercise.sets,
+    reps: exercise.reps,
+    suggestedWeight: exercise.suggestedWeight,
+    restSeconds: exercise.restSeconds,
+    order,
+  };
+}
+
 export default function RoutineCreateScreen() {
+  const { n } = useLocalSearchParams<{ n?: string }>();
+  return <RoutineForm key={n ?? 'default'} />;
+}
+
+function RoutineForm() {
   const { user } = useAuth();
+  const params = useLocalSearchParams<{ mode?: string; templateId?: string; routineId?: string; clientId?: string }>();
+  const isTemplate = params.mode === 'template';
+  const editingId = isTemplate ? params.templateId : params.routineId;
+  const isEditing = Boolean(editingId);
+
   const [clients, setClients] = useState<DirectoryClient[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [isLoadingReferences, setIsLoadingReferences] = useState(true);
-  const [referenceError, setReferenceError] = useState('');
+  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -45,11 +79,13 @@ export default function RoutineCreateScreen() {
   const [level, setLevel] = useState<RoutineLevel>('principiante');
   const [durationWeeks, setDurationWeeks] = useState('4');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
-  const [assignedTo, setAssignedTo] = useState('');
+  const [assignedTo, setAssignedTo] = useState(params.clientId ?? '');
 
   const [exerciseName, setExerciseName] = useState('');
   const [muscleGroup, setMuscleGroup] = useState('');
-  const [equipmentId, setEquipmentId] = useState('');
+  const [isAddingGroup, setIsAddingGroup] = useState(false);
+  const [newGroup, setNewGroup] = useState('');
+  const [equipmentChoice, setEquipmentChoice] = useState('');
   const [exerciseDay, setExerciseDay] = useState<number | null>(null);
   const [sets, setSets] = useState('3');
   const [reps, setReps] = useState('10');
@@ -60,46 +96,81 @@ export default function RoutineCreateScreen() {
   useEffect(() => {
     let isCurrent = true;
 
-    async function loadReferences() {
+    async function load() {
       try {
-        const [clientsResponse, equipmentResponse] = await Promise.all([
+        const [clientsResponse, equipmentResponse, groupsResponse] = await Promise.all([
           api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: 'Cliente' } }),
           api.get<{ equipment: Equipment[] }>('/inventory'),
+          api.get<{ groups: { name: string }[] }>('/muscle-groups'),
         ]);
         if (!isCurrent) return;
         setClients(clientsResponse.data.users);
-        setEquipment(equipmentResponse.data.equipment.filter((item) => item.status !== 'out_of_service'));
+        setEquipment(equipmentResponse.data.equipment);
+        setMuscleGroups(groupsResponse.data.groups.map((group) => group.name));
+
+        if (editingId) {
+          const source = isTemplate
+            ? (await api.get<{ template: RoutineTemplate }>(`/routine-templates/${editingId}`)).data.template
+            : (await api.get<{ routine: Routine }>(`/routines/${editingId}`)).data.routine;
+          if (!isCurrent) return;
+          setTitle(source.title);
+          setGoal(source.goal ?? '');
+          setLevel(source.level);
+          setDurationWeeks(String(source.durationWeeks));
+          setSelectedDays(source.scheduleDays ?? []);
+          setExercises(source.exercises.map(toDraft));
+          if (!isTemplate) {
+            const routine = source as Routine;
+            setAssignedTo(typeof routine.assignedTo === 'object' ? routine.assignedTo._id : routine.assignedTo);
+          }
+        }
       } catch (requestError) {
-        if (isCurrent) setReferenceError(getApiErrorMessage(requestError, 'No se pudieron cargar clientes o equipos.'));
+        if (isCurrent) setLoadError(getApiErrorMessage(requestError, 'No se pudo cargar la información.'));
       } finally {
-        if (isCurrent) setIsLoadingReferences(false);
+        if (isCurrent) setIsLoading(false);
       }
     }
 
-    void loadReferences();
+    void load();
     return () => { isCurrent = false; };
-  }, []);
+  }, [editingId, isTemplate]);
 
   if (user?.role !== 'Coach') return <Redirect href="/(main)/routines" />;
 
+  const availableEquipment = equipment.filter((item) => item.status !== 'out_of_service');
+  const equipmentName = (id?: string) => equipment.find((item) => item._id === id)?.name ?? 'Equipo';
+
   function toggleDay(day: number) {
-    setSelectedDays((current) => (
-      current.includes(day) ? current.filter((value) => value !== day) : [...current, day]
-    ));
-    setExerciseDay((current) => current === day ? null : current);
+    setSelectedDays((current) => (current.includes(day) ? current.filter((value) => value !== day) : [...current, day]));
+    setExerciseDay((current) => (current === day ? null : current));
+  }
+
+  async function saveGroup() {
+    const name = newGroup.trim();
+    if (name.length < 2) return setError('Escribe el nombre del grupo muscular.');
+    setError('');
+    try {
+      const response = await api.post<{ group: { name: string } }>('/muscle-groups', { name });
+      const saved = response.data.group.name;
+      setMuscleGroups((current) => (current.includes(saved) ? current : [...current, saved].sort((a, b) => a.localeCompare(b))));
+      setMuscleGroup(saved);
+      setNewGroup('');
+      setIsAddingGroup(false);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'No se pudo guardar el grupo muscular.'));
+    }
   }
 
   function addExercise() {
     setError('');
-    if (!exerciseName.trim() || !muscleGroup.trim() || !equipmentId || exerciseDay === null) {
-      setError('Completa ejercicio, grupo muscular, equipo del inventario y día.');
+    if (!exerciseName.trim() || !muscleGroup || !equipmentChoice || exerciseDay === null) {
+      setError('Completa ejercicio, grupo muscular, equipo y día.');
       return;
     }
     const parsedSets = Number(sets);
-    const parsedReps = reps.trim();
     const parsedRest = Number(restSeconds);
-    const parsedWeight = suggestedWeight.trim() ? Number(suggestedWeight) : undefined;
-    if (!Number.isInteger(parsedSets) || parsedSets < 1 || !parsedReps || !Number.isInteger(parsedRest) || parsedRest < 0) {
+    const parsedWeight = suggestedWeight.trim() ? Number(suggestedWeight.replace(',', '.')) : undefined;
+    if (!Number.isInteger(parsedSets) || parsedSets < 1 || !reps.trim() || !Number.isInteger(parsedRest) || parsedRest < 0) {
       setError('Verifica series, repeticiones y descanso.');
       return;
     }
@@ -108,92 +179,106 @@ export default function RoutineCreateScreen() {
       return;
     }
 
+    const isBodyweight = equipmentChoice === BODYWEIGHT;
     setExercises((current) => [...current, {
       name: exerciseName.trim(),
-      muscleGroup: muscleGroup.trim(),
-      equipmentId,
+      muscleGroup,
+      bodyweight: isBodyweight,
+      ...(isBodyweight ? {} : { equipmentId: equipmentChoice }),
       day: exerciseDay,
       sets: parsedSets,
-      reps: parsedReps,
+      reps: reps.trim(),
       ...(parsedWeight !== undefined ? { suggestedWeight: parsedWeight } : {}),
       restSeconds: parsedRest,
       order: current.length,
     }]);
     setExerciseName('');
     setMuscleGroup('');
-    setEquipmentId('');
+    setEquipmentChoice('');
     setSuggestedWeight('');
   }
 
-  async function saveRoutine() {
+  function adjustWeight(index: number, delta: number) {
+    setExercises((current) => current.map((exercise, itemIndex) => (
+      itemIndex === index ? { ...exercise, suggestedWeight: Math.max(0, (exercise.suggestedWeight ?? 0) + delta) } : exercise
+    )));
+  }
+
+  async function save() {
     setError('');
-    if (!title.trim() || !goal.trim() || !assignedTo) {
-      setError('Completa el nombre, objetivo y cliente de la rutina.');
-      return;
-    }
-    if (!selectedDays.length) {
-      setError('Selecciona al menos un día de entrenamiento.');
-      return;
-    }
-    if (!exercises.length) {
-      setError('Agrega al menos un ejercicio desde el inventario.');
-      return;
-    }
+    if (!title.trim()) return setError('Escribe el nombre de la rutina.');
+    if (!isTemplate && !assignedTo) return setError('Selecciona el cliente de la rutina.');
+    if (!selectedDays.length) return setError('Selecciona al menos un día de entrenamiento.');
+    if (!exercises.length) return setError('Agrega al menos un ejercicio.');
     const weeks = Number(durationWeeks);
-    if (!Number.isInteger(weeks) || weeks < 1 || weeks > 52) {
-      setError('La duración debe ser de 1 a 52 semanas.');
-      return;
+    if (!Number.isInteger(weeks) || weeks < 1 || weeks > 52) return setError('La duración debe ser de 1 a 52 semanas.');
+    if (exercises.some((exercise) => !selectedDays.includes(exercise.day))) {
+      return setError('Hay ejercicios en días que ya no están programados.');
     }
+
+    const body = {
+      title: title.trim(),
+      ...(goal.trim() ? { goal: goal.trim() } : {}),
+      level,
+      durationWeeks: weeks,
+      daysPerWeek: selectedDays.length,
+      scheduleDays: selectedDays,
+      exercises: exercises.map((exercise, order) => ({ ...exercise, order })),
+    };
 
     setIsSaving(true);
     try {
-      await api.post('/routines', {
-        title: title.trim(),
-        goal: goal.trim(),
-        level,
-        durationWeeks: weeks,
-        daysPerWeek: selectedDays.length,
-        scheduleDays: selectedDays,
-        assignedTo,
-        status: 'active',
-        exercises,
-      });
-      router.replace('/(main)/routines');
+      if (isTemplate) {
+        if (editingId) await api.patch(`/routine-templates/${editingId}`, body);
+        else await api.post('/routine-templates', body);
+      } else if (editingId) {
+        await api.patch(`/routines/${editingId}`, body);
+      } else {
+        await api.post('/routines', { ...body, assignedTo, status: 'active' });
+      }
+      router.back();
     } catch (requestError) {
-      setError(getApiErrorMessage(requestError, 'No se pudo guardar la rutina.'));
+      setError(getApiErrorMessage(requestError, 'No se pudo guardar.'));
     } finally {
       setIsSaving(false);
     }
   }
 
-  const eligibleEquipment = equipment.filter((item) => item.status !== 'out_of_service');
+  const heading = isTemplate
+    ? (isEditing ? 'Editar plantilla' : 'Nueva plantilla')
+    : (isEditing ? 'Editar rutina del cliente' : 'Nueva rutina');
 
   return (
     <Page>
-      <Pressable accessibilityRole="button" onPress={() => router.back()} style={styles.backButton}>
-        <Text style={styles.backText}>‹  Rutinas</Text>
-      </Pressable>
-      <AppHeader title="Coach Creator" detail="Diseña el plan y asígnalo a uno de tus clientes." />
+      <View style={styles.header}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()}>
+          <IconBadge name="arrow-back" color={palette.ink} />
+        </Pressable>
+        <View style={styles.flex}>
+          <Text style={styles.title}>{heading}</Text>
+          <Text style={styles.subtitle}>
+            {isTemplate ? 'Una base reutilizable; no está ligada a ningún cliente.' : 'Los cambios solo afectan la rutina de este cliente.'}
+          </Text>
+        </View>
+      </View>
 
-      {referenceError ? <Notice error>{referenceError}</Notice> : null}
-      {isLoadingReferences ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
-      {!isLoadingReferences && clients.length === 0 ? <Notice>No tienes clientes asignados para recibir una rutina.</Notice> : null}
-      {!isLoadingReferences && eligibleEquipment.length === 0 ? <Notice>No hay equipos disponibles en el inventario para diseñar ejercicios.</Notice> : null}
+      {loadError ? <Notice error>{loadError}</Notice> : null}
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
 
-      <Surface style={styles.section}>
+      <FloatingCard style={styles.section}>
         <SectionTitle>Datos de la rutina</SectionTitle>
-        <Field label="Nombre del plan" placeholder="Fuerza base" value={title} onChangeText={setTitle} />
+        <Field label="Nombre" placeholder="Hipertrofia principiantes" value={title} onChangeText={setTitle} />
         <Field label="Objetivo" placeholder="Fuerza, hipertrofia…" value={goal} onChangeText={setGoal} />
-        <Field label="Duración (semanas)" keyboardType="number-pad" value={durationWeeks} onChangeText={setDurationWeeks} />
-        <View style={styles.fieldGroup}>
+        <Field label="Duración (semanas)" keyboardType="number-pad" value={durationWeeks} onChangeText={(value) => setDurationWeeks(value.replace(/\D/g, ''))} />
+        <View style={styles.group}>
           <Text style={styles.label}>Nivel</Text>
           <View style={styles.chips}>
             {levels.map((item) => (
-              <Choice key={item} label={capitalize(item)} selected={level === item} onPress={() => setLevel(item)} />
+              <Choice key={item} label={item.charAt(0).toUpperCase() + item.slice(1)} selected={level === item} onPress={() => setLevel(item)} />
             ))}
           </View>
         </View>
-        <View style={styles.fieldGroup}>
+        <View style={styles.group}>
           <Text style={styles.label}>Días programados ({selectedDays.length})</Text>
           <View style={styles.chips}>
             {weekDays.map((day) => (
@@ -201,89 +286,104 @@ export default function RoutineCreateScreen() {
             ))}
           </View>
         </View>
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Asignar a cliente</Text>
-          {clients.map((client) => (
-            <Pressable
-              key={client.id}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: assignedTo === client.id }}
-              onPress={() => setAssignedTo(client.id)}
-              style={[styles.clientOption, assignedTo === client.id && styles.selectedOption]}>
-              <View style={styles.clientText}>
-                <Text style={[styles.clientName, assignedTo === client.id && styles.selectedText]}>{client.name}</Text>
-                <Text style={[styles.clientEmail, assignedTo === client.id && styles.selectedText]}>{client.email}</Text>
-              </View>
-              <Text style={[styles.radio, assignedTo === client.id && styles.radioSelected]}>{assignedTo === client.id ? '●' : '○'}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </Surface>
+        {!isTemplate && !isEditing ? (
+          <SelectField
+            label="Asignar a cliente"
+            placeholder="Selecciona un cliente"
+            emptyText="No tienes clientes asignados."
+            options={clients.map((client) => ({ value: client.id, label: `${client.name} - ${client.email}` }))}
+            value={assignedTo}
+            onChange={setAssignedTo}
+          />
+        ) : null}
+      </FloatingCard>
 
-      <Surface style={styles.section}>
+      <FloatingCard style={styles.section}>
         <SectionTitle>Agregar ejercicio</SectionTitle>
         <Field label="Ejercicio" value={exerciseName} onChangeText={setExerciseName} placeholder="Prensa de pierna" />
-        <Field label="Grupo muscular" value={muscleGroup} onChangeText={setMuscleGroup} placeholder="Pierna" />
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Equipo del inventario</Text>
-          <Text style={styles.helper}>Se carga desde el catálogo; no se puede escribir equipo manualmente.</Text>
-          <View style={styles.equipmentList}>
-            {eligibleEquipment.map((item) => (
-              <Choice
-                key={item._id}
-                label={`${item.name} · ${item.zone}`}
-                selected={equipmentId === item._id}
-                onPress={() => setEquipmentId(item._id)}
-              />
-            ))}
+        <SelectField
+          label="Grupo muscular"
+          placeholder="Selecciona un grupo"
+          options={muscleGroups.map((name) => ({ value: name, label: name }))}
+          value={muscleGroup}
+          onChange={setMuscleGroup}
+          addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }}
+        />
+        {isAddingGroup ? (
+          <View style={styles.group}>
+            <Field label="Nuevo grupo muscular" placeholder="Antebrazo" value={newGroup} onChangeText={setNewGroup} />
+            <View style={styles.row}>
+              <View style={styles.flex}><ActionButton onPress={() => void saveGroup()}>Guardar grupo</ActionButton></View>
+              <View style={styles.flex}><ActionButton secondary onPress={() => { setIsAddingGroup(false); setNewGroup(''); }}>Cancelar</ActionButton></View>
+            </View>
           </View>
-        </View>
-        <View style={styles.fieldGroup}>
+        ) : null}
+        <SelectField
+          label="Equipo"
+          placeholder="Selecciona el equipo"
+          options={[
+            { value: BODYWEIGHT, label: 'Peso Corporal / Libre', hint: 'Sin máquina' },
+            ...availableEquipment.map((item) => ({ value: item._id, label: item.name, hint: item.zone })),
+          ]}
+          value={equipmentChoice}
+          onChange={setEquipmentChoice}
+        />
+        <View style={styles.group}>
           <Text style={styles.label}>Día del ejercicio</Text>
           <View style={styles.chips}>
             {weekDays.filter((day) => selectedDays.includes(day.value)).map((day) => (
               <Choice key={day.value} label={day.label} selected={exerciseDay === day.value} onPress={() => setExerciseDay(day.value)} />
             ))}
           </View>
+          {!selectedDays.length ? <Text style={styles.helper}>Primero elige los días programados.</Text> : null}
         </View>
-        <View style={styles.numberRow}>
-          <View style={styles.numberField}><Field label="Series" keyboardType="number-pad" value={sets} onChangeText={setSets} /></View>
-          <View style={styles.numberField}><Field label="Repeticiones" value={reps} onChangeText={setReps} placeholder="8-10" /></View>
+        <View style={styles.row}>
+          <View style={styles.flex}><Field label="Series" keyboardType="number-pad" value={sets} onChangeText={(value) => setSets(value.replace(/\D/g, ''))} /></View>
+          <View style={styles.flex}><Field label="Repeticiones" value={reps} onChangeText={setReps} placeholder="8-10" /></View>
         </View>
-        <View style={styles.numberRow}>
-          <View style={styles.numberField}><Field label="Peso sugerido (kg)" keyboardType="decimal-pad" value={suggestedWeight} onChangeText={setSuggestedWeight} placeholder="Opcional" /></View>
-          <View style={styles.numberField}><Field label="Descanso (segundos)" keyboardType="number-pad" value={restSeconds} onChangeText={setRestSeconds} /></View>
+        <View style={styles.row}>
+          <View style={styles.flex}><Field label="Peso sugerido (kg)" keyboardType="decimal-pad" value={suggestedWeight} onChangeText={setSuggestedWeight} placeholder="Opcional" /></View>
+          <View style={styles.flex}><Field label="Descanso (s)" keyboardType="number-pad" value={restSeconds} onChangeText={(value) => setRestSeconds(value.replace(/\D/g, ''))} /></View>
         </View>
-        <ActionButton onPress={addExercise} disabled={isLoadingReferences || !eligibleEquipment.length || !selectedDays.length}>
-          Añadir ejercicio
-        </ActionButton>
-      </Surface>
+        <ActionButton onPress={addExercise} disabled={isLoading || !selectedDays.length}>Añadir ejercicio</ActionButton>
+      </FloatingCard>
 
       {exercises.length ? (
-        <View style={styles.fieldGroup}>
+        <View style={styles.group}>
           <SectionTitle>{`${exercises.length} ejercicios en la rutina`}</SectionTitle>
-          {exercises.map((exercise, index) => {
-            const selectedEquipment = equipment.find((item) => item._id === exercise.equipmentId);
-            return (
-              <Surface key={`${exercise.name}-${index}`} style={styles.exerciseRow}>
-                <View style={styles.exerciseInfo}>
+          {exercises.map((exercise, index) => (
+            <FloatingCard key={exercise._id ?? `${exercise.name}-${index}`} style={styles.exerciseCard}>
+              <View style={styles.exerciseTop}>
+                <IconBadge name={exercise.bodyweight ? 'accessibility-new' : 'fitness-center'} color={exercise.bodyweight ? palette.orange : palette.violet} size={40} />
+                <View style={styles.flex}>
                   <Text style={styles.exerciseName}>{exercise.name}</Text>
                   <Text style={styles.exerciseMeta}>
-                    {weekDayNames[exercise.day]} · {selectedEquipment?.name ?? 'Equipo'} · {exercise.sets} × {exercise.reps} · {exercise.restSeconds}s descanso
+                    {weekDayNames[exercise.day]} · {exercise.muscleGroup} · {exercise.bodyweight ? 'Peso corporal / Libre' : equipmentName(exercise.equipmentId)}
                   </Text>
+                  <Text style={styles.exerciseMeta}>{exercise.sets} × {exercise.reps} · {exercise.restSeconds}s descanso</Text>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${exercise.name}`} onPress={() => setExercises((current) => current.filter((_, itemIndex) => itemIndex !== index).map((item, order) => ({ ...item, order })))}>
-                  <Text style={styles.remove}>Quitar</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${exercise.name}`} onPress={() => setExercises((current) => current.filter((_, itemIndex) => itemIndex !== index))}>
+                  <MaterialIcons name="delete" size={22} color={palette.danger} />
                 </Pressable>
-              </Surface>
-            );
-          })}
+              </View>
+              <View style={styles.weightRow}>
+                <Text style={styles.weightLabel}>Peso sugerido</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Bajar peso" onPress={() => adjustWeight(index, -2.5)} style={styles.stepButton}>
+                  <MaterialIcons name="remove" size={18} color={palette.ink} />
+                </Pressable>
+                <Text style={styles.weightValue}>{exercise.suggestedWeight ?? 0} kg</Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Subir peso" onPress={() => adjustWeight(index, 2.5)} style={styles.stepButton}>
+                  <MaterialIcons name="add" size={18} color={palette.ink} />
+                </Pressable>
+              </View>
+            </FloatingCard>
+          ))}
         </View>
       ) : null}
 
       {error ? <Notice error>{error}</Notice> : null}
-      <ActionButton onPress={() => void saveRoutine()} disabled={isSaving || isLoadingReferences || !clients.length || !eligibleEquipment.length}>
-        {isSaving ? <ActivityIndicator color={palette.white} /> : 'Guardar y asignar rutina'}
+      <ActionButton onPress={() => void save()} disabled={isSaving || isLoading}>
+        {isSaving ? <ActivityIndicator color={palette.white} /> : isTemplate ? 'Guardar plantilla' : isEditing ? 'Guardar cambios' : 'Guardar y asignar rutina'}
       </ActionButton>
     </Page>
   );
@@ -291,45 +391,34 @@ export default function RoutineCreateScreen() {
 
 function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.choice, selected && styles.selectedOption]}>
-      <Text style={[styles.choiceText, selected && styles.selectedText]}>{label}</Text>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress} style={[styles.choice, selected && styles.choiceSelected]}>
+      <Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{label}</Text>
     </Pressable>
   );
 }
 
-function capitalize(value: string) {
-  return value.charAt(0).toUpperCase() + value.slice(1);
-}
-
 const styles = StyleSheet.create({
-  backButton: { alignSelf: 'flex-start', paddingVertical: 4, paddingRight: 12 },
-  backText: { color: palette.green, fontSize: 14, fontWeight: '800' },
-  loading: { minHeight: 80, alignItems: 'center', justifyContent: 'center' },
-  section: { gap: 15 },
-  fieldGroup: { gap: 8 },
+  flex: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  title: { color: palette.ink, fontSize: 24, fontWeight: '800' },
+  subtitle: { color: palette.muted, fontSize: 13 },
+  loading: { minHeight: 60, alignItems: 'center', justifyContent: 'center' },
+  section: { gap: 15, padding: 20 },
+  group: { gap: 8 },
+  row: { flexDirection: 'row', gap: 12 },
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  helper: { color: palette.muted, fontSize: 11, lineHeight: 16 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  equipmentList: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, maxHeight: 190, overflow: 'scroll' },
-  choice: { minHeight: 36, justifyContent: 'center', borderWidth: 1, borderColor: palette.line, borderRadius: 7, backgroundColor: palette.surface, paddingHorizontal: 10, paddingVertical: 7 },
-  selectedOption: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
-  choiceText: { color: palette.ink, fontSize: 11, fontWeight: '700' },
-  selectedText: { color: palette.white },
-  clientOption: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: palette.line, borderRadius: 8, padding: 10 },
-  clientText: { flex: 1, gap: 3 },
-  clientName: { color: palette.ink, fontSize: 13, fontWeight: '800' },
-  clientEmail: { color: palette.muted, fontSize: 11 },
-  radio: { color: palette.muted, fontSize: 18 },
-  radioSelected: { color: palette.lime },
-  numberRow: { flexDirection: 'row', gap: 10 },
-  numberField: { flex: 1 },
-  exerciseRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 13 },
-  exerciseInfo: { flex: 1, gap: 4 },
-  exerciseName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  exerciseMeta: { color: palette.muted, fontSize: 11, lineHeight: 16 },
-  remove: { color: palette.danger, fontSize: 11, fontWeight: '800', padding: 6 },
+  helper: { color: palette.muted, fontSize: 12 },
+  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  choice: { borderRadius: 20, backgroundColor: '#F2F4EE', paddingHorizontal: 14, paddingVertical: 9 },
+  choiceSelected: { backgroundColor: palette.deepGreen },
+  choiceText: { color: palette.ink, fontSize: 12, fontWeight: '700' },
+  choiceTextSelected: { color: palette.white },
+  exerciseCard: { gap: 12 },
+  exerciseTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  exerciseName: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  exerciseMeta: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  weightRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 10 },
+  weightLabel: { flex: 1, color: palette.ink, fontSize: 13, fontWeight: '700' },
+  weightValue: { minWidth: 64, textAlign: 'center', color: palette.green, fontSize: 15, fontWeight: '800' },
+  stepButton: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#F2F4EE', alignItems: 'center', justifyContent: 'center' },
 });

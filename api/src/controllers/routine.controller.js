@@ -4,6 +4,23 @@ const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
 
+const exerciseInputSchema = z.object({
+  _id: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  name: z.string().trim().min(1).max(120),
+  muscleGroup: z.string().trim().min(1).max(80),
+  equipmentId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  bodyweight: z.boolean().default(false),
+  day: z.number().int().min(0).max(6),
+  sets: z.number().int().min(1).max(50),
+  reps: z.string().trim().min(1).max(30),
+  suggestedWeight: z.number().min(0).max(1000).optional(),
+  restSeconds: z.number().int().min(0).max(3600).default(60),
+  order: z.number().int().min(0),
+}).refine((exercise) => exercise.bodyweight || exercise.equipmentId, {
+  path: ['equipmentId'],
+  message: 'Selecciona un equipo del inventario o Peso corporal / Libre.',
+});
+
 const routineBaseSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(2000).optional(),
@@ -14,20 +31,10 @@ const routineBaseSchema = z.object({
   scheduleDays: z.array(z.number().int().min(0).max(6)).max(7),
   assignedTo: z.string().regex(/^[a-f\d]{24}$/i),
   status: z.enum(['active', 'paused']).default('active'),
-  exercises: z.array(z.object({
-    name: z.string().trim().min(1).max(120),
-    muscleGroup: z.string().trim().min(1).max(80),
-    equipmentId: z.string().regex(/^[a-f\d]{24}$/i),
-    day: z.number().int().min(0).max(6),
-    sets: z.number().int().min(1).max(50),
-    reps: z.string().trim().min(1).max(30),
-    suggestedWeight: z.number().min(0).max(1000).optional(),
-    restSeconds: z.number().int().min(0).max(3600).default(60),
-    order: z.number().int().min(0),
-  })).min(1).max(100),
+  exercises: z.array(exerciseInputSchema).min(1).max(100),
 });
 
-const routineSchema = routineBaseSchema.superRefine((routine, context) => {
+function scheduleRefinement(routine, context) {
   if (routine.scheduleDays && new Set(routine.scheduleDays).size !== routine.scheduleDays.length) {
     context.addIssue({ code: 'custom', path: ['scheduleDays'], message: 'No repitas días de entrenamiento.' });
   }
@@ -39,10 +46,13 @@ const routineSchema = routineBaseSchema.superRefine((routine, context) => {
       context.addIssue({ code: 'custom', path: ['exercises', index, 'day'], message: 'El día del ejercicio debe estar programado en la rutina.' });
     }
   });
-});
+}
+
+const routineSchema = routineBaseSchema.superRefine(scheduleRefinement);
 
 async function ensureEligibleEquipment(exercises) {
-  const equipmentIds = [...new Set(exercises.map((exercise) => String(exercise.equipmentId)))];
+  const equipmentIds = [...new Set(exercises.filter((exercise) => exercise.equipmentId && !exercise.bodyweight).map((exercise) => String(exercise.equipmentId)))];
+  if (equipmentIds.length === 0) return;
   const eligibleEquipment = await Equipment.find({
     _id: { $in: equipmentIds },
     status: { $ne: 'out_of_service' },
@@ -58,6 +68,11 @@ async function listRoutines(req, res) {
   if (req.user.role === 'Coach') {
     const clientIds = await User.find({ assignedCoach: req.user.id }).distinct('_id');
     filter = { assignedTo: { $in: clientIds } };
+  }
+  if (req.user.role !== 'Cliente' && /^[a-f\d]{24}$/i.test(String(req.query.clientId ?? ''))) {
+    const clientId = String(req.query.clientId);
+    const allowed = req.user.role === 'Admin' || filter.assignedTo.$in.some((id) => String(id) === clientId);
+    filter = allowed ? { assignedTo: clientId } : { _id: null };
   }
   const routines = await Routine.find(filter)
     .populate('assignedTo', 'name email')
@@ -146,4 +161,7 @@ module.exports = {
   deleteRoutine,
   routineSchema,
   routineBaseSchema,
+  exerciseInputSchema,
+  scheduleRefinement,
+  ensureEligibleEquipment,
 };

@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientHomeScreen from './client-home-screen';
+import { routineEditorHref } from './routine-links';
 import ClientQrCard from './client-qr-card';
 import { palette } from './theme';
 import type { Routine } from './types';
@@ -223,7 +224,7 @@ function StaffDashboard() {
             </View>
           ) : user?.role === 'Coach' ? (
             <View style={styles.actionStack}>
-              <ActionButton onPress={() => router.push('/(main)/routine-create')}>Crear rutina</ActionButton>
+              <ActionButton onPress={() => router.push(routineEditorHref())}>Crear rutina</ActionButton>
               <ActionButton secondary onPress={() => router.push('/directory' as Href)}>Ver directorio</ActionButton>
             </View>
           ) : (

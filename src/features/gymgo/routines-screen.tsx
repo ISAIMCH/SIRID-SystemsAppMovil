@@ -1,11 +1,13 @@
-import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { palette } from './theme';
 import type { Exercise, Routine } from './types';
+import CoachTemplates from './coach-templates';
+import { routineEditorHref } from './routine-links';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 
 const levelNames = {
@@ -82,7 +84,7 @@ export default function RoutinesScreen() {
     }
   }
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let isCurrent = true;
     api.get<{ routines: Routine[] }>('/routines')
       .then((response) => {
@@ -95,7 +97,9 @@ export default function RoutinesScreen() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, [retryNumber]);
+    // retryNumber solo fuerza una nueva carga al reintentar o al asignar una plantilla.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryNumber]));
 
   return (
     <Page>
@@ -104,8 +108,12 @@ export default function RoutinesScreen() {
         detail={user?.role === 'Coach' ? 'Coach Creator y planes de tus clientes.' : 'Planes de entrenamiento disponibles para tu cuenta.'}
       />
       {user?.role === 'Coach' ? (
-        <ActionButton onPress={() => router.push('/(main)/routine-create')}>Crear y asignar rutina</ActionButton>
+        <View style={styles.coachActions}>
+          <ActionButton onPress={() => router.push(routineEditorHref())}>Nueva rutina para cliente</ActionButton>
+          <ActionButton secondary onPress={() => router.push(routineEditorHref({ mode: 'template' }))}>Nueva plantilla base</ActionButton>
+        </View>
       ) : null}
+      {user?.role === 'Coach' ? <CoachTemplates onAssigned={() => setRetryNumber((current) => current + 1)} /> : null}
       <SectionTitle>{routines.length ? `${routines.length} planes` : 'Tu plan de entrenamiento'}</SectionTitle>
       {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : null}
       {logMessage ? <Notice error={logMessage.error}>{logMessage.text}</Notice> : null}
@@ -133,6 +141,14 @@ export default function RoutinesScreen() {
             {levelNames[routine.level]}  ·  {routine.daysPerWeek} días/semana  ·  {routine.durationWeeks} semanas
           </Text>
           {routine.goal ? <Text style={styles.goal}>Objetivo · {routine.goal}</Text> : null}
+          {user?.role === 'Coach' ? (
+            <View style={styles.coachRow}>
+              {typeof routine.assignedTo === 'object' ? <Text style={styles.goal}>Cliente · {routine.assignedTo.name}</Text> : null}
+              <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}>
+                <Text style={styles.retry}>Editar rutina</Text>
+              </Pressable>
+            </View>
+          ) : null}
           <View style={styles.rule} />
           {getRoutineDays(routine).map((day) => {
             const dayExercises = getExercisesForDay(routine, day);
@@ -240,6 +256,8 @@ function getExercisesForDay(routine: Routine, day: number) {
 }
 
 const styles = StyleSheet.create({
+  coachActions: { gap: 10 },
+  coachRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   feedback: { gap: 8 },
   retry: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
   routine: { gap: 14, borderRadius: 24, borderWidth: 0, padding: 20, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },

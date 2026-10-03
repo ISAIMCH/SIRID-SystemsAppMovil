@@ -5,6 +5,8 @@ const controller = require('../controllers/workout.controller');
 
 const router = express.Router();
 
+router.get('/client/:clientId', authenticate, authorize('Admin', 'Coach'), asyncHandler(controller.getClientWorkoutHistory));
+
 router.use(authenticate, authorize('Cliente'));
 router.post('/', asyncHandler(controller.createWorkoutSession));
 router.get('/me', asyncHandler(controller.getMyWorkoutHistory));

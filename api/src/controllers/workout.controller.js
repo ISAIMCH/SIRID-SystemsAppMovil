@@ -77,6 +77,19 @@ async function getMyWorkoutHistory(req, res) {
   res.json({ sessions });
 }
 
+async function getClientWorkoutHistory(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.clientId)) throw new HttpError(400, 'ID de cliente inválido.');
+  const client = await User.findOne({ _id: req.params.clientId, role: 'Cliente' }).select('assignedCoach');
+  if (!client || (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id)) {
+    throw new HttpError(404, 'Cliente no encontrado.');
+  }
+  const sessions = await WorkoutSession.find({ user: client._id })
+    .sort({ completedAt: -1 })
+    .limit(20)
+    .lean();
+  res.json({ sessions });
+}
+
 async function getMyWorkoutStats(req, res) {
   const today = new Date();
   const startOfWeek = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 6));
@@ -108,4 +121,4 @@ async function getMyWorkoutStats(req, res) {
   });
 }
 
-module.exports = { createWorkoutSession, getMyWorkoutHistory, getMyWorkoutStats };
+module.exports = { createWorkoutSession, getMyWorkoutHistory, getMyWorkoutStats, getClientWorkoutHistory };

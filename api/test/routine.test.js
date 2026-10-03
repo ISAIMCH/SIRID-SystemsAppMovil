@@ -43,3 +43,10 @@ test('rechaza ejercicios asignados a un día no programado', () => {
 test('permite modificar campos simples mediante PATCH parcial', () => {
   assert.equal(routineBaseSchema.partial().omit({ assignedTo: true }).safeParse({ status: 'paused' }).success, true);
 });
+
+test('acepta ejercicios de peso corporal sin equipo', () => {
+  const input = validRoutine();
+  delete input.exercises[0].equipmentId;
+  input.exercises[0].bodyweight = true;
+  assert.equal(routineSchema.safeParse(input).success, true);
+});

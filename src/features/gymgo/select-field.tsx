@@ -6,7 +6,7 @@ import { palette } from './theme';
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
-export function SelectField({ label, placeholder, options, value, onChange, clearLabel, emptyText }: {
+export function SelectField({ label, placeholder, options, value, onChange, clearLabel, emptyText, addOption }: {
   label: string;
   placeholder: string;
   options: SelectOption[];
@@ -14,6 +14,7 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
   onChange: (value: string) => void;
   clearLabel?: string;
   emptyText?: string;
+  addOption?: { label: string; onSelect: () => void };
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
@@ -39,6 +40,11 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
               {option.hint ? <Text style={styles.hint}>{option.hint}</Text> : null}
             </Pressable>
           ))}
+          {addOption ? (
+            <Pressable accessibilityRole="button" onPress={() => { addOption.onSelect(); setIsOpen(false); }} style={styles.option}>
+              <Text style={[styles.optionText, styles.addText]}>{addOption.label}</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>
@@ -56,6 +62,7 @@ const styles = StyleSheet.create({
   optionText: { color: palette.ink, fontSize: 15 },
   optionSelected: { color: palette.green, fontWeight: '800' },
   clearText: { color: palette.muted },
+  addText: { color: palette.cyan, fontWeight: '800' },
   hint: { color: palette.muted, fontSize: 12 },
   empty: { color: palette.muted, fontSize: 13, padding: 16 },
 });

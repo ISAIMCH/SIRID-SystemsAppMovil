@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { CoachSelect } from './coach-select';
+import ClientProgress from './client-progress';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { palette } from './theme';
@@ -126,6 +127,8 @@ export default function ClientDetailScreen() {
                   </FloatingCard>
                 </>
               ) : null}
+
+              {user?.role === 'Coach' && !isCoach ? <ClientProgress clientId={person.id} /> : null}
 
               {isAdmin ? <ActionButton onPress={() => setIsEditing(true)}>Editar perfil</ActionButton> : null}
             </>

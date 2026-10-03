@@ -9,6 +9,7 @@ export type Exercise = {
     status: 'available' | 'busy' | 'out_of_service';
   };
   equipment?: string;
+  bodyweight?: boolean;
   day?: number;
   sets: number;
   reps: string;
@@ -29,6 +30,7 @@ export type Routine = {
   assignedTo: string | { _id: string; name: string; email: string };
   createdBy: string;
   status: 'active' | 'paused';
+  sourceTemplate?: string | null;
   exercises: Exercise[];
   updatedAt: string;
 };
@@ -39,4 +41,31 @@ export type MembershipPlan = {
   durationInDays: number;
   specifications: string[];
   isActive: boolean;
+};
+
+export type RoutineTemplate = {
+  _id: string;
+  title: string;
+  description?: string;
+  goal?: string;
+  level: Routine['level'];
+  durationWeeks: number;
+  daysPerWeek: number;
+  scheduleDays: number[];
+  exercises: Exercise[];
+  updatedAt: string;
+};
+
+export type WorkoutSessionLog = {
+  _id: string;
+  routine: string;
+  trainingDay: number;
+  completedAt: string;
+  durationMinutes: number;
+  totalVolumeKg: number;
+  exercises: {
+    routineExerciseId: string;
+    exerciseName: string;
+    sets: { reps: number; weightKg: number; restSeconds: number }[];
+  }[];
 };
