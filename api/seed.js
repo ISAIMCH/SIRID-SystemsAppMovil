@@ -7,24 +7,36 @@ dotenv.config({ path: path.join(__dirname, '.env') });
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const Equipment = require('./src/models/equipment.model');
+const Product = require('./src/models/product.model');
 const User = require('./src/models/user.model');
 
 const equipmentCatalog = [
-  { name: 'Prensa de piernas', zone: 'Zona de piernas', brand: 'Life Fitness', usageFrequency: 'high' },
-  { name: 'Rack para sentadillas', zone: 'Peso libre', brand: 'Rogue', usageFrequency: 'high' },
-  { name: 'Banco ajustable', zone: 'Peso libre', brand: 'Matrix', usageFrequency: 'high' },
-  { name: 'Mancuernas 2-20 kg', zone: 'Peso libre', brand: 'Technogym', usageFrequency: 'high' },
-  { name: 'Mancuernas 22-40 kg', zone: 'Peso libre', brand: 'Technogym', usageFrequency: 'medium' },
-  { name: 'Polea crossover', zone: 'Máquinas', brand: 'Life Fitness', usageFrequency: 'high' },
-  { name: 'Jalón al pecho', zone: 'Máquinas', brand: 'Precor', usageFrequency: 'high' },
-  { name: 'Remo sentado', zone: 'Máquinas', brand: 'Precor', usageFrequency: 'medium' },
-  { name: 'Extensión de piernas', zone: 'Zona de piernas', brand: 'Hammer Strength', usageFrequency: 'medium' },
-  { name: 'Curl femoral', zone: 'Zona de piernas', brand: 'Hammer Strength', usageFrequency: 'medium' },
-  { name: 'Press de pecho', zone: 'Máquinas', brand: 'Life Fitness', usageFrequency: 'high' },
-  { name: 'Caminadora 01', zone: 'Cardio', brand: 'Technogym', usageFrequency: 'high' },
-  { name: 'Caminadora 02', zone: 'Cardio', brand: 'Technogym', usageFrequency: 'high' },
-  { name: 'Elíptica', zone: 'Cardio', brand: 'Precor', usageFrequency: 'medium' },
-  { name: 'Bicicleta estática', zone: 'Cardio', brand: 'Schwinn', usageFrequency: 'low' },
+  { name: 'Prensa de piernas', zone: 'Zona de piernas', brand: 'Life Fitness', type: 'strength', totalQuantity: 2 },
+  { name: 'Rack para sentadillas', zone: 'Peso libre', brand: 'Rogue', type: 'strength', totalQuantity: 2 },
+  { name: 'Banco ajustable', zone: 'Peso libre', brand: 'Matrix', type: 'strength', totalQuantity: 2 },
+  { name: 'Mancuernas 2-20 kg', zone: 'Peso libre', brand: 'Technogym', type: 'strength', totalQuantity: 2 },
+  { name: 'Mancuernas 22-40 kg', zone: 'Peso libre', brand: 'Technogym', type: 'strength', totalQuantity: 2 },
+  { name: 'Polea crossover', zone: 'Máquinas', brand: 'Life Fitness', type: 'strength', totalQuantity: 2 },
+  { name: 'Jalón al pecho', zone: 'Máquinas', brand: 'Precor', type: 'strength', totalQuantity: 2 },
+  { name: 'Remo sentado', zone: 'Máquinas', brand: 'Precor', type: 'strength', totalQuantity: 2 },
+  { name: 'Extensión de piernas', zone: 'Zona de piernas', brand: 'Hammer Strength', type: 'strength', totalQuantity: 2 },
+  { name: 'Curl femoral', zone: 'Zona de piernas', brand: 'Hammer Strength', type: 'strength', totalQuantity: 2 },
+  { name: 'Press de pecho', zone: 'Máquinas', brand: 'Life Fitness', type: 'strength', totalQuantity: 2 },
+  { name: 'Caminadora 01', zone: 'Cardio', brand: 'Technogym', type: 'cardio', totalQuantity: 2 },
+  { name: 'Caminadora 02', zone: 'Cardio', brand: 'Technogym', type: 'cardio', totalQuantity: 2 },
+  { name: 'Elíptica', zone: 'Cardio', brand: 'Precor', type: 'cardio', totalQuantity: 2 },
+  { name: 'Bicicleta estática', zone: 'Cardio', brand: 'Schwinn', type: 'cardio', totalQuantity: 2 },
+];
+
+const productCatalog = [
+  { name: 'Proteína Whey 2 lb', category: 'Suplementos', price: 749, stock: 12 },
+  { name: 'Creatina 300 g', category: 'Suplementos', price: 429, stock: 20 },
+  { name: 'Pre-entreno 30 dosis', category: 'Suplementos', price: 559, stock: 8 },
+  { name: 'Playera GymGo Dry-Fit', category: 'Ropa', price: 299, stock: 25 },
+  { name: 'Tank top deportivo', category: 'Ropa', price: 259, stock: 15 },
+  { name: 'Faja lumbar', category: 'Accesorios', price: 389, stock: 10 },
+  { name: 'Shaker 700 ml', category: 'Accesorios', price: 149, stock: 30 },
+  { name: 'Guantes de entrenamiento', category: 'Accesorios', price: 219, stock: 14 },
 ];
 
 function buildUsers(passwordHash, now) {
@@ -110,6 +122,10 @@ async function seed() {
       { $set: { ...item, status: 'available' } },
       { upsert: true, runValidators: true },
     );
+  }
+
+  for (const product of productCatalog) {
+    await Product.updateOne({ name: product.name }, { $setOnInsert: product }, { upsert: true, runValidators: true });
   }
 
   const users = buildUsers(passwordHash, now);

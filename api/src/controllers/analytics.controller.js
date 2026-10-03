@@ -36,11 +36,10 @@ async function getOperationsDashboard(req, res) {
     Equipment.aggregate([
       { $group: {
         _id: '$zone',
-        total: { $sum: 1 },
-        available: { $sum: { $cond: [{ $eq: ['$status', 'available'] }, 1, 0] } },
-        busy: { $sum: { $cond: [{ $eq: ['$status', 'busy'] }, 1, 0] } },
-        outOfService: { $sum: { $cond: [{ $eq: ['$status', 'out_of_service'] }, 1, 0] } },
+        total: { $sum: { $ifNull: ['$totalQuantity', 1] } },
+        outOfService: { $sum: { $ifNull: ['$maintenanceQuantity', { $cond: [{ $eq: ['$status', 'out_of_service'] }, 1, 0] }] } },
       } },
+      { $addFields: { available: { $subtract: ['$total', '$outOfService'] }, busy: 0 } },
       { $sort: { _id: 1 } },
     ]),
   ]);

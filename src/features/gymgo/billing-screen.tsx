@@ -1,12 +1,13 @@
+import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Redirect } from 'expo-router';
 
+import AdminBillingScreen from './admin-billing-screen';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 import { IconBadge } from './fit-ui';
 import { palette } from './theme';
+import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 
 type PaymentStatus = 'pending' | 'paid' | 'cancelled';
 type PaymentUser = { id: string; name: string; email: string } | string;
@@ -20,6 +21,7 @@ type Payment = {
   method: 'reception';
   status: PaymentStatus;
   reference: string;
+  validationPin?: string;
   createdAt: string;
   processedAt?: string;
 };
@@ -59,7 +61,7 @@ function formatAmount(amount: number, currency: string) {
 export default function BillingScreen() {
   const { user } = useAuth();
   if (user?.role !== 'Cliente' && user?.role !== 'Admin') return <Redirect href="/(main)" />;
-  return user.role === 'Admin' ? <AdminPayments /> : <ClientMembership />;
+  return user.role === 'Admin' ? <AdminBillingScreen /> : <ClientMembership />;
 }
 
 function ClientMembership() {
@@ -149,8 +151,9 @@ function ClientMembership() {
           {pendingPayment ? (
             <Surface style={styles.pendingCard}>
               <Text style={styles.pendingTitle}>Solicitud pendiente</Text>
-              <Text style={styles.pendingBody}>Paga en recepción y muestra esta referencia:</Text>
-              <Text selectable style={styles.reference}>{pendingPayment.reference}</Text>
+              <Text style={styles.pendingBody}>Paga en recepción y dicta este PIN al encargado:</Text>
+              <Text selectable style={styles.pin}>{pendingPayment.validationPin ?? '-----'}</Text>
+              <Text style={styles.pendingBody}>Referencia: {pendingPayment.reference}</Text>
               <Text style={styles.paymentAmount}>{formatAmount(pendingPayment.amount, pendingPayment.currency)}</Text>
             </Surface>
           ) : (
@@ -188,121 +191,6 @@ function ClientMembership() {
   );
 }
 
-function AdminPayments() {
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [statusFilter, setStatusFilter] = useState<'all' | PaymentStatus>('pending');
-  const [isLoading, setIsLoading] = useState(true);
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  const [retryNumber, setRetryNumber] = useState(0);
-
-  useEffect(() => {
-    let isCurrent = true;
-    api.get<{ payments: Payment[] }>('/billing/payments', {
-      params: statusFilter === 'all' ? {} : { status: statusFilter },
-    })
-      .then((response) => {
-        if (isCurrent) setPayments(response.data.payments);
-      })
-      .catch((requestError: unknown) => {
-        if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudieron cargar los pagos pendientes.'));
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false);
-      });
-    return () => { isCurrent = false; };
-  }, [retryNumber, statusFilter]);
-
-  async function processPayment(payment: Payment, status: 'paid' | 'cancelled') {
-    setError('');
-    setUpdatingId(payment.id);
-    try {
-      await api.patch(`/billing/payments/${payment.id}/status`, { status });
-      setPayments((current) => current.map((entry) => (
-        entry.id === payment.id ? { ...entry, status } : entry
-      )));
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError, 'No se pudo actualizar el pago.'));
-    } finally {
-      setUpdatingId(null);
-    }
-  }
-
-  const visiblePayments = statusFilter === 'all'
-    ? payments
-    : payments.filter((payment) => payment.status === statusFilter);
-
-  return (
-    <Page>
-      <AppHeader title="Pagos y membresías" detail="Confirma los pagos recibidos en el gimnasio." />
-      <View style={styles.filterRow}>
-        {([
-          { value: 'pending', label: 'Pendientes' },
-          { value: 'paid', label: 'Pagados' },
-          { value: 'cancelled', label: 'Cancelados' },
-          { value: 'all', label: 'Todos' },
-        ] as const).map((filter) => (
-          <Pressable
-            key={filter.value}
-            accessibilityRole="button"
-            accessibilityState={{ selected: statusFilter === filter.value }}
-            onPress={() => {
-              setError('');
-              setIsLoading(true);
-              setStatusFilter(filter.value);
-            }}
-            style={[styles.filterChip, statusFilter === filter.value && styles.filterSelected]}>
-            <Text style={[styles.filterText, statusFilter === filter.value && styles.filterTextSelected]}>{filter.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <SectionTitle>{isLoading ? 'Cargando solicitudes' : `${visiblePayments.length} pagos`}</SectionTitle>
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
-      {error ? (
-        <View style={styles.feedback}>
-          <Notice error>{error}</Notice>
-          <Pressable accessibilityRole="button" onPress={() => { setIsLoading(true); setRetryNumber((value) => value + 1); }}>
-            <Text style={styles.retry}>Reintentar</Text>
-          </Pressable>
-        </View>
-      ) : null}
-      {!isLoading && !error && visiblePayments.length === 0 ? (
-        <Notice>{statusFilter === 'pending' ? 'No hay pagos pendientes de revisión.' : 'No hay pagos para este filtro.'}</Notice>
-      ) : null}
-      {visiblePayments.map((payment) => {
-        const customerName = typeof payment.user === 'string' ? 'Cliente' : payment.user.name;
-        const customerEmail = typeof payment.user === 'string' ? '' : payment.user.email;
-        return (
-          <Surface key={payment.id} style={styles.adminPayment}>
-            <Text style={styles.historyName}>{customerName}</Text>
-            {customerEmail ? <Text style={styles.historyMeta}>{customerEmail}</Text> : null}
-            <View style={styles.adminPaymentDetails}>
-              <View style={styles.historyInfo}>
-                <Text style={styles.historyMeta}>{payment.planName} · {payment.durationDays} días</Text>
-                <Text selectable style={styles.referenceSmall}>{payment.reference}</Text>
-              </View>
-              <Text style={styles.paymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
-            </View>
-            <Text style={[styles.paymentState, payment.status === 'paid' && styles.historyStatus]}>
-              {paymentStatusLabels[payment.status]}
-            </Text>
-            {payment.status === 'pending' ? (
-              <View style={styles.actions}>
-                <ActionButton onPress={() => void processPayment(payment, 'paid')} disabled={updatingId === payment.id}>
-                  {updatingId === payment.id ? <ActivityIndicator color={palette.white} /> : 'Confirmar pago'}
-                </ActionButton>
-                <ActionButton secondary onPress={() => void processPayment(payment, 'cancelled')} disabled={updatingId === payment.id}>
-                  Cancelar solicitud
-                </ActionButton>
-              </View>
-            ) : null}
-          </Surface>
-        );
-      })}
-    </Page>
-  );
-}
-
 const styles = StyleSheet.create({
   loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   feedback: { gap: 10 },
@@ -322,6 +210,7 @@ const styles = StyleSheet.create({
   pendingTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' },
   pendingBody: { color: palette.muted, fontSize: 13 },
   reference: { color: palette.green, fontSize: 22, fontWeight: '900' },
+  pin: { color: palette.orange, fontSize: 44, fontWeight: '900', letterSpacing: 10 },
   referenceSmall: { color: palette.green, fontSize: 12, fontWeight: '800' },
   paymentAmount: { color: palette.ink, fontSize: 14, fontWeight: '800' },
   paymentAction: { gap: 10 },

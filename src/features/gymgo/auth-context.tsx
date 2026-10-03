@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
 import { api } from './api';
-import { removeAccessToken, readAccessToken, writeAccessToken } from './token-storage';
+import { readAccessToken, removeAccessToken, writeAccessToken } from './token-storage';
 
 export type GymGoRole = 'Admin' | 'Coach' | 'Cliente';
 
@@ -67,7 +67,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         const token = await readAccessToken();
         if (!token) return;
-        const response = await api.get<{ user: GymGoUser }>('/auth/me');
+        const response = await api.get<{ user: GymGoUser }>('/auth/me', { timeout: 12000 });
         if (isCurrent) setUser(response.data.user);
       } catch {
         await removeAccessToken();

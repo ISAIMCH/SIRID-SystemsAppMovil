@@ -7,7 +7,7 @@ const apiOrigin = (process.env.EXPO_PUBLIC_API_URL ?? 'https://sirid-systemsappm
 
 export const api = create({
   baseURL: `${apiOrigin}/api`,
-  timeout: 15000,
+  timeout: 60000,
   headers: { Accept: 'application/json' },
 });
 
@@ -19,7 +19,8 @@ api.interceptors.request.use(async (config) => {
 
 export function getApiErrorMessage(error: unknown, fallback: string) {
   if (isAxiosError<{ error?: string }>(error)) {
-    return error.response?.data?.error ?? fallback;
+    if (error.response) return error.response.data?.error ?? fallback;
+    return `${fallback} (${error.code ?? 'sin respuesta'}: ${error.message}) — ${apiOrigin}`;
   }
-  return fallback;
+  return error instanceof Error ? `${fallback} (${error.message})` : fallback;
 }

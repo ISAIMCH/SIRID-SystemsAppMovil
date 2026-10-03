@@ -35,6 +35,12 @@
       ],
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permite a GymGo acceder a tus fotos para subir imágenes de la tienda."
+        }
+      ],
+      [
         "expo-camera",
         {
           "cameraPermission": "Permite a GymGo usar la cámara para escanear pases QR.",

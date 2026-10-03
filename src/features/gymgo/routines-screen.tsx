@@ -1,12 +1,12 @@
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router } from 'expo-router';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 import { palette } from './theme';
 import type { Exercise, Routine } from './types';
+import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 
 const levelNames = {
   principiante: 'Principiante',

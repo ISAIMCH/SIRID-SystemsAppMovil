@@ -1,12 +1,13 @@
-const { randomBytes } = require('node:crypto');
+const { randomBytes, randomInt } = require('node:crypto');
 const { z } = require('zod');
 const Payment = require('../models/payment.model');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
 
-function serializePayment(payment) {
+function serializePayment(payment, { includePin = false } = {}) {
   const user = payment.user;
   return {
+    ...(includePin ? { validationPin: payment.validationPin } : {}),
     id: String(payment._id),
     user: user && typeof user === 'object' && user.name ? {
       id: String(user._id),
@@ -25,10 +26,24 @@ function serializePayment(payment) {
   };
 }
 
+async function generateUniquePin() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const pin = String(randomInt(0, 100000)).padStart(5, '0');
+    if (!(await Payment.exists({ validationPin: pin, status: 'pending' }))) return pin;
+  }
+  throw new HttpError(503, 'No se pudo generar un PIN. Intenta de nuevo.');
+}
+
 async function getMyBilling(req, res) {
   const user = await User.findById(req.user.id).select('membership');
   const payments = await Payment.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
-  res.json({ membership: user.membership, payments: payments.map(serializePayment) });
+  for (const payment of payments) {
+    if (payment.status === 'pending' && !payment.validationPin) {
+      payment.validationPin = await generateUniquePin();
+      await Payment.updateOne({ _id: payment._id }, { $set: { validationPin: payment.validationPin } });
+    }
+  }
+  res.json({ membership: user.membership, payments: payments.map((payment) => serializePayment(payment, { includePin: true })) });
 }
 
 async function requestReceptionPayment(req, res) {
@@ -51,9 +66,19 @@ async function requestReceptionPayment(req, res) {
     method: 'reception',
     status: 'pending',
     reference: `GYM-${randomBytes(5).toString('hex').toUpperCase()}`,
+    validationPin: await generateUniquePin(),
   });
 
-  res.status(201).json({ payment: serializePayment(payment.toObject()) });
+  res.status(201).json({ payment: serializePayment(payment.toObject(), { includePin: true }) });
+}
+
+async function findPendingPaymentByPin(req, res) {
+  const { pin } = z.object({ pin: z.string().regex(/^\d{5}$/, 'El PIN debe tener 5 dígitos.') }).parse(req.params);
+  const payment = await Payment.findOne({ validationPin: pin, status: 'pending' })
+    .populate('user', 'name email')
+    .lean();
+  if (!payment) throw new HttpError(404, 'No hay un pago pendiente con ese PIN.');
+  res.json({ payment: serializePayment(payment) });
 }
 
 async function listPayments(req, res) {
@@ -109,4 +134,4 @@ async function updatePaymentStatus(req, res) {
   res.json({ payment: result });
 }
 
-module.exports = { getMyBilling, requestReceptionPayment, listPayments, updatePaymentStatus };
+module.exports = { getMyBilling, requestReceptionPayment, listPayments, updatePaymentStatus, findPendingPaymentByPin };

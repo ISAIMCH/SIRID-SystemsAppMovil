@@ -11,6 +11,7 @@ const billingRoutes = require('./routes/billing.routes');
 const workoutRoutes = require('./routes/workout.routes');
 const analyticsRoutes = require('./routes/analytics.routes');
 const maintenanceRoutes = require('./routes/maintenance.routes');
+const storeRoutes = require('./routes/store.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -28,6 +29,7 @@ app.use(cors({
     return callback(error);
   },
 }));
+app.use('/api/store', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
@@ -41,6 +43,7 @@ app.use('/api/billing', billingRoutes);
 app.use('/api/workouts', workoutRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/maintenance', maintenanceRoutes);
+app.use('/api/store', storeRoutes);
 app.use('/api', accessRoutes);
 app.use(notFound);
 app.use(errorHandler);

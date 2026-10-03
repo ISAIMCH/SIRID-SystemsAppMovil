@@ -9,6 +9,7 @@ const paymentSchema = new mongoose.Schema({
   method: { type: String, enum: ['reception'], required: true, default: 'reception' },
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], required: true, default: 'pending', index: true },
   reference: { type: String, required: true, unique: true, trim: true },
+  validationPin: { type: String, match: /^\d{5}$/, index: true },
   processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   processedAt: Date,
 }, { timestamps: true });

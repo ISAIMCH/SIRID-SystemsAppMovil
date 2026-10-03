@@ -5,8 +5,8 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import ClientQrCard from './client-qr-card';
 import ClientHomeScreen from './client-home-screen';
+import ClientQrCard from './client-qr-card';
 import { palette } from './theme';
 import type { Routine } from './types';
 import { ActionButton, AppHeader, Eyebrow, Notice, SectionTitle, Surface } from './ui';

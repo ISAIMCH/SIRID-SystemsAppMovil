@@ -14,12 +14,13 @@ type TabName =
   | 'directory'
   | 'staff'
   | 'scanner'
-  | 'store';
+  | 'store'
+  | 'admin-store';
 
 const ROLE_TABS: Record<GymGoRole, TabName[]> = {
   Cliente: ['index', 'access', 'routines', 'store', 'billing'],
   Coach: ['index', 'routines', 'directory'],
-  Admin: ['index', 'scanner', 'inventory', 'maintenance', 'billing', 'directory', 'staff'],
+  Admin: ['index', 'scanner', 'inventory', 'maintenance', 'billing', 'admin-store', 'directory', 'staff'],
 };
 
 const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
@@ -33,6 +34,7 @@ const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcon
   staff: { title: 'Personal', icon: 'person-add' },
   scanner: { title: 'Escáner', icon: 'qr-code-scanner' },
   store: { title: 'Tienda', icon: 'storefront' },
+  'admin-store': { title: 'Tienda', icon: 'local-offer' },
 };
 
 const TAB_NAMES = Object.keys(TAB_META) as TabName[];
@@ -51,6 +53,7 @@ export default function AppTabs() {
         headerShown: false,
         tabBarActiveTintColor: palette.green,
         tabBarInactiveTintColor: palette.muted,
+        tabBarLabelStyle: { fontSize: 10 },
         tabBarStyle: {
           backgroundColor: palette.surface,
           borderTopColor: palette.line,

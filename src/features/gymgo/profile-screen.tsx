@@ -1,7 +1,7 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth, type GymGoUser } from './auth-context';

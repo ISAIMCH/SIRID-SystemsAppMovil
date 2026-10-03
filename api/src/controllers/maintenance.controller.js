@@ -36,7 +36,7 @@ async function updateReport(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de reporte inválido.');
   const input = z.object({
     status: z.enum(['in_progress', 'resolved']),
-    equipmentStatus: z.enum(['available', 'busy', 'out_of_service']).optional(),
+    equipmentStatus: z.enum(['available', 'out_of_service']).optional(),
     adminNote: z.string().trim().max(1000).optional(),
   }).parse(req.body);
 
@@ -51,11 +51,15 @@ async function updateReport(req, res) {
       const equipmentStatus = input.equipmentStatus
         ?? (input.status === 'resolved' ? 'available' : undefined);
       if (equipmentStatus) {
-        await Equipment.updateOne(
-          { _id: report.equipment },
-          { $set: { status: equipmentStatus } },
-          { session },
-        );
+        const equipment = await Equipment.findById(report.equipment).session(session);
+        if (equipment) {
+          const delta = equipmentStatus === 'out_of_service' ? 1 : -1;
+          equipment.maintenanceQuantity = Math.min(
+            equipment.totalQuantity,
+            Math.max(0, equipment.maintenanceQuantity + delta),
+          );
+          await equipment.save({ session });
+        }
       }
 
       report.status = input.status;
