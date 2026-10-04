@@ -89,7 +89,7 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
             <View style={styles.info}>
               <Text style={styles.title}>{template.title}</Text>
               <Text style={styles.meta}>
-                {template.level} · {template.daysPerWeek} días/semana · {template.exercises.length} ejercicios
+                {template.level} · {template.daysPerWeek} días/semana · {(template.blocks ?? []).reduce((sum, block) => sum + block.exercises.length, 0)} ejercicios
               </Text>
             </View>
           </View>

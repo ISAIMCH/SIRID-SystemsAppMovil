@@ -21,7 +21,7 @@ function serializeEquipment(item) {
     name: item.name,
     zone: item.zone,
     brand: item.brand,
-    type: item.type ?? 'strength',
+    type: item.type ?? (/^cardio$/i.test(item.zone) ? 'cardio' : 'strength'),
     totalQuantity,
     maintenanceQuantity,
     status: totalQuantity - maintenanceQuantity > 0 ? 'available' : 'out_of_service',

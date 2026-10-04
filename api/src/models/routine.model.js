@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const exerciseSchema = require('./routine-exercise.schema');
+const { blockSchema } = require('./routine-exercise.schema');
 
 const routineSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, maxlength: 120 },
@@ -13,8 +13,8 @@ const routineSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   sourceTemplate: { type: mongoose.Schema.Types.ObjectId, ref: 'RoutineTemplate', default: null },
   status: { type: String, enum: ['active', 'paused'], default: 'active' },
-  exercises: { type: [exerciseSchema], validate: (items) => items.length > 0 },
-}, { timestamps: true });
+  blocks: { type: [blockSchema], validate: (items) => items.length > 0 },
+}, { timestamps: true, strict: false });
 
 routineSchema.index({ assignedTo: 1, status: 1, updatedAt: -1 });
 

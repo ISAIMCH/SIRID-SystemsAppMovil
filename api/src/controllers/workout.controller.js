@@ -4,21 +4,54 @@ const User = require('../models/user.model');
 const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
+const { normalizeBlocks } = require('./routine.controller');
 
 const workoutSchema = z.object({
   routineId: z.string().regex(/^[a-f\d]{24}$/i),
   trainingDay: z.number().int().min(0).max(6),
   durationMinutes: z.number().int().min(0).max(600),
-  exercises: z.array(z.object({
-    routineExerciseId: z.string().regex(/^[a-f\d]{24}$/i),
+  blocks: z.array(z.object({
+    routineBlockId: z.string().regex(/^[a-f\d]{24}$/i),
     sets: z.array(z.object({
-      reps: z.number().int().min(0).max(300),
-      weightKg: z.number().min(0).max(1000),
-      restSeconds: z.number().int().min(0).max(3600),
+      setNumber: z.number().int().min(1).max(50),
+      exercises: z.array(z.object({
+        routineExerciseId: z.string().regex(/^[a-f\d]{24}$/i),
+        reps: z.number().int().min(0).max(300).optional(),
+        weightKg: z.number().min(0).max(1000).optional(),
+        durationMinutes: z.number().int().min(1).max(600).optional(),
+        distanceKm: z.number().min(0).max(1000).optional(),
+        level: z.number().int().min(1).max(100).optional(),
+      })).min(1).max(20),
     })).min(1).max(50),
-    observations: z.string().trim().max(1000).optional(),
   })).min(1).max(100),
 });
+
+function sessionResponse(session) {
+  const value = session.toObject ? session.toObject() : session;
+  if (value.blocks?.length) return value;
+  return {
+    ...value,
+    blocks: (value.exercises ?? []).map((exercise, order) => ({
+      routineBlockId: exercise.routineExerciseId,
+      blockType: 'single',
+      restSeconds: exercise.sets?.[0]?.restSeconds ?? 60,
+      order,
+      sets: (exercise.sets ?? []).map((set, index) => ({
+        setNumber: index + 1,
+        completedAt: value.completedAt,
+        exercises: [{
+          routineExerciseId: exercise.routineExerciseId,
+          exerciseName: exercise.exerciseName,
+          muscleGroup: exercise.muscleGroup,
+          equipmentId: exercise.equipmentId,
+          metricType: 'strength',
+          reps: set.reps,
+          weightKg: set.weightKg,
+        }],
+      })),
+    })),
+  };
+}
 
 async function createWorkoutSession(req, res) {
   const input = workoutSchema.parse(req.body);
@@ -32,27 +65,71 @@ async function createWorkoutSession(req, res) {
     throw new HttpError(400, 'Este día no está programado en tu rutina.');
   }
 
-  const routineExercises = routine.exercises.filter((exercise) => exercise.day === input.trainingDay);
-  const exercisesById = new Map(routineExercises.map((exercise) => [String(exercise._id), exercise]));
-  const usedExerciseIds = new Set();
-  const exerciseLogs = input.exercises.map((entry) => {
-    const exercise = exercisesById.get(entry.routineExerciseId);
-    if (!exercise || usedExerciseIds.has(entry.routineExerciseId)) {
-      throw new HttpError(400, 'La sesión contiene un ejercicio inválido o repetido.');
-    }
-    usedExerciseIds.add(entry.routineExerciseId);
+  const routineBlocks = normalizeBlocks(routine.toObject()).filter((block) => block.day === input.trainingDay);
+  const blocksById = new Map(routineBlocks.map((block) => [String(block._id), block]));
+  const usedBlockIds = new Set();
+  const sessionBlocks = input.blocks.map((entry) => {
+    const block = blocksById.get(entry.routineBlockId);
+    if (!block || usedBlockIds.has(entry.routineBlockId)) throw new HttpError(400, 'La sesión contiene un bloque inválido o repetido.');
+    usedBlockIds.add(entry.routineBlockId);
+    const exercisesById = new Map(block.exercises.map((exercise) => [String(exercise._id), exercise]));
+    const usedSetNumbers = new Set();
+    const rounds = entry.sets.map((round) => {
+      if (round.setNumber > block.sets || usedSetNumbers.has(round.setNumber)) {
+        throw new HttpError(400, 'La sesión contiene un número de serie inválido o repetido.');
+      }
+      usedSetNumbers.add(round.setNumber);
+      if (round.exercises.length !== block.exercises.length) {
+        throw new HttpError(400, 'Completa todos los ejercicios del bloque antes de registrar la serie.');
+      }
+      const usedExerciseIds = new Set();
+      const loggedExercises = round.exercises.map((entryExercise) => {
+        const exercise = exercisesById.get(entryExercise.routineExerciseId);
+        if (!exercise || usedExerciseIds.has(entryExercise.routineExerciseId)) {
+          throw new HttpError(400, 'La serie contiene un ejercicio inválido o repetido.');
+        }
+        usedExerciseIds.add(entryExercise.routineExerciseId);
+        const isCardio = exercise.metricType === 'cardio';
+        if (isCardio) {
+          if (!entryExercise.durationMinutes && entryExercise.distanceKm === undefined && entryExercise.level === undefined) {
+            throw new HttpError(400, 'Registra duración, distancia o nivel para el ejercicio de cardio.');
+          }
+          if (entryExercise.reps !== undefined || entryExercise.weightKg !== undefined) {
+            throw new HttpError(400, 'Los ejercicios de cardio no aceptan repeticiones ni peso.');
+          }
+        } else if (entryExercise.reps === undefined || entryExercise.weightKg === undefined) {
+          throw new HttpError(400, 'Registra repeticiones y peso para cada ejercicio de fuerza.');
+        }
+        return {
+          routineExerciseId: exercise._id,
+          exerciseName: exercise.name,
+          muscleGroup: exercise.muscleGroup,
+          equipmentId: exercise.equipmentId ?? null,
+          metricType: isCardio ? 'cardio' : 'strength',
+          reps: entryExercise.reps,
+          weightKg: entryExercise.weightKg,
+          durationMinutes: entryExercise.durationMinutes,
+          distanceKm: entryExercise.distanceKm,
+          level: entryExercise.level,
+        };
+      });
+      if (usedExerciseIds.size !== exercisesById.size) throw new HttpError(400, 'Completa todos los ejercicios del bloque.');
+      return { setNumber: round.setNumber, completedAt: new Date(), exercises: loggedExercises };
+    });
     return {
-      routineExerciseId: exercise._id,
-      exerciseName: exercise.name,
-      muscleGroup: exercise.muscleGroup,
-      equipmentId: exercise.equipmentId ?? null,
-      sets: entry.sets,
-      observations: entry.observations,
+      routineBlockId: block._id,
+      blockType: block.blockType,
+      restSeconds: block.restSeconds,
+      sets: rounds,
     };
   });
 
-  const totalVolumeKg = exerciseLogs.reduce((exerciseTotal, exercise) => (
-    exerciseTotal + exercise.sets.reduce((setTotal, set) => setTotal + set.reps * set.weightKg, 0)
+  const totalVolumeKg = sessionBlocks.reduce((blockTotal, block) => (
+    blockTotal + block.sets.reduce((setTotal, round) => (
+      setTotal + round.exercises.reduce((exerciseTotal, exercise) => (
+        exerciseTotal + (exercise.metricType === 'strength' ? (exercise.reps ?? 0) * (exercise.weightKg ?? 0) : 0)
+      ), 0)
+    ), 0)
   ), 0);
 
   const [session] = await WorkoutSession.create([{
@@ -62,10 +139,10 @@ async function createWorkoutSession(req, res) {
     completedAt: new Date(),
     durationMinutes: input.durationMinutes,
     totalVolumeKg,
-    exercises: exerciseLogs,
+    blocks: sessionBlocks,
   }]);
 
-  res.status(201).json({ session });
+  res.status(201).json({ session: sessionResponse(session) });
 }
 
 async function getMyWorkoutHistory(req, res) {
@@ -74,7 +151,7 @@ async function getMyWorkoutHistory(req, res) {
     .sort({ completedAt: -1 })
     .limit(100)
     .lean();
-  res.json({ sessions });
+  res.json({ sessions: sessions.map(sessionResponse) });
 }
 
 async function getClientWorkoutHistory(req, res) {
@@ -87,7 +164,7 @@ async function getClientWorkoutHistory(req, res) {
     .sort({ completedAt: -1 })
     .limit(20)
     .lean();
-  res.json({ sessions });
+  res.json({ sessions: sessions.map(sessionResponse) });
 }
 
 async function getMyWorkoutStats(req, res) {
@@ -121,4 +198,4 @@ async function getMyWorkoutStats(req, res) {
   });
 }
 
-module.exports = { createWorkoutSession, getMyWorkoutHistory, getMyWorkoutStats, getClientWorkoutHistory };
+module.exports = { createWorkoutSession, getMyWorkoutHistory, getMyWorkoutStats, getClientWorkoutHistory, workoutSchema };

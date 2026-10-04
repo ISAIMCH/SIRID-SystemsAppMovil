@@ -7,15 +7,30 @@ export type Exercise = {
     name: string;
     zone: string;
     status: 'available' | 'busy' | 'out_of_service';
+    type: 'strength' | 'cardio';
   };
   equipment?: string;
   bodyweight?: boolean;
+  metricType?: 'strength' | 'cardio';
   day?: number;
-  sets: number;
-  reps: string;
+  sets?: number;
+  reps?: string;
   suggestedWeight?: number;
+  restSeconds?: number;
+  order: number;
+  targetDurationMinutes?: number;
+  targetDistanceKm?: number;
+  targetLevel?: number;
+};
+
+export type RoutineBlock = {
+  _id: string;
+  day: number;
+  blockType: 'single' | 'superset' | 'circuit';
+  sets: number;
   restSeconds: number;
   order: number;
+  exercises: Exercise[];
 };
 
 export type Routine = {
@@ -31,6 +46,7 @@ export type Routine = {
   createdBy: string;
   status: 'active' | 'paused';
   sourceTemplate?: string | null;
+  blocks?: RoutineBlock[];
   exercises: Exercise[];
   updatedAt: string;
 };
@@ -52,6 +68,7 @@ export type RoutineTemplate = {
   durationWeeks: number;
   daysPerWeek: number;
   scheduleDays: number[];
+  blocks?: RoutineBlock[];
   exercises: Exercise[];
   updatedAt: string;
 };
@@ -63,7 +80,27 @@ export type WorkoutSessionLog = {
   completedAt: string;
   durationMinutes: number;
   totalVolumeKg: number;
-  exercises: {
+  blocks?: {
+    routineBlockId: string;
+    blockType: RoutineBlock['blockType'];
+    restSeconds: number;
+    sets: {
+      setNumber: number;
+      completedAt: string;
+      exercises: {
+        routineExerciseId: string;
+        exerciseName: string;
+        muscleGroup: string;
+        metricType: 'strength' | 'cardio';
+        reps?: number;
+        weightKg?: number;
+        durationMinutes?: number;
+        distanceKm?: number;
+        level?: number;
+      }[];
+    }[];
+  }[];
+  exercises?: {
     routineExerciseId: string;
     exerciseName: string;
     sets: { reps: number; weightKg: number; restSeconds: number }[];

@@ -1,18 +1,28 @@
 const mongoose = require('mongoose');
 
-const setLogSchema = new mongoose.Schema({
-  reps: { type: Number, required: true, min: 0, max: 300 },
-  weightKg: { type: Number, required: true, min: 0, max: 1000 },
-  restSeconds: { type: Number, required: true, min: 0, max: 3600 },
-}, { _id: false });
-
 const exerciseLogSchema = new mongoose.Schema({
   routineExerciseId: { type: mongoose.Schema.Types.ObjectId, required: true },
   exerciseName: { type: String, required: true, trim: true, maxlength: 120 },
   muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
   equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', default: null },
-  sets: { type: [setLogSchema], required: true, validate: (items) => items.length > 0 },
+  metricType: { type: String, enum: ['strength', 'cardio'], default: 'strength' },
+  reps: { type: Number, min: 0, max: 300 },
+  weightKg: { type: Number, min: 0, max: 1000 },
+  durationMinutes: { type: Number, min: 1, max: 600 },
+  distanceKm: { type: Number, min: 0, max: 1000 },
+  level: { type: Number, min: 1, max: 100 },
   observations: { type: String, trim: true, maxlength: 1000 },
+}, { _id: false });
+
+const workoutBlockSchema = new mongoose.Schema({
+  routineBlockId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  blockType: { type: String, enum: ['single', 'superset', 'circuit'], required: true },
+  restSeconds: { type: Number, required: true, min: 0, max: 3600 },
+  sets: { type: [{
+    setNumber: { type: Number, required: true, min: 1 },
+    completedAt: { type: Date, required: true, default: Date.now },
+    exercises: { type: [exerciseLogSchema], required: true, validate: (items) => items.length > 0 },
+  }], required: true, validate: (items) => items.length > 0 },
 }, { _id: false });
 
 const workoutSessionSchema = new mongoose.Schema({
@@ -22,8 +32,8 @@ const workoutSessionSchema = new mongoose.Schema({
   completedAt: { type: Date, required: true, default: Date.now, index: true },
   durationMinutes: { type: Number, required: true, min: 0, max: 600 },
   totalVolumeKg: { type: Number, required: true, min: 0, default: 0 },
-  exercises: { type: [exerciseLogSchema], required: true, validate: (items) => items.length > 0 },
-}, { timestamps: true });
+  blocks: { type: [workoutBlockSchema], required: true, validate: (items) => items.length > 0 },
+}, { timestamps: true, strict: false });
 
 workoutSessionSchema.index({ user: 1, completedAt: -1 });
 

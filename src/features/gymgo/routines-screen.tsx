@@ -1,298 +1,391 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import CoachTemplates from './coach-templates';
+import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
-import type { Exercise, Routine } from './types';
-import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
+import type { Exercise, Routine, RoutineBlock } from './types';
+import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 
-const levelNames = {
-  principiante: 'Principiante',
-  intermedio: 'Intermedio',
-  avanzado: 'Avanzado',
-};
+type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
+type RestTimer = { blockId: string; remaining: number };
+const initialDeviceDay = new Date().getDay();
+const dayTabs = [
+  { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mié' },
+  { value: 4, label: 'Jue' }, { value: 5, label: 'Vie' }, { value: 6, label: 'Sáb' }, { value: 0, label: 'Dom' },
+];
+const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const levelNames = { principiante: 'Principiante', intermedio: 'Intermedio', avanzado: 'Avanzado' };
+const emptyInput = (): MetricValues => ({ reps: '', weightKg: '', durationMinutes: '', distanceKm: '', level: '' });
+
+function minutesSince(start: number | null) {
+  return start ? Math.round((Date.now() - start) / 60000) : 0;
+}
+
+function routineBlocks(routine: Routine): RoutineBlock[] {
+  if (routine.blocks?.length) return routine.blocks;
+  return (routine.exercises ?? []).map((exercise, order) => ({
+    _id: `legacy-${exercise._id ?? order}`,
+    day: exercise.day ?? 0,
+    blockType: 'single' as const,
+    sets: exercise.sets ?? 3,
+    restSeconds: exercise.restSeconds ?? 60,
+    order,
+    exercises: [exercise],
+  }));
+}
+
+function inputKey(block: RoutineBlock, setNumber: number, exercise: Exercise, index: number) {
+  return `${block._id ?? block.order}.${setNumber}.${exercise._id ?? index}`;
+}
+
+function isCardio(exercise: Exercise) {
+  return exercise.metricType === 'cardio'
+    || (typeof exercise.equipmentId === 'object' && exercise.equipmentId.type === 'cardio');
+}
+
+function isSetComplete(block: RoutineBlock, setNumber: number, inputs: Record<string, MetricValues>) {
+  return block.exercises.every((exercise, index) => {
+    const values = inputs[inputKey(block, setNumber, exercise, index)];
+    if (!values) return false;
+    if (isCardio(exercise)) {
+      const duration = values.durationMinutes ? Number(values.durationMinutes) : undefined;
+      const distance = values.distanceKm ? Number(values.distanceKm.replace(',', '.')) : undefined;
+      const level = values.level ? Number(values.level) : undefined;
+      return Boolean(
+        (duration !== undefined && Number.isInteger(duration) && duration > 0 && duration <= 600)
+        || (distance !== undefined && Number.isFinite(distance) && distance > 0 && distance <= 1000)
+        || (level !== undefined && Number.isInteger(level) && level >= 1 && level <= 100),
+      );
+    }
+    const reps = Number(values.reps);
+    const weight = Number(values.weightKg.replace(',', '.'));
+    return values.reps.trim() !== '' && Number.isInteger(reps) && reps >= 0 && reps <= 300
+      && values.weightKg.trim() !== '' && Number.isFinite(weight) && weight >= 0 && weight <= 1000;
+  });
+}
 
 export default function RoutinesScreen() {
   const { user } = useAuth();
+  const isClient = user?.role === 'Cliente';
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
-  const [substituteExerciseId, setSubstituteExerciseId] = useState<string | null>(null);
-  const [setLogs, setSetLogs] = useState<Record<string, { reps: string; weight: string }[]>>({});
-  const [savingDay, setSavingDay] = useState<string | null>(null);
-  const [savedDays, setSavedDays] = useState<string[]>([]);
+  const [selectedDay, setSelectedDay] = useState(initialDeviceDay);
+  const [inputs, setInputs] = useState<Record<string, MetricValues>>({});
+  const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
+  const [restTimer, setRestTimer] = useState<RestTimer | null>(null);
+  const [savingDay, setSavingDay] = useState(false);
   const [logMessage, setLogMessage] = useState<{ text: string; error: boolean } | null>(null);
   const startedAt = useRef<number | null>(null);
 
-  function updateSet(exercise: Exercise, setIndex: number, field: 'reps' | 'weight', value: string) {
-    const key = exercise._id;
-    if (!key) return;
+  useFocusEffect(useCallback(() => {
+    let isCurrent = true;
+    if (retryNumber > 0) setError('');
+    api.get<{ routines: Routine[] }>('/routines')
+      .then((response) => { if (isCurrent) setRoutines(response.data.routines); })
+      .catch((requestError: unknown) => { if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas.')); })
+      .finally(() => { if (isCurrent) setIsLoading(false); });
+    return () => { isCurrent = false; };
+  }, [retryNumber]));
+
+  useEffect(() => {
+    if (!restTimer) return undefined;
+    const interval = setInterval(() => {
+      setRestTimer((current) => {
+        if (!current || current.remaining <= 1) return null;
+        return { ...current, remaining: current.remaining - 1 };
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [restTimer]);
+
+  const routine = routines.find((entry) => entry.status === 'active') ?? routines[0];
+  const allBlocks = routine ? routineBlocks(routine) : [];
+  const dayBlocks = allBlocks.filter((block) => block.day === selectedDay).sort((left, right) => left.order - right.order);
+
+  function updateMetric(block: RoutineBlock, setNumber: number, exercise: Exercise, index: number, field: keyof MetricValues, value: string) {
     startedAt.current ??= Date.now();
-    const cleaned = value.replace(/[^0-9.,]/g, '').slice(0, 6);
-    setSetLogs((current) => {
-      const rows = Array.from({ length: exercise.sets }, (_, index) => current[key]?.[index] ?? { reps: '', weight: '' });
-      rows[setIndex] = { ...rows[setIndex], [field]: cleaned };
-      return { ...current, [key]: rows };
-    });
+    const cleaned = value.replace(/[^0-9.,]/g, '').slice(0, 8);
+    const key = inputKey(block, setNumber, exercise, index);
+    setInputs((current) => ({ ...current, [key]: { ...(current[key] ?? emptyInput()), [field]: cleaned } }));
   }
 
-  async function saveSession(routine: Routine, day: number, dayExercises: Exercise[]) {
-    const dayKey = `${routine._id}-${day}`;
-    const exercises = dayExercises.flatMap((exercise) => {
-      if (!exercise._id) return [];
-      const sets = (setLogs[exercise._id] ?? [])
-        .filter((entry) => entry.reps.trim() !== '')
-        .map((entry) => ({
-          reps: Math.round(Number(entry.reps.replace(',', '.'))),
-          weightKg: Number(entry.weight.replace(',', '.')) || 0,
-          restSeconds: exercise.restSeconds,
-        }));
-      return sets.length ? [{ routineExerciseId: exercise._id, sets }] : [];
+  function finishBlockSet(block: RoutineBlock, setNumber: number) {
+    const blockId = block._id ?? String(block.order);
+    const done = completedSets[blockId] ?? [];
+    const expectedSetNumber = Array.from({ length: block.sets }, (_, index) => index + 1).find((number) => !done.includes(number));
+    if (restTimer?.blockId === blockId) {
+      setLogMessage({ text: 'Espera a que termine el descanso de este bloque.', error: true });
+      return;
+    }
+    if (setNumber !== expectedSetNumber) {
+      setLogMessage({ text: 'Completa las rondas de este bloque en orden.', error: true });
+      return;
+    }
+    if (!isSetComplete(block, setNumber, inputs)) {
+      setLogMessage({ text: 'Completa cada ejercicio de este bloque antes de terminar la serie.', error: true });
+      return;
+    }
+    setCompletedSets((current) => {
+      const previous = current[blockId] ?? [];
+      return { ...current, [blockId]: previous.includes(setNumber) ? previous : [...previous, setNumber].sort((a, b) => a - b) };
     });
-    if (!exercises.length) {
-      setLogMessage({ text: 'Anota las repeticiones de al menos una serie.', error: true });
+    setLogMessage(null);
+    if (block.restSeconds > 0 && setNumber < block.sets) setRestTimer({ blockId, remaining: block.restSeconds });
+  }
+
+  async function saveSession() {
+    if (!routine) return;
+    const payloadBlocks = dayBlocks.flatMap((block) => {
+      const blockId = block._id ?? String(block.order);
+      const done = completedSets[blockId] ?? [];
+      const sets = done.map((setNumber) => ({
+        setNumber,
+        exercises: block.exercises.map((exercise, index) => {
+          const values = inputs[inputKey(block, setNumber, exercise, index)] ?? emptyInput();
+          return {
+            routineExerciseId: exercise._id,
+            ...(isCardio(exercise)
+              ? {
+                  ...(values.durationMinutes ? { durationMinutes: Number(values.durationMinutes) } : {}),
+                  ...(values.distanceKm ? { distanceKm: Number(values.distanceKm.replace(',', '.')) } : {}),
+                  ...(values.level ? { level: Number(values.level) } : {}),
+                }
+              : { reps: Math.round(Number(values.reps)), weightKg: Number(values.weightKg.replace(',', '.')) }),
+          };
+        }).filter((exercise) => Boolean(exercise.routineExerciseId)),
+      }));
+      return sets.length ? [{ routineBlockId: block._id, sets }] : [];
+    });
+    if (!payloadBlocks.length) {
+      setLogMessage({ text: 'Completa y termina al menos una serie de bloque para guardar.', error: true });
       return;
     }
 
+    setSavingDay(true);
     setLogMessage(null);
-    setSavingDay(dayKey);
     try {
-      const minutes = minutesSince(startedAt.current);
       await api.post('/workouts', {
         routineId: routine._id,
-        trainingDay: day,
-        durationMinutes: Math.min(600, minutes),
-        exercises,
+        trainingDay: selectedDay,
+        durationMinutes: Math.min(600, minutesSince(startedAt.current)),
+        blocks: payloadBlocks,
       });
-      setSavedDays((current) => [...current, dayKey]);
-      setSetLogs((current) => {
-        const next = { ...current };
-        dayExercises.forEach((exercise) => { if (exercise._id) delete next[exercise._id]; });
-        return next;
-      });
+      setInputs({});
+      setCompletedSets({});
+      setRestTimer(null);
       startedAt.current = null;
-      setLogMessage({ text: 'Sesión guardada. Tus estadísticas se actualizaron.', error: false });
+      setLogMessage({ text: 'Entrenamiento guardado. Tu progreso se actualizó.', error: false });
     } catch (requestError) {
-      setLogMessage({ text: getApiErrorMessage(requestError, 'No se pudo guardar la sesión.'), error: true });
+      setLogMessage({ text: getApiErrorMessage(requestError, 'No se pudo guardar el entrenamiento.'), error: true });
     } finally {
-      setSavingDay(null);
+      setSavingDay(false);
     }
   }
 
-  useFocusEffect(useCallback(() => {
-    let isCurrent = true;
-    api.get<{ routines: Routine[] }>('/routines')
-      .then((response) => {
-        if (isCurrent) setRoutines(response.data.routines);
-      })
-      .catch((requestError: unknown) => {
-        if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas.'));
-      })
-      .finally(() => {
-        if (isCurrent) setIsLoading(false);
-      });
-    return () => { isCurrent = false; };
-    // retryNumber solo fuerza una nueva carga al reintentar o al asignar una plantilla.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryNumber]));
-
   return (
     <Page>
-      <AppHeader
-        title="Rutinas"
-        detail={user?.role === 'Coach' ? 'Coach Creator y planes de tus clientes.' : 'Planes de entrenamiento disponibles para tu cuenta.'}
-      />
-      {user?.role === 'Coach' ? (
-        <View style={styles.coachActions}>
-          <ActionButton onPress={() => router.push(routineEditorHref())}>Nueva rutina para cliente</ActionButton>
-          <ActionButton secondary onPress={() => router.push(routineEditorHref({ mode: 'template' }))}>Nueva plantilla base</ActionButton>
-        </View>
+      <AppHeader title="Rutinas" detail={isClient ? 'Elige el día y registra cada ronda de tu entrenamiento.' : 'Rutinas asignadas a tus clientes.'} />
+
+      {!isClient ? (
+        <>
+          <View style={styles.coachActions}>
+            <ActionButton onPress={() => router.push(routineEditorHref())}>Nueva rutina para cliente</ActionButton>
+            <ActionButton secondary onPress={() => router.push(routineEditorHref({ mode: 'template' }))}>Nueva plantilla base</ActionButton>
+          </View>
+          <CoachTemplates onAssigned={() => setRetryNumber((current) => current + 1)} />
+        </>
       ) : null}
-      {user?.role === 'Coach' ? <CoachTemplates onAssigned={() => setRetryNumber((current) => current + 1)} /> : null}
-      <SectionTitle>{routines.length ? `${routines.length} planes` : 'Tu plan de entrenamiento'}</SectionTitle>
+
       {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : null}
-      {logMessage ? <Notice error={logMessage.error}>{logMessage.text}</Notice> : null}
       {error ? (
         <View style={styles.feedback}>
           <Notice error>{error}</Notice>
-          <Pressable accessibilityRole="button" onPress={() => { setError(''); setIsLoading(true); setRetryNumber((current) => current + 1); }}>
-            <Text style={styles.retry}>Reintentar</Text>
-          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => { setError(''); setIsLoading(true); setRetryNumber((current) => current + 1); }}><Text style={styles.retry}>Reintentar</Text></Pressable>
         </View>
       ) : null}
-      {!isLoading && !error && routines.length === 0 ? (
-        <Notice>Aún no tienes rutinas asignadas. Cuando tu Coach publique un plan, aparecerá aquí.</Notice>
-      ) : null}
-      {routines.map((routine) => (
-        <Surface key={routine._id} style={styles.routine}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>{routine.title}</Text>
-            <Text style={[styles.status, routine.status === 'active' ? styles.active : styles.paused]}>
-              {routine.status === 'active' ? 'Activa' : 'En pausa'}
-            </Text>
-          </View>
-          {routine.description ? <Text style={styles.description}>{routine.description}</Text> : null}
-          <Text style={styles.meta}>
-            {levelNames[routine.level]}  ·  {routine.daysPerWeek} días/semana  ·  {routine.durationWeeks} semanas
-          </Text>
-          {routine.goal ? <Text style={styles.goal}>Objetivo · {routine.goal}</Text> : null}
-          {user?.role === 'Coach' ? (
-            <View style={styles.coachRow}>
-              {typeof routine.assignedTo === 'object' ? <Text style={styles.goal}>Cliente · {routine.assignedTo.name}</Text> : null}
-              <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}>
-                <Text style={styles.retry}>Editar rutina</Text>
-              </Pressable>
+      {logMessage ? <Notice error={logMessage.error}>{logMessage.text}</Notice> : null}
+
+      {routine ? (
+        <>
+          <FloatingCard style={styles.routineSummary}>
+            <View style={styles.summaryTop}>
+              <IconBadge name="assignment" color={palette.neon} />
+              <View style={styles.flex}>
+                <Text style={styles.routineTitle}>{routine.title}</Text>
+                <Text style={styles.meta}>{levelNames[routine.level]} · {routine.daysPerWeek} días/semana · {routine.durationWeeks} semanas</Text>
+              </View>
             </View>
-          ) : null}
-          <View style={styles.rule} />
-          {getRoutineDays(routine).map((day) => {
-            const dayExercises = getExercisesForDay(routine, day);
-            return (
-              <View key={day} style={styles.daySection}>
-                <Text style={styles.dayTitle}>{weekDayNames[day]}</Text>
-                {dayExercises.map((exercise, index) => {
-                  const equipment = typeof exercise.equipmentId === 'object'
-                    ? exercise.equipmentId
-                    : undefined;
-                  const equipmentName = equipment?.name ?? exercise.equipment ?? 'Equipo registrado';
+          </FloatingCard>
+
+          {isClient ? (
+            <>
+              <View style={styles.dayTabs}>
+                {dayTabs.map((day) => {
+                  const selected = selectedDay === day.value;
+                  const count = allBlocks.filter((block) => block.day === day.value).length;
                   return (
-                    <View key={exercise._id ?? `${exercise.name}-${index}`} style={styles.exerciseBlock}>
-                      <View style={styles.exercise}>
-                        <View style={styles.exerciseNumber}><Text style={styles.numberText}>{index + 1}</Text></View>
-                        <View style={styles.exerciseInfo}>
-                          <Text style={styles.exerciseName}>{exercise.name}</Text>
-                          <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {equipmentName}</Text>
-                          <Text style={styles.exerciseMeta}>
-                            {exercise.sets} × {exercise.reps}
-                            {exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}
-                            {` · ${exercise.restSeconds}s descanso`}
-                          </Text>
-                        </View>
-                      </View>
-                      {user?.role === 'Cliente' && routine.status === 'active' && exercise._id ? (
-                        <View style={styles.setTable}>
-                          {Array.from({ length: exercise.sets }, (_, setIndex) => {
-                            const entry = setLogs[exercise._id as string]?.[setIndex];
-                            return (
-                              <View key={setIndex} style={styles.setRow}>
-                                <Text style={styles.setLabel}>Serie {setIndex + 1}</Text>
-                                <TextInput
-                                  keyboardType="numeric"
-                                  value={entry?.reps ?? ''}
-                                  onChangeText={(value) => updateSet(exercise, setIndex, 'reps', value)}
-                                  placeholder={exercise.reps}
-                                  placeholderTextColor={palette.muted}
-                                  style={styles.setInput}
-                                />
-                                <Text style={styles.setUnit}>reps</Text>
-                                <TextInput
-                                  keyboardType="decimal-pad"
-                                  value={entry?.weight ?? ''}
-                                  onChangeText={(value) => updateSet(exercise, setIndex, 'weight', value)}
-                                  placeholder={exercise.suggestedWeight !== undefined ? String(exercise.suggestedWeight) : '0'}
-                                  placeholderTextColor={palette.muted}
-                                  style={styles.setInput}
-                                />
-                                <Text style={styles.setUnit}>kg</Text>
-                              </View>
-                            );
-                          })}
-                        </View>
-                      ) : null}
-                      {user?.role === 'Cliente' ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          onPress={() => setSubstituteExerciseId((current) => (
-                            current === (exercise._id ?? exercise.name) ? null : (exercise._id ?? exercise.name)
-                          ))}
-                          style={styles.replaceButton}>
-                          <Text style={styles.replaceText}>Sustituir ejercicio</Text>
-                        </Pressable>
-                      ) : null}
-                      {user?.role === 'Cliente' && substituteExerciseId === (exercise._id ?? exercise.name) ? (
-                        <Text style={styles.replaceNotice}>Las recomendaciones por disponibilidad se conectarán en la Fase 5.</Text>
-                      ) : null}
-                    </View>
+                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setSelectedDay(day.value); setRestTimer(null); setLogMessage(null); }} style={[styles.dayTab, selected && styles.dayTabSelected]}>
+                      <Text style={[styles.dayTabText, selected && styles.dayTabTextSelected]}>{day.label}</Text>
+                      <View style={[styles.dayDot, count > 0 && (selected ? styles.dayDotSelected : styles.dayDotActive)]} />
+                    </Pressable>
                   );
                 })}
-                {!dayExercises.length ? <Text style={styles.noExercises}>Sin ejercicios programados.</Text> : null}
-                {user?.role === 'Cliente' && routine.status === 'active' && dayExercises.length ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    disabled={savingDay === `${routine._id}-${day}`}
-                    onPress={() => void saveSession(routine, day, dayExercises)}
-                    style={[styles.finishButton, savingDay === `${routine._id}-${day}` && styles.finishDisabled]}>
-                    {savingDay === `${routine._id}-${day}`
-                      ? <ActivityIndicator color={palette.deepGreen} />
-                      : <Text style={styles.finishText}>{savedDays.includes(`${routine._id}-${day}`) ? 'Guardar otra sesión' : 'Finalizar y guardar sesión'}</Text>}
-                  </Pressable>
-                ) : null}
               </View>
-            );
-          })}
-        </Surface>
-      ))}
+              <Text style={styles.selectedDayTitle}>{dayNames[selectedDay]}</Text>
+
+              {!dayBlocks.length ? (
+                <FloatingCard style={styles.restCard}>
+                  <IconBadge name="self-improvement" color={palette.cyan} size={56} />
+                  <Text style={styles.restTitle}>Día de descanso</Text>
+                  <Text style={styles.restCopy}>No hay bloques programados para hoy. Recupérate y vuelve con energía.</Text>
+                </FloatingCard>
+              ) : (
+                <>
+                  {dayBlocks.map((block, blockIndex) => {
+                    const blockId = block._id ?? String(block.order);
+                    const done = completedSets[blockId] ?? [];
+                    const typeLabel = block.blockType === 'single' ? 'Individual' : block.blockType === 'superset' ? 'Superset' : 'Circuito';
+                    return (
+                      <FloatingCard key={blockId} style={styles.blockCard}>
+                        <View style={styles.blockHeader}>
+                          <IconBadge name={block.blockType === 'single' ? 'fitness-center' : block.blockType === 'superset' ? 'sync-alt' : 'autorenew'} color={block.blockType === 'single' ? palette.neon : palette.violet} />
+                          <View style={styles.flex}>
+                            <Text style={styles.blockTitle}>Bloque {blockIndex + 1} · {typeLabel}</Text>
+                            <Text style={styles.meta}>{block.sets} rondas · {block.restSeconds}s descanso entre rondas</Text>
+                          </View>
+                          <View style={styles.progressPill}><Text style={styles.progressText}>{done.length}/{block.sets}</Text></View>
+                        </View>
+
+                        {block.exercises.map((exercise, exerciseIndex) => {
+                          const cardio = isCardio(exercise);
+                          const equipment = typeof exercise.equipmentId === 'object' ? exercise.equipmentId.name : exercise.bodyweight ? 'Peso corporal / libre' : 'Equipo';
+                          return (
+                            <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.exercisePanel}>
+                              <View style={styles.exerciseHeading}>
+                                <Text style={styles.exerciseNumber}>{String.fromCharCode(65 + exerciseIndex)}</Text>
+                                <View style={styles.flex}>
+                                  <Text style={styles.exerciseName}>{exercise.name}</Text>
+                                  <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {equipment}</Text>
+                                  {cardio ? <Text style={styles.targetText}>{[exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ') || 'Meta de cardio'}</Text> : <Text style={styles.targetText}>{exercise.reps}{exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}</Text>}
+                                </View>
+                              </View>
+                              {Array.from({ length: block.sets }, (_, index) => {
+                                const setNumber = index + 1;
+                                const values = inputs[inputKey(block, setNumber, exercise, exerciseIndex)] ?? emptyInput();
+                                const isDone = done.includes(setNumber);
+                                return (
+                                  <View key={setNumber} style={styles.setRow}>
+                                    <Text style={styles.setLabel}>Ronda {setNumber}</Text>
+                                    {cardio ? (
+                                      <>
+                                        <MetricInput label="min" keyboard="number-pad" value={values.durationMinutes} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'durationMinutes', value)} disabled={isDone} />
+                                        <MetricInput label="km" keyboard="decimal-pad" value={values.distanceKm} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'distanceKm', value)} disabled={isDone} />
+                                        <MetricInput label="nivel" keyboard="number-pad" value={values.level} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'level', value)} disabled={isDone} />
+                                      </>
+                                    ) : (
+                                      <>
+                                        <MetricInput label="reps" keyboard="number-pad" value={values.reps} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'reps', value)} disabled={isDone} />
+                                        <MetricInput label="kg" keyboard="decimal-pad" value={values.weightKg} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'weightKg', value)} disabled={isDone} />
+                                      </>
+                                    )}
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          );
+                        })}
+
+                        {Array.from({ length: block.sets }, (_, index) => index + 1).map((setNumber) => {
+                          const isDone = done.includes(setNumber);
+                          const canComplete = isSetComplete(block, setNumber, inputs);
+                          const timerActive = restTimer?.blockId === blockId;
+                          const nextSetNumber = Array.from({ length: block.sets }, (_, setIndex) => setIndex + 1).find((number) => !done.includes(number));
+                          return (
+                            <Pressable key={`complete-${setNumber}`} accessibilityRole="button" disabled={!canComplete || isDone || savingDay || (timerActive && setNumber === nextSetNumber)} onPress={() => finishBlockSet(block, setNumber)} style={[styles.completeSetButton, (!canComplete || isDone || (timerActive && setNumber === nextSetNumber)) && styles.completeDisabled]}>
+                              <MaterialIcons name={isDone ? 'check-circle' : 'check'} size={18} color={isDone ? palette.green : palette.deepGreen} />
+                              <Text style={[styles.completeText, isDone && styles.completeTextDone]}>{isDone ? `Ronda ${setNumber} completada` : timerActive && setNumber === nextSetNumber ? `Descanso ${restTimer.remaining}s` : `Completar ronda ${setNumber}`}</Text>
+                            </Pressable>
+                          );
+                        })}
+                      </FloatingCard>
+                    );
+                  })}
+                  <ActionButton onPress={() => void saveSession()} disabled={savingDay || !Object.values(completedSets).some((sets) => sets.length > 0)}>
+                    {savingDay ? <ActivityIndicator color={palette.white} /> : 'Guardar entrenamiento del día'}
+                  </ActionButton>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <SectionTitle>Bloques de la rutina</SectionTitle>
+              {allBlocks.map((block, index) => (
+                <FloatingCard key={block._id ?? block.order} style={styles.blockCard}>
+                  <Text style={styles.blockTitle}>{dayNames[block.day]} · {block.blockType} · {block.sets} series</Text>
+                  {block.exercises.map((exercise) => <Text key={exercise._id} style={styles.exerciseMeta}>{exercise.name} · {exercise.metricType === 'cardio' ? 'Cardio' : exercise.reps}</Text>)}
+                  <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}><Text style={styles.retry}>Editar rutina</Text></Pressable>
+                </FloatingCard>
+              ))}
+            </>
+          )}
+        </>
+      ) : !isLoading && !error ? <Notice>Aún no tienes rutinas asignadas.</Notice> : null}
     </Page>
   );
 }
 
-const weekDayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-
-function getRoutineDays(routine: Routine) {
-  if (routine.scheduleDays?.length) return [...routine.scheduleDays].sort((left, right) => left - right);
-  return [...new Set(routine.exercises.map((exercise) => exercise.day ?? 1))].sort((left, right) => left - right);
-}
-
-function getExercisesForDay(routine: Routine, day: number) {
-  const hasDayAssignments = routine.exercises.some((exercise) => exercise.day !== undefined);
-  return hasDayAssignments
-    ? routine.exercises.filter((exercise) => (exercise.day ?? 0) === day)
-    : routine.exercises;
+function MetricInput({ label, keyboard, value, onChange, disabled }: { label: string; keyboard: 'number-pad' | 'decimal-pad'; value: string; onChange: (value: string) => void; disabled: boolean }) {
+  return <View style={styles.metricGroup}><TextInput editable={!disabled} keyboardType={keyboard} value={value} onChangeText={onChange} placeholder="—" placeholderTextColor={palette.muted} style={[styles.metricInput, disabled && styles.inputDone]} /><Text style={styles.metricUnit}>{label}</Text></View>;
 }
 
 const styles = StyleSheet.create({
-  coachActions: { gap: 10 },
-  coachRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  flex: { flex: 1 },
   feedback: { gap: 8 },
   retry: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
-  routine: { gap: 14, borderRadius: 24, borderWidth: 0, padding: 20, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 18, elevation: 4 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
-  title: { color: palette.ink, flex: 1, fontSize: 19, lineHeight: 25, fontWeight: '800' },
-  status: { overflow: 'hidden', borderRadius: 5, paddingHorizontal: 8, paddingVertical: 5, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
-  active: { color: palette.green, backgroundColor: '#E6EED7' },
-  paused: { color: palette.muted, backgroundColor: '#ECEDE8' },
-  description: { color: palette.muted, fontSize: 14, lineHeight: 21 },
-  meta: { color: palette.green, fontSize: 12, fontWeight: '700' },
-  goal: { color: palette.muted, fontSize: 13 },
-  rule: { height: 1, backgroundColor: palette.line },
-  daySection: { gap: 10 },
-  dayTitle: { color: palette.green, fontSize: 14, fontWeight: '800' },
-  exerciseBlock: { gap: 8 },
-  exercise: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  exerciseNumber: { width: 25, height: 25, borderRadius: 13, backgroundColor: palette.lime, alignItems: 'center', justifyContent: 'center' },
-  numberText: { color: palette.deepGreen, fontSize: 11, fontWeight: '800' },
-  exerciseInfo: { flex: 1, gap: 2 },
-  exerciseName: { color: palette.ink, fontSize: 14, fontWeight: '700' },
+  coachActions: { gap: 10 },
+  routineSummary: { gap: 12 },
+  summaryTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  routineTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
+  meta: { color: palette.muted, fontSize: 12 },
+  dayTabs: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#E9ECE3', borderRadius: 20, padding: 5 },
+  dayTab: { width: 42, minHeight: 54, alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 16 },
+  dayTabSelected: { backgroundColor: palette.deepGreen },
+  dayTabText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
+  dayTabTextSelected: { color: palette.white },
+  dayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
+  dayDotActive: { backgroundColor: palette.cyan },
+  dayDotSelected: { backgroundColor: palette.neon },
+  selectedDayTitle: { color: palette.ink, fontSize: 19, fontWeight: '800' },
+  restCard: { alignItems: 'center', gap: 10, paddingVertical: 30 },
+  restTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
+  restCopy: { color: palette.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  blockCard: { gap: 12, padding: 16 },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  blockTitle: { color: palette.ink, fontSize: 16, fontWeight: '800', textTransform: 'capitalize' },
+  progressPill: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#19D98B26' },
+  progressText: { color: palette.green, fontSize: 12, fontWeight: '800' },
+  exercisePanel: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 11 },
+  exerciseHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  exerciseNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#7C5CFF26', color: palette.violet, fontSize: 13, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
+  exerciseName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
   exerciseMeta: { color: palette.muted, fontSize: 12, lineHeight: 17 },
-  rest: { color: palette.muted, fontSize: 11, fontWeight: '700' },
-  replaceButton: { alignSelf: 'flex-start', borderWidth: 1, borderColor: palette.line, borderRadius: 7, paddingHorizontal: 10, paddingVertical: 7, marginLeft: 35 },
-  replaceText: { color: palette.green, fontSize: 11, fontWeight: '800' },
-  replaceNotice: { color: palette.muted, fontSize: 11, lineHeight: 16, marginLeft: 35 },
-  noExercises: { color: palette.muted, fontSize: 12, paddingLeft: 4 },
-  setTable: { gap: 6, marginLeft: 35 },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  setLabel: { width: 54, color: palette.muted, fontSize: 12, fontWeight: '700' },
-  setInput: { width: 62, height: 38, borderRadius: 12, backgroundColor: '#F2F4EE', color: palette.ink, textAlign: 'center', fontSize: 15, fontWeight: '700' },
-  setUnit: { color: palette.muted, fontSize: 11, marginRight: 6 },
-  finishButton: { minHeight: 48, borderRadius: 16, backgroundColor: palette.neon, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  finishDisabled: { opacity: 0.6 },
-  finishText: { color: palette.deepGreen, fontSize: 14, fontWeight: '800' },
+  targetText: { color: palette.green, fontSize: 12, fontWeight: '700' },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 38 },
+  setLabel: { width: 48, color: palette.muted, fontSize: 11, fontWeight: '700' },
+  metricGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  metricInput: { width: 54, height: 38, borderRadius: 12, backgroundColor: '#F2F4EE', color: palette.ink, textAlign: 'center', fontSize: 14, fontWeight: '700' },
+  inputDone: { backgroundColor: '#E6EED7' },
+  metricUnit: { color: palette.muted, fontSize: 10, fontWeight: '700' },
+  completeSetButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 42, borderRadius: 15, backgroundColor: palette.neon },
+  completeDisabled: { backgroundColor: '#E9ECE3' },
+  completeText: { color: palette.deepGreen, fontSize: 13, fontWeight: '800' },
+  completeTextDone: { color: palette.green },
 });
-function minutesSince(start: number | null) {
-  return start ? Math.round((Date.now() - start) / 60000) : 0;
-}
