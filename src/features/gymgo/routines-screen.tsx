@@ -4,10 +4,10 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { palette } from './theme';
-import type { Exercise, Routine } from './types';
 import CoachTemplates from './coach-templates';
 import { routineEditorHref } from './routine-links';
+import { palette } from './theme';
+import type { Exercise, Routine } from './types';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
 
 const levelNames = {

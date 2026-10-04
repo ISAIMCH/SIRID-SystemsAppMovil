@@ -5,8 +5,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { CoachSelect } from './coach-select';
 import ClientProgress from './client-progress';
+import { CoachSelect } from './coach-select';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { palette } from './theme';
