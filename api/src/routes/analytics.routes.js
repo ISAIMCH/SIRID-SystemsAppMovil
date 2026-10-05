@@ -5,6 +5,7 @@ const controller = require('../controllers/analytics.controller');
 
 const router = express.Router();
 
+router.get('/client/:clientId', authenticate, authorize('Admin', 'Coach', 'Cliente'), asyncHandler(controller.getClientFitnessAnalytics));
 router.get('/dashboard', authenticate, authorize('Admin', 'Coach'), asyncHandler(controller.getOperationsDashboard));
 
 module.exports = router;

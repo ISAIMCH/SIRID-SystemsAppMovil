@@ -6,6 +6,11 @@ const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
 const { normalizeBlocks } = require('./routine.controller');
 
+function calculateCaloriesBurned(weightKg, durationMinutes, includesCardio) {
+  const met = includesCardio ? 6 : 3.5;
+  return ((met * 3.5 * weightKg) / 200) * durationMinutes;
+}
+
 const workoutSchema = z.object({
   routineId: z.string().regex(/^[a-f\d]{24}$/i),
   trainingDay: z.number().int().min(0).max(6),
@@ -132,6 +137,12 @@ async function createWorkoutSession(req, res) {
       ), 0)
     ), 0)
   ), 0);
+  const client = await User.findById(req.user.id).select('weightKg').lean();
+  const weightKg = client?.weightKg ?? 70;
+  const includesCardio = sessionBlocks.some((block) => block.sets.some((round) => (
+    round.exercises.some((exercise) => exercise.metricType === 'cardio')
+  )));
+  const caloriesBurned = calculateCaloriesBurned(weightKg, input.durationMinutes, includesCardio);
 
   const [session] = await WorkoutSession.create([{
     user: req.user.id,
@@ -140,6 +151,7 @@ async function createWorkoutSession(req, res) {
     completedAt: new Date(),
     durationMinutes: input.durationMinutes,
     totalVolumeKg,
+    caloriesBurned,
     blocks: sessionBlocks,
   }]);
 
@@ -199,4 +211,11 @@ async function getMyWorkoutStats(req, res) {
   });
 }
 
-module.exports = { createWorkoutSession, getMyWorkoutHistory, getMyWorkoutStats, getClientWorkoutHistory, workoutSchema };
+module.exports = {
+  createWorkoutSession,
+  getMyWorkoutHistory,
+  getMyWorkoutStats,
+  getClientWorkoutHistory,
+  workoutSchema,
+  calculateCaloriesBurned,
+};
