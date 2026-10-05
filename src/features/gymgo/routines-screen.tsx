@@ -2,6 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
@@ -14,6 +15,7 @@ import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 
 type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
 type RestTimer = { blockId: string; remaining: number };
+type WorkoutReward = { caloriesBurned: number; durationMinutes: number; totalVolumeKg: number };
 const initialDeviceDay = new Date().getDay();
 const dayTabs = [
   { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mié' },
@@ -82,6 +84,7 @@ export default function RoutinesScreen() {
   const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
   const [restTimer, setRestTimer] = useState<RestTimer | null>(null);
   const [activeGif, setActiveGif] = useState<{ name: string; url: string } | null>(null);
+  const [workoutReward, setWorkoutReward] = useState<WorkoutReward | null>(null);
   const [savingDay, setSavingDay] = useState(false);
   const [logMessage, setLogMessage] = useState<{ text: string; error: boolean } | null>(null);
   const startedAt = useRef<number | null>(null);
@@ -173,7 +176,7 @@ export default function RoutinesScreen() {
     setSavingDay(true);
     setLogMessage(null);
     try {
-      await api.post('/workouts', {
+      const response = await api.post<{ session: WorkoutReward }>('/workouts', {
         routineId: routine._id,
         trainingDay: selectedDay,
         durationMinutes: Math.min(600, minutesSince(startedAt.current)),
@@ -183,7 +186,7 @@ export default function RoutinesScreen() {
       setCompletedSets({});
       setRestTimer(null);
       startedAt.current = null;
-      setLogMessage({ text: 'Entrenamiento guardado. Tu progreso se actualizó.', error: false });
+      setWorkoutReward(response.data.session);
     } catch (requestError) {
       setLogMessage({ text: getApiErrorMessage(requestError, 'No se pudo guardar el entrenamiento.'), error: true });
     } finally {
@@ -360,12 +363,59 @@ export default function RoutinesScreen() {
           </View>
         </View>
       </Modal>
+      <WorkoutRewardModal
+        reward={workoutReward}
+        onClose={() => {
+          setWorkoutReward(null);
+          router.replace('/(main)');
+        }}
+      />
     </Page>
   );
 }
 
 function MetricInput({ label, keyboard, value, onChange, disabled }: { label: string; keyboard: 'number-pad' | 'decimal-pad'; value: string; onChange: (value: string) => void; disabled: boolean }) {
   return <View style={styles.metricGroup}><TextInput editable={!disabled} keyboardType={keyboard} value={value} onChangeText={onChange} placeholder="—" placeholderTextColor={palette.muted} style={[styles.metricInput, disabled && styles.inputDone]} /><Text style={styles.metricUnit}>{label}</Text></View>;
+}
+
+function WorkoutRewardModal({ reward, onClose }: { reward: WorkoutReward | null; onClose: () => void }) {
+  const number = (value: number) => new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(Math.round(value));
+  return (
+    <Modal visible={Boolean(reward)} animationType="fade" statusBarTranslucent onRequestClose={onClose}>
+      <SafeAreaView style={styles.rewardScreen}>
+        <View style={styles.rewardContent}>
+          <View style={styles.rewardIcon}><MaterialIcons name="emoji-events" size={44} color="#A3FF68" /></View>
+          <Text style={styles.rewardEyebrow}>ENTRENAMIENTO COMPLETADO</Text>
+          <Text style={styles.rewardTitle}>Buen trabajo.</Text>
+          <Text style={styles.rewardSubtitle}>Cada sesión cuenta. Mira lo que sumaste hoy.</Text>
+
+          <View style={styles.rewardCalories}>
+            <MaterialIcons name="local-fire-department" size={23} color="#A3FF68" />
+            <Text style={styles.rewardCaloriesValue}>{reward ? number(reward.caloriesBurned) : '—'}</Text>
+            <Text style={styles.rewardCaloriesUnit}>kcal</Text>
+          </View>
+
+          <View style={styles.rewardMetrics}>
+            <View style={styles.rewardMetric}>
+              <MaterialIcons name="schedule" size={21} color="#55D6D0" />
+              <Text style={styles.rewardMetricValue}>{reward ? number(reward.durationMinutes) : '—'} min</Text>
+              <Text style={styles.rewardMetricLabel}>TIEMPO ACTIVO</Text>
+            </View>
+            <View style={styles.rewardDivider} />
+            <View style={styles.rewardMetric}>
+              <MaterialIcons name="fitness-center" size={21} color="#A3FF68" />
+              <Text style={styles.rewardMetricValue}>{reward ? number(reward.totalVolumeKg) : '—'} kg</Text>
+              <Text style={styles.rewardMetricLabel}>VOLUMEN</Text>
+            </View>
+          </View>
+        </View>
+        <Pressable accessibilityRole="button" onPress={onClose} style={styles.rewardButton}>
+          <Text style={styles.rewardButtonText}>Volver al inicio</Text>
+          <MaterialIcons name="arrow-forward" size={20} color="#081009" />
+        </Pressable>
+      </SafeAreaView>
+    </Modal>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -416,4 +466,20 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   modalTitle: { flex: 1, color: palette.ink, fontSize: 16, fontWeight: '800' },
   gifImage: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#F2F4EE' },
+  rewardScreen: { flex: 1, backgroundColor: '#070B09', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 36, paddingBottom: 22 },
+  rewardContent: { flex: 1, justifyContent: 'center', gap: 13 },
+  rewardIcon: { width: 82, height: 82, borderRadius: 41, backgroundColor: '#A3FF681C', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  rewardEyebrow: { color: '#A3FF68', fontSize: 10, fontWeight: '900' },
+  rewardTitle: { color: '#F4F8F5', fontSize: 36, fontWeight: '900' },
+  rewardSubtitle: { color: '#91A098', fontSize: 14, lineHeight: 20 },
+  rewardCalories: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 22 },
+  rewardCaloriesValue: { color: '#F4F8F5', fontSize: 54, lineHeight: 62, fontWeight: '900' },
+  rewardCaloriesUnit: { color: '#A3FF68', fontSize: 16, fontWeight: '800' },
+  rewardMetrics: { flexDirection: 'row', alignItems: 'center', borderRadius: 22, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#111815', paddingVertical: 20, marginTop: 10 },
+  rewardMetric: { flex: 1, alignItems: 'center', gap: 7 },
+  rewardMetricValue: { color: '#F4F8F5', fontSize: 20, fontWeight: '900' },
+  rewardMetricLabel: { color: '#91A098', fontSize: 9, fontWeight: '900' },
+  rewardDivider: { width: 1, height: 55, backgroundColor: '#27342E' },
+  rewardButton: { minHeight: 56, borderRadius: 18, backgroundColor: '#A3FF68', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  rewardButtonText: { color: '#081009', fontSize: 15, fontWeight: '900' },
 });
