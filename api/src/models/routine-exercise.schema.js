@@ -3,7 +3,9 @@ const mongoose = require('mongoose');
 const exerciseSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
+  equipment: { type: String, trim: true, maxlength: 100 },
   equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment' },
+  gifUrl: { type: String, trim: true, maxlength: 500 },
   bodyweight: { type: Boolean, default: false },
   metricType: { type: String, enum: ['strength', 'cardio'], default: 'strength', required: true },
   reps: { type: String, trim: true, maxlength: 30 },

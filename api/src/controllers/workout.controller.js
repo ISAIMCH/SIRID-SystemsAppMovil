@@ -104,6 +104,7 @@ async function createWorkoutSession(req, res) {
           routineExerciseId: exercise._id,
           exerciseName: exercise.name,
           muscleGroup: exercise.muscleGroup,
+          gifUrl: exercise.gifUrl,
           equipmentId: exercise.equipmentId ?? null,
           metricType: isCardio ? 'cardio' : 'strength',
           reps: entryExercise.reps,

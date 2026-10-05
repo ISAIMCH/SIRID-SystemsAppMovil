@@ -4,6 +4,7 @@ const exerciseLogSchema = new mongoose.Schema({
   routineExerciseId: { type: mongoose.Schema.Types.ObjectId, required: true },
   exerciseName: { type: String, required: true, trim: true, maxlength: 120 },
   muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
+  gifUrl: { type: String, trim: true, maxlength: 500 },
   equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', default: null },
   metricType: { type: String, enum: ['strength', 'cardio'], default: 'strength' },
   reps: { type: Number, min: 0, max: 300 },

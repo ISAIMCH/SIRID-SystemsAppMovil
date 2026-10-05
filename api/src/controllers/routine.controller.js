@@ -9,7 +9,9 @@ const exerciseSchema = z.object({
   _id: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   name: z.string().trim().min(1).max(120),
   muscleGroup: z.string().trim().min(1).max(80),
+  equipment: z.string().trim().max(100).optional(),
   equipmentId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  gifUrl: z.string().url().max(500).optional(),
   bodyweight: z.boolean().default(false),
   metricType: z.enum(['strength', 'cardio']).optional(),
   reps: z.string().trim().min(1).max(30).optional(),
@@ -18,9 +20,9 @@ const exerciseSchema = z.object({
   targetDistanceKm: z.number().min(0.01).max(1000).optional(),
   targetLevel: z.number().int().min(1).max(100).optional(),
   order: z.number().int().min(0),
-}).refine((exercise) => exercise.bodyweight || exercise.equipmentId, {
+}).refine((exercise) => exercise.bodyweight || exercise.equipmentId || exercise.equipment, {
   path: ['equipmentId'],
-  message: 'Selecciona un equipo del inventario o Peso corporal / Libre.',
+  message: 'Selecciona un equipo del inventario o un equipo del catálogo.',
 });
 
 const blockSchema = z.object({
@@ -126,7 +128,12 @@ async function ensureEligibleBlocks(blocks) {
     type: item.type ?? (/^cardio$/i.test(item.zone) ? 'cardio' : 'strength'),
   }]));
   for (const exercise of exercises) {
-    const metricType = exercise.bodyweight ? 'strength' : byId.get(String(exercise.equipmentId))?.type ?? 'strength';
+    if (!exercise.bodyweight && !exercise.equipmentId && !exercise.equipment) {
+      throw new HttpError(400, 'Cada ejercicio requiere equipo o la opción de peso corporal.');
+    }
+    const metricType = exercise.bodyweight
+      ? 'strength'
+      : byId.get(String(exercise.equipmentId))?.type ?? exercise.metricType ?? 'strength';
     if (exercise.metricType && exercise.metricType !== metricType) throw new HttpError(400, 'Las métricas deben coincidir con el tipo de equipo.');
     if (metricType === 'cardio') {
       if (!exercise.targetDurationMinutes && !exercise.targetDistanceKm && !exercise.targetLevel) {

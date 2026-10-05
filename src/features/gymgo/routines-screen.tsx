@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
@@ -81,6 +81,7 @@ export default function RoutinesScreen() {
   const [inputs, setInputs] = useState<Record<string, MetricValues>>({});
   const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
   const [restTimer, setRestTimer] = useState<RestTimer | null>(null);
+  const [activeGif, setActiveGif] = useState<{ name: string; url: string } | null>(null);
   const [savingDay, setSavingDay] = useState(false);
   const [logMessage, setLogMessage] = useState<{ text: string; error: boolean } | null>(null);
   const startedAt = useRef<number | null>(null);
@@ -266,13 +267,20 @@ export default function RoutinesScreen() {
 
                         {block.exercises.map((exercise, exerciseIndex) => {
                           const cardio = isCardio(exercise);
-                          const equipment = typeof exercise.equipmentId === 'object' ? exercise.equipmentId.name : exercise.bodyweight ? 'Peso corporal / libre' : 'Equipo';
+                          const equipment = exercise.equipment ?? (typeof exercise.equipmentId === 'object' ? exercise.equipmentId.name : exercise.bodyweight ? 'Peso corporal / libre' : 'Equipo');
                           return (
                             <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.exercisePanel}>
                               <View style={styles.exerciseHeading}>
                                 <Text style={styles.exerciseNumber}>{String.fromCharCode(65 + exerciseIndex)}</Text>
                                 <View style={styles.flex}>
-                                  <Text style={styles.exerciseName}>{exercise.name}</Text>
+                                  <View style={styles.exerciseNameRow}>
+                                    <Text style={styles.exerciseName}>{exercise.name}</Text>
+                                    {exercise.gifUrl ? (
+                                      <Pressable accessibilityRole="button" accessibilityLabel={`Ver animación de ${exercise.name}`} onPress={() => setActiveGif({ name: exercise.name, url: exercise.gifUrl as string })}>
+                                        <MaterialIcons name="play-circle-filled" size={23} color={palette.cyan} />
+                                      </Pressable>
+                                    ) : null}
+                                  </View>
                                   <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {equipment}</Text>
                                   {cardio ? <Text style={styles.targetText}>{[exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ') || 'Meta de cardio'}</Text> : <Text style={styles.targetText}>{exercise.reps}{exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}</Text>}
                                 </View>
@@ -338,6 +346,20 @@ export default function RoutinesScreen() {
           )}
         </>
       ) : !isLoading && !error ? <Notice>Aún no tienes rutinas asignadas.</Notice> : null}
+
+      <Modal visible={Boolean(activeGif)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setActiveGif(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text numberOfLines={2} style={styles.modalTitle}>{activeGif?.name}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cerrar animación" onPress={() => setActiveGif(null)}>
+                <MaterialIcons name="close" size={24} color={palette.ink} />
+              </Pressable>
+            </View>
+            {activeGif ? <Image source={{ uri: activeGif.url }} resizeMode="contain" style={styles.gifImage} /> : null}
+          </View>
+        </View>
+      </Modal>
     </Page>
   );
 }
@@ -374,6 +396,7 @@ const styles = StyleSheet.create({
   progressText: { color: palette.green, fontSize: 12, fontWeight: '800' },
   exercisePanel: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 11 },
   exerciseHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  exerciseNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   exerciseNumber: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#7C5CFF26', color: palette.violet, fontSize: 13, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
   exerciseName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
   exerciseMeta: { color: palette.muted, fontSize: 12, lineHeight: 17 },
@@ -388,4 +411,9 @@ const styles = StyleSheet.create({
   completeDisabled: { backgroundColor: '#E9ECE3' },
   completeText: { color: palette.deepGreen, fontSize: 13, fontWeight: '800' },
   completeTextDone: { color: palette.green },
+  modalBackdrop: { flex: 1, backgroundColor: '#07130FC7', alignItems: 'center', justifyContent: 'center', padding: 22 },
+  modalCard: { width: '100%', maxWidth: 420, borderRadius: 24, backgroundColor: palette.white, padding: 16, gap: 14, shadowColor: '#000000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 24, elevation: 12 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  modalTitle: { flex: 1, color: palette.ink, fontSize: 16, fontWeight: '800' },
+  gifImage: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#F2F4EE' },
 });

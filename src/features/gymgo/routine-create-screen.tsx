@@ -6,10 +6,11 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
+import { ExerciseSearch } from './exercise-search';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { SelectField } from './select-field';
 import { palette } from './theme';
-import type { Exercise, Routine, RoutineBlock, RoutineTemplate } from './types';
+import type { Exercise, ExerciseDictionaryEntry, Routine, RoutineBlock, RoutineTemplate } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
 
 type Equipment = { _id: string; name: string; zone: string; type: 'strength' | 'cardio'; status: 'available' | 'busy' | 'out_of_service' };
@@ -50,6 +51,23 @@ function draftBlocks(source: Routine | RoutineTemplate): DraftBlock[] {
   }));
 }
 
+function findInventoryEquipment(label: string, equipment: Equipment[]) {
+  const normalized = label.toLowerCase();
+  if (normalized.includes('body weight') || normalized.includes('bodyweight')) return BODYWEIGHT;
+  const aliases: Record<string, string[]> = {
+    dumbbell: ['mancuerna', 'peso libre'],
+    barbell: ['barra', 'rack', 'peso libre'],
+    cable: ['polea', 'cable'],
+    'leverage machine': ['máquina', 'maquina'],
+    treadmill: ['caminadora', 'treadmill'],
+    elliptical: ['elíptica', 'eliptica'],
+    'stationary bike': ['bicicleta'],
+  };
+  const terms = aliases[normalized] ?? [normalized];
+  return equipment.find((item) => terms.some((term) => `${item.name} ${item.zone}`.toLowerCase().includes(term)))?._id
+    ?? `catalog:${label}`;
+}
+
 export default function RoutineCreateScreen() {
   const { n } = useLocalSearchParams<{ n?: string }>();
   return <RoutineForm key={n ?? 'default'} />;
@@ -85,6 +103,7 @@ function RoutineForm() {
   const [draftExercises, setDraftExercises] = useState<DraftExercise[]>([]);
 
   const [exerciseName, setExerciseName] = useState('');
+  const [selectedDictionaryExercise, setSelectedDictionaryExercise] = useState<ExerciseDictionaryEntry | null>(null);
   const [muscleGroup, setMuscleGroup] = useState('');
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroup, setNewGroup] = useState('');
@@ -139,8 +158,30 @@ function RoutineForm() {
 
   const availableEquipment = equipment.filter((item) => item.status !== 'out_of_service');
   const selectedEquipment = equipmentChoice === BODYWEIGHT ? undefined : availableEquipment.find((item) => item._id === equipmentChoice);
-  const metricType: 'strength' | 'cardio' = selectedEquipment?.type === 'cardio' ? 'cardio' : 'strength';
+  const metricType: 'strength' | 'cardio' = equipmentChoice === BODYWEIGHT
+    ? 'strength'
+    : selectedEquipment?.type ?? (equipmentChoice.startsWith('catalog:') ? selectedDictionaryExercise?.metricType : undefined) ?? 'strength';
   const maxBlockExercises = blockType === 'single' ? 1 : 20;
+
+  async function selectDictionaryExercise(exercise: ExerciseDictionaryEntry) {
+    setSelectedDictionaryExercise(exercise);
+    setExerciseName(exercise.name);
+    const targetMuscle = exercise.targetMuscle || 'General';
+    setMuscleGroups((current) => current.includes(targetMuscle) ? current : [...current, targetMuscle].sort((a, b) => a.localeCompare(b)));
+    setMuscleGroup(targetMuscle);
+    setEquipmentChoice(findInventoryEquipment(exercise.equipment, availableEquipment));
+    try {
+      const response = await api.post<{ group: { name: string } }>('/muscle-groups', { name: targetMuscle });
+      setMuscleGroups((current) => current.includes(response.data.group.name) ? current : [...current, response.data.group.name].sort((a, b) => a.localeCompare(b)));
+      setMuscleGroup(response.data.group.name);
+    } catch {
+      setError('El grupo muscular se usará en este ejercicio, pero no se pudo guardar para próximos usos.');
+    }
+    setSuggestedWeight('');
+    setTargetDuration('');
+    setTargetDistance('');
+    setTargetLevel('');
+  }
 
   function toggleDay(day: number) {
     setSelectedDays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day]);
@@ -166,7 +207,7 @@ function RoutineForm() {
   function addExerciseToBlock() {
     setError('');
     if (draftExercises.length >= maxBlockExercises) return setError('Este bloque individual ya tiene su ejercicio.');
-    if (!exerciseName.trim() || !muscleGroup || !equipmentChoice) return setError('Completa ejercicio, grupo muscular y equipo.');
+    if (!exerciseName.trim() || !muscleGroup || !equipmentChoice) return setError('Selecciona un ejercicio del catálogo, grupo muscular y equipo.');
 
     let exercise: DraftExercise;
     if (metricType === 'cardio') {
@@ -180,7 +221,8 @@ function RoutineForm() {
         return setError('Revisa las métricas objetivo de cardio.');
       }
       exercise = {
-        name: exerciseName.trim(), muscleGroup, metricType: 'cardio', order: draftExercises.length,
+        name: exerciseName.trim(), muscleGroup, equipment: selectedEquipment?.name ?? selectedDictionaryExercise?.equipment,
+        metricType: 'cardio', gifUrl: selectedDictionaryExercise?.gifUrl, order: draftExercises.length,
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
         ...(duration ? { targetDurationMinutes: duration } : {}),
         ...(distance ? { targetDistanceKm: distance } : {}),
@@ -191,8 +233,10 @@ function RoutineForm() {
       const weight = suggestedWeight.trim() ? Number(suggestedWeight.replace(',', '.')) : undefined;
       if (weight !== undefined && (!Number.isFinite(weight) || weight < 0 || weight > 1000)) return setError('El peso sugerido debe ser de 0 a 1000 kg.');
       exercise = {
-        name: exerciseName.trim(), muscleGroup, metricType: 'strength', reps: reps.trim(), order: draftExercises.length,
-        bodyweight: equipmentChoice === BODYWEIGHT,
+        name: exerciseName.trim(), muscleGroup,
+        equipment: selectedEquipment?.name ?? (equipmentChoice === BODYWEIGHT ? 'Peso corporal / libre' : selectedDictionaryExercise?.equipment),
+        metricType: 'strength', gifUrl: selectedDictionaryExercise?.gifUrl, reps: reps.trim(), order: draftExercises.length,
+        bodyweight: equipmentChoice === BODYWEIGHT || selectedDictionaryExercise?.equipment.toLowerCase().includes('body weight') === true,
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
         ...(weight !== undefined ? { suggestedWeight: weight } : {}),
       };
@@ -200,6 +244,7 @@ function RoutineForm() {
 
     setDraftExercises((current) => [...current, exercise]);
     setExerciseName('');
+    setSelectedDictionaryExercise(null);
     setMuscleGroup('');
     setEquipmentChoice('');
     setSuggestedWeight('');
@@ -339,7 +384,14 @@ function RoutineForm() {
 
         <View style={styles.rule} />
         <SectionTitle>Ejercicio {draftExercises.length + 1}{blockType === 'single' ? '' : ` de ${maxBlockExercises}`}</SectionTitle>
-        <Field label="Nombre" value={exerciseName} onChangeText={setExerciseName} placeholder="Prensa de pierna / Caminadora" />
+        <ExerciseSearch
+          value={exerciseName}
+          onChangeText={(value) => {
+            setExerciseName(value);
+            setSelectedDictionaryExercise(null);
+          }}
+          onSelect={selectDictionaryExercise}
+        />
         <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={muscleGroups.map((name) => ({ value: name, label: name }))} value={muscleGroup} onChange={setMuscleGroup} addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }} />
         {isAddingGroup ? (
           <View style={styles.group}>
@@ -347,7 +399,11 @@ function RoutineForm() {
             <View style={styles.row}><View style={styles.flex}><ActionButton onPress={() => void saveGroup()}>Guardar grupo</ActionButton></View><View style={styles.flex}><ActionButton secondary onPress={() => { setIsAddingGroup(false); setNewGroup(''); }}>Cancelar</ActionButton></View></View>
           </View>
         ) : null}
-        <SelectField label="Equipo" placeholder="Selecciona el equipo" options={[{ value: BODYWEIGHT, label: 'Peso Corporal / Libre', hint: 'Fuerza sin máquina' }, ...availableEquipment.map((item) => ({ value: item._id, label: item.name, hint: `${item.zone} · ${item.type === 'cardio' ? 'Cardio' : 'Fuerza'}` }))]} value={equipmentChoice} onChange={setEquipmentChoice} />
+        <SelectField label="Equipo" placeholder="Selecciona el equipo" options={[
+          { value: BODYWEIGHT, label: 'Peso Corporal / Libre', hint: 'Fuerza sin máquina' },
+          ...(equipmentChoice.startsWith('catalog:') && selectedDictionaryExercise ? [{ value: equipmentChoice, label: selectedDictionaryExercise.equipment, hint: 'Equipo del catálogo' }] : []),
+          ...availableEquipment.map((item) => ({ value: item._id, label: item.name, hint: `${item.zone} · ${item.type === 'cardio' ? 'Cardio' : 'Fuerza'}` })),
+        ]} value={equipmentChoice} onChange={setEquipmentChoice} />
         {metricType === 'cardio' ? (
           <>
             <Text style={styles.helper}>Cardio: define al menos un objetivo de duración, distancia o nivel/inclinación.</Text>
@@ -396,7 +452,7 @@ function RoutineForm() {
                 <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.blockExercise}>
                   <View style={styles.flex}>
                     <Text style={styles.exerciseName}>{exerciseIndex + 1}. {exercise.name}</Text>
-                    <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {exercise.metricType === 'cardio' ? 'Cardio' : exercise.bodyweight ? 'Peso corporal / libre' : equipment.find((item) => item._id === exercise.equipmentId)?.name ?? 'Fuerza'}</Text>
+                    <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {exercise.equipment ?? (exercise.metricType === 'cardio' ? 'Cardio' : exercise.bodyweight ? 'Peso corporal / libre' : equipment.find((item) => item._id === exercise.equipmentId)?.name ?? 'Fuerza')}</Text>
                     {exercise.metricType === 'cardio' ? <Text style={styles.exerciseMeta}>{[exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ')}</Text> : <Text style={styles.exerciseMeta}>{exercise.reps}{exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}</Text>}
                   </View>
                   {exercise.metricType !== 'cardio' ? (

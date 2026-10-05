@@ -10,6 +10,7 @@ export type Exercise = {
     type: 'strength' | 'cardio';
   };
   equipment?: string;
+  gifUrl?: string;
   bodyweight?: boolean;
   metricType?: 'strength' | 'cardio';
   day?: number;
@@ -31,6 +32,15 @@ export type RoutineBlock = {
   restSeconds: number;
   order: number;
   exercises: Exercise[];
+};
+
+export type ExerciseDictionaryEntry = {
+  _id: string;
+  name: string;
+  targetMuscle: string;
+  equipment: string;
+  gifUrl: string;
+  metricType: 'strength' | 'cardio';
 };
 
 export type Routine = {
@@ -91,6 +101,7 @@ export type WorkoutSessionLog = {
         routineExerciseId: string;
         exerciseName: string;
         muscleGroup: string;
+        gifUrl?: string;
         metricType: 'strength' | 'cardio';
         reps?: number;
         weightKg?: number;
