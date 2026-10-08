@@ -89,11 +89,11 @@ function StaffDashboard() {
 
   return (
     <>
-      <View style={styles.topTint} />
-      <View style={styles.page}>
+      <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint]} />
+      <View style={[styles.page, user?.role === 'Coach' && styles.darkPage]}>
         <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
 
-        <View style={styles.hero}>
+        <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero]}>
           <Eyebrow>{isClient ? 'PLAN PERSONAL' : `${user?.role?.toUpperCase()} · GYMGO`}</Eyebrow>
           <Text style={styles.heroTitle}>{roleHeading}</Text>
           <Text style={styles.heroDetail}>
@@ -143,13 +143,13 @@ function StaffDashboard() {
         ) : (
           <View style={styles.metricRow}>
             <Surface style={styles.metric}>
-              <Text style={styles.metricLabel}>Entradas hoy</Text>
-              <Text style={styles.metricValue}>{isLoadingSummary ? '—' : operations?.today.checkIns ?? 0}</Text>
+              <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Entradas hoy</Text>
+              <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.today.checkIns ?? 0}</Text>
               <Text style={styles.metricHint}>check-in registrados</Text>
             </Surface>
             <Surface style={styles.metric}>
-              <Text style={styles.metricLabel}>Dentro ahora</Text>
-              <Text style={styles.metricValue}>{isLoadingSummary ? '—' : operations?.currentOccupancy ?? 0}</Text>
+              <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Dentro ahora</Text>
+              <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.currentOccupancy ?? 0}</Text>
               <Text style={styles.metricHint}>clientes presentes</Text>
             </Surface>
           </View>
@@ -169,11 +169,11 @@ function StaffDashboard() {
         ) : null}
 
         {!isClient && operations ? (
-          <Surface style={styles.analyticsPanel}>
+            <Surface style={[styles.analyticsPanel, user?.role === 'Coach' && styles.darkPanel]}>
             <View style={styles.analyticsHeader}>
               <View style={styles.analyticsHeading}>
                 <View style={styles.demandDot} />
-                <Text style={styles.demandTitle}>Demanda horaria · 7 días</Text>
+                <Text style={[styles.demandTitle, user?.role === 'Coach' && styles.darkMetricValue]}>Demanda horaria · 7 días</Text>
               </View>
               <Text style={styles.metricHint}>{operations.today.checkOuts} salidas hoy</Text>
             </View>
@@ -247,8 +247,11 @@ function StaffDashboard() {
 
 const styles = StyleSheet.create({
   topTint: { position: 'absolute', height: 130, left: 0, right: 0, top: 0, backgroundColor: '#E4EAD8' },
+  darkTopTint: { backgroundColor: '#070B09' },
   page: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 22, gap: 22, paddingBottom: 36 },
+  darkPage: { backgroundColor: '#070B09' },
   hero: { backgroundColor: palette.deepGreen, borderRadius: 10, minHeight: 205, padding: 22, justifyContent: 'center', gap: 12 },
+  darkHero: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E', borderRadius: 24 },
   heroTitle: { color: palette.white, fontSize: 30, lineHeight: 36, fontWeight: '800', maxWidth: 420 },
   heroDetail: { color: '#DFE8DF', fontSize: 14, lineHeight: 21 },
   scannerCta: { minHeight: 50, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: palette.lime, paddingHorizontal: 15 },
@@ -261,6 +264,8 @@ const styles = StyleSheet.create({
   metric: { flex: 1, minHeight: 118, justifyContent: 'space-between', gap: 12 },
   metricLabel: { color: palette.muted, fontSize: 13, fontWeight: '700' },
   metricValue: { color: palette.ink, fontSize: 29, lineHeight: 32, fontWeight: '800' },
+  darkMetricValue: { color: '#F4F8F5' },
+  darkMetricLabel: { color: '#91A098' },
   metricHint: { color: palette.muted, fontSize: 12 },
   metricStatus: { color: palette.coral, fontSize: 15, fontWeight: '800', textTransform: 'capitalize' },
   active: { color: palette.green },
@@ -270,6 +275,7 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', gap: 28 },
   progressValue: { color: palette.green, fontSize: 22, fontWeight: '800' },
   analyticsPanel: { gap: 14 },
+  darkPanel: { backgroundColor: '#111815', borderColor: '#27342E', borderRadius: 24 },
   analyticsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   analyticsHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   demandDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.coral },

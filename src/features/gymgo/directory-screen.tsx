@@ -55,9 +55,9 @@ export default function DirectoryScreen() {
   const noun = segment === 'Cliente' ? 'clientes' : 'coaches';
 
   return (
-    <Page>
+    <Page dark={user?.role === 'Coach'}>
       <AppHeader
-        title="Directorio"
+        title={user?.role === 'Coach' ? 'Clientes' : 'Directorio'}
         detail={user?.role === 'Coach' ? 'Clientes asignados a tu perfil.' : 'Consulta y edita clientes y coaches.'}
       />
 

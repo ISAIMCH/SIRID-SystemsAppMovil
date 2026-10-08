@@ -1,12 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { palette } from './theme';
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
-export function SelectField({ label, placeholder, options, value, onChange, clearLabel, emptyText, addOption }: {
+export function SelectField({ label, placeholder, options, value, onChange, clearLabel, emptyText, addOption, filterable = false }: {
   label: string;
   placeholder: string;
   options: SelectOption[];
@@ -15,26 +15,30 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
   clearLabel?: string;
   emptyText?: string;
   addOption?: { label: string; onSelect: () => void };
+  filterable?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const selected = options.find((option) => option.value === value);
+  const visibleOptions = options.filter((option) => `${option.label} ${option.hint ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
 
   return (
     <View style={styles.group}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable accessibilityRole="button" onPress={() => setIsOpen((open) => !open)} style={styles.select}>
+      <Pressable accessibilityRole="button" onPress={() => { setIsOpen((open) => !open); setQuery(''); }} style={styles.select}>
         <Text numberOfLines={1} style={[styles.selectText, !selected && styles.placeholder]}>{selected?.label ?? placeholder}</Text>
         <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={22} color={palette.muted} />
       </Pressable>
       {isOpen ? (
         <View style={styles.options}>
+          {filterable ? <TextInput value={query} onChangeText={setQuery} placeholder="Buscar..." placeholderTextColor={palette.muted} style={styles.filterInput} autoFocus /> : null}
           {clearLabel ? (
             <Pressable accessibilityRole="button" onPress={() => { onChange(''); setIsOpen(false); }} style={styles.option}>
               <Text style={[styles.optionText, styles.clearText]}>{clearLabel}</Text>
             </Pressable>
           ) : null}
-          {options.length === 0 ? <Text style={styles.empty}>{emptyText ?? 'Sin opciones disponibles.'}</Text> : null}
-          {options.map((option) => (
+          {visibleOptions.length === 0 ? <Text style={styles.empty}>{emptyText ?? 'Sin opciones disponibles.'}</Text> : null}
+          {visibleOptions.map((option) => (
             <Pressable key={option.value} accessibilityRole="button" onPress={() => { onChange(option.value); setIsOpen(false); }} style={styles.option}>
               <Text style={[styles.optionText, option.value === value && styles.optionSelected]}>{option.label}</Text>
               {option.hint ? <Text style={styles.hint}>{option.hint}</Text> : null}
@@ -65,4 +69,5 @@ const styles = StyleSheet.create({
   addText: { color: palette.cyan, fontWeight: '800' },
   hint: { color: palette.muted, fontSize: 12 },
   empty: { color: palette.muted, fontSize: 13, padding: 16 },
+  filterInput: { height: 44, color: palette.ink, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: palette.line, fontSize: 14 },
 });

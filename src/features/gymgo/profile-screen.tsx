@@ -53,10 +53,10 @@ export default function ProfileScreen() {
   }
 
   return (
-    <Page>
+    <Page dark>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()}>
-          <IconBadge name="arrow-back" color={palette.ink} />
+          <IconBadge name="arrow-back" color="#F4F8F5" />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Perfil físico</Text>
@@ -136,23 +136,23 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerText: { flex: 1 },
-  title: { color: palette.ink, fontSize: 26, fontWeight: '800' },
-  subtitle: { color: palette.muted, fontSize: 14 },
+  title: { color: '#F4F8F5', fontSize: 26, fontWeight: '800' },
+  subtitle: { color: '#91A098', fontSize: 14 },
   bmiCard: { gap: 14, padding: 22 },
   bmiTop: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  bmiLabel: { color: palette.muted, fontSize: 13, fontWeight: '700' },
+  bmiLabel: { color: '#91A098', fontSize: 13, fontWeight: '700' },
   bmiValue: { fontSize: 42, lineHeight: 48, fontWeight: '900' },
-  bmiCategory: { color: palette.ink, fontSize: 16, fontWeight: '700' },
+  bmiCategory: { color: '#F4F8F5', fontSize: 16, fontWeight: '700' },
   scale: { flexDirection: 'row', height: 10, borderRadius: 5, overflow: 'visible', gap: 2, marginTop: 6 },
   segment: { height: 10, borderRadius: 5 },
-  marker: { position: 'absolute', top: -5, width: 6, height: 20, borderRadius: 3, backgroundColor: palette.ink, marginLeft: -3 },
+  marker: { position: 'absolute', top: -5, width: 6, height: 20, borderRadius: 3, backgroundColor: '#F4F8F5', marginLeft: -3 },
   form: { gap: 16, padding: 22 },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   inputGroup: { flex: 1, gap: 6 },
-  inputLabel: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  input: { height: 50, borderRadius: 16, backgroundColor: '#F2F4EE', color: palette.ink, paddingHorizontal: 16, fontSize: 18, fontWeight: '700' },
+  inputLabel: { color: '#F4F8F5', fontSize: 13, fontWeight: '700' },
+  input: { height: 50, borderRadius: 16, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#141A17', color: '#F4F8F5', paddingHorizontal: 16, fontSize: 18, fontWeight: '700' },
   saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52, borderRadius: 18, backgroundColor: palette.neon },
   saveText: { color: palette.deepGreen, fontSize: 15, fontWeight: '800' },
   disabled: { opacity: 0.5 },
-  helper: { color: palette.muted, fontSize: 12 },
+  helper: { color: '#91A098', fontSize: 12 },
 });

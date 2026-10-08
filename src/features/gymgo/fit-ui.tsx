@@ -2,10 +2,13 @@ import { MaterialIcons } from '@expo/vector-icons';
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useDarkUi } from './ui';
+
 type IconName = keyof typeof MaterialIcons.glyphMap;
 
 export function FloatingCard({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
-  return <View style={[styles.card, style]}>{children}</View>;
+  const dark = useDarkUi();
+  return <View style={[styles.card, dark && styles.darkCard, style]}>{children}</View>;
 }
 
 export function IconBadge({ name, color, size = 44 }: { name: IconName; color: string; size?: number }) {
@@ -23,12 +26,13 @@ export function MetricCard({ icon, color, label, value, hint }: {
   value: string | number;
   hint?: string;
 }) {
+  const dark = useDarkUi();
   return (
     <FloatingCard style={styles.metric}>
       <IconBadge name={icon} color={color} />
       <Text style={[styles.metricValue, { color }]}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
-      {hint ? <Text style={styles.metricHint}>{hint}</Text> : null}
+      <Text style={[styles.metricLabel, dark && styles.darkMetricLabel]}>{label}</Text>
+      {hint ? <Text style={[styles.metricHint, dark && styles.darkMetricHint]}>{hint}</Text> : null}
     </FloatingCard>
   );
 }
@@ -44,9 +48,12 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 4,
   },
+  darkCard: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
   badge: { alignItems: 'center', justifyContent: 'center' },
   metric: { flex: 1, gap: 6, minWidth: 140 },
   metricValue: { fontSize: 28, lineHeight: 32, fontWeight: '800', marginTop: 6 },
   metricLabel: { color: '#1C2A25', fontSize: 13, fontWeight: '700' },
   metricHint: { color: '#747D75', fontSize: 11 },
+  darkMetricLabel: { color: '#F4F8F5' },
+  darkMetricHint: { color: '#91A098' },
 });

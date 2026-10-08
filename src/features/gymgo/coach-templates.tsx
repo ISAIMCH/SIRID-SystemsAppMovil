@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import type { DirectoryClient } from './directory-types';
@@ -21,6 +21,9 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [clientId, setClientId] = useState('');
   const [isBusy, setIsBusy] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const visibleTemplates = templates.filter((template) => template.title.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
 
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
@@ -75,6 +78,17 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
   return (
     <View style={styles.wrapper}>
       <SectionTitle>Mis plantillas</SectionTitle>
+      <View style={styles.searchBox}>
+        <MaterialIcons name="search" size={19} color={palette.muted} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Buscar plantilla por nombre"
+          placeholderTextColor={palette.muted}
+          style={styles.searchInput}
+          autoCorrect={false}
+        />
+      </View>
       {isLoading ? <ActivityIndicator color={palette.green} /> : null}
       {error ? <Notice error>{error}</Notice> : null}
       {success ? <Notice>{success}</Notice> : null}
@@ -82,7 +96,8 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
         <Notice>Aún no tienes plantillas. Crea una base y asígnala a tus clientes como copia independiente.</Notice>
       ) : null}
 
-      {templates.map((template) => (
+      {!isLoading && !error && visibleTemplates.length === 0 ? <Notice>No hay plantillas que coincidan.</Notice> : null}
+      {visibleTemplates.map((template) => (
         <FloatingCard key={template._id} style={styles.card}>
           <View style={styles.top}>
             <IconBadge name="content-copy" color={palette.violet} />
@@ -139,4 +154,6 @@ const styles = StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   actionText: { fontSize: 13, fontWeight: '800' },
   assign: { gap: 12, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
+  searchBox: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#141A17', paddingHorizontal: 12 },
+  searchInput: { flex: 1, color: '#F4F8F5', fontSize: 14 },
 });

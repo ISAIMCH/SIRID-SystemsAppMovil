@@ -108,7 +108,7 @@ function ClientMembership() {
   }
 
   return (
-    <Page>
+    <Page dark>
       <AppHeader title="Pago y membresía" detail="Consulta tu plan y el estado de tus pagos." />
 
       {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
@@ -150,11 +150,11 @@ function ClientMembership() {
           <SectionTitle>Realizar un pago</SectionTitle>
           {pendingPayment ? (
             <Surface style={styles.pendingCard}>
-              <Text style={styles.pendingTitle}>Solicitud pendiente</Text>
-              <Text style={styles.pendingBody}>Paga en recepción y dicta este PIN al encargado:</Text>
+              <Text style={styles.clientPendingTitle}>Solicitud pendiente</Text>
+              <Text style={styles.clientPendingBody}>Paga en recepción y dicta este PIN al encargado:</Text>
               <Text selectable style={styles.pin}>{pendingPayment.validationPin ?? '-----'}</Text>
-              <Text style={styles.pendingBody}>Referencia: {pendingPayment.reference}</Text>
-              <Text style={styles.paymentAmount}>{formatAmount(pendingPayment.amount, pendingPayment.currency)}</Text>
+              <Text style={styles.clientPendingBody}>Referencia: {pendingPayment.reference}</Text>
+              <Text style={styles.clientPaymentAmount}>{formatAmount(pendingPayment.amount, pendingPayment.currency)}</Text>
             </Surface>
           ) : (
             <View style={styles.paymentAction}>
@@ -174,11 +174,11 @@ function ClientMembership() {
           {payments.map((payment) => (
             <Surface key={payment.id} style={styles.historyRow}>
               <View style={styles.historyInfo}>
-                <Text style={styles.historyName}>{payment.planName}</Text>
-                <Text style={styles.historyMeta}>{formatDate(payment.createdAt)} · {payment.reference}</Text>
+                <Text style={styles.clientHistoryName}>{payment.planName}</Text>
+                <Text style={styles.clientHistoryMeta}>{formatDate(payment.createdAt)} · {payment.reference}</Text>
               </View>
               <View style={styles.historyAmount}>
-                <Text style={styles.paymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
+                <Text style={styles.clientPaymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
                 <Text style={[styles.historyStatus, payment.status === 'paid' && styles.historyPaid]}>
                   {paymentStatusLabels[payment.status]}
                 </Text>
@@ -194,7 +194,7 @@ function ClientMembership() {
 const styles = StyleSheet.create({
   loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   feedback: { gap: 10 },
-  retry: { color: palette.green, fontSize: 14, fontWeight: '800', paddingVertical: 6 },
+  retry: { color: '#9BFF63', fontSize: 14, fontWeight: '800', paddingVertical: 6 },
   planCard: { gap: 12, backgroundColor: '#0F2A24', borderColor: '#0F2A24', borderRadius: 24, padding: 22, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 5 },
   planEyebrow: { color: palette.neon, fontSize: 10, fontWeight: '800' },
   planTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
@@ -206,15 +206,20 @@ const styles = StyleSheet.create({
   dateItem: { gap: 4 },
   dateLabel: { color: '#C4D2C6', fontSize: 11 },
   dateValue: { color: palette.white, fontSize: 13, fontWeight: '700' },
-  pendingCard: { gap: 8, borderWidth: 0, borderRadius: 24, backgroundColor: '#FFF3E8', padding: 20 },
+  pendingCard: { gap: 8, borderWidth: 1, borderColor: '#27342E', borderRadius: 24, backgroundColor: '#111815', padding: 20 },
   pendingTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' },
   pendingBody: { color: palette.muted, fontSize: 13 },
   reference: { color: palette.green, fontSize: 22, fontWeight: '900' },
   pin: { color: palette.orange, fontSize: 44, fontWeight: '900', letterSpacing: 10 },
   referenceSmall: { color: palette.green, fontSize: 12, fontWeight: '800' },
   paymentAmount: { color: palette.ink, fontSize: 14, fontWeight: '800' },
+  clientPendingTitle: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
+  clientPendingBody: { color: '#91A098', fontSize: 13 },
+  clientPaymentAmount: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
+  clientHistoryName: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
+  clientHistoryMeta: { color: '#91A098', fontSize: 11 },
   paymentAction: { gap: 10 },
-  helper: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  helper: { color: '#91A098', fontSize: 12, lineHeight: 17 },
   historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 16, borderRadius: 24, borderWidth: 0, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.07, shadowRadius: 14, elevation: 3 },
   historyInfo: { flex: 1, gap: 4 },
   historyName: { color: palette.ink, fontSize: 14, fontWeight: '800' },

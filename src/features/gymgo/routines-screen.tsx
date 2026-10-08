@@ -48,7 +48,7 @@ function inputKey(block: RoutineBlock, setNumber: number, exercise: Exercise, in
 
 function isCardio(exercise: Exercise) {
   return exercise.metricType === 'cardio'
-    || (typeof exercise.equipmentId === 'object' && exercise.equipmentId.type === 'cardio');
+    || (typeof exercise.equipmentId === 'object' && exercise.equipmentId !== null && exercise.equipmentId.type === 'cardio');
 }
 
 function isSetComplete(block: RoutineBlock, setNumber: number, inputs: Record<string, MetricValues>) {
@@ -110,12 +110,15 @@ export default function RoutinesScreen() {
     return () => clearInterval(interval);
   }, [restTimer]);
 
+  useEffect(() => {
+    if (Object.keys(inputs).length > 0 && !startedAt.current) startedAt.current = Date.now();
+  }, [inputs]);
+
   const routine = routines.find((entry) => entry.status === 'active') ?? routines[0];
   const allBlocks = routine ? routineBlocks(routine) : [];
   const dayBlocks = allBlocks.filter((block) => block.day === selectedDay).sort((left, right) => left.order - right.order);
 
   function updateMetric(block: RoutineBlock, setNumber: number, exercise: Exercise, index: number, field: keyof MetricValues, value: string) {
-    startedAt.current ??= Date.now();
     const cleaned = value.replace(/[^0-9.,]/g, '').slice(0, 8);
     const key = inputKey(block, setNumber, exercise, index);
     setInputs((current) => ({ ...current, [key]: { ...(current[key] ?? emptyInput()), [field]: cleaned } }));
@@ -195,7 +198,7 @@ export default function RoutinesScreen() {
   }
 
   return (
-    <Page>
+    <Page dark={isClient || user?.role === 'Coach'}>
       <AppHeader title="Rutinas" detail={isClient ? 'Elige el día y registra cada ronda de tu entrenamiento.' : 'Rutinas asignadas a tus clientes.'} />
 
       {!isClient ? (
@@ -223,33 +226,33 @@ export default function RoutinesScreen() {
             <View style={styles.summaryTop}>
               <IconBadge name="assignment" color={palette.neon} />
               <View style={styles.flex}>
-                <Text style={styles.routineTitle}>{routine.title}</Text>
-                <Text style={styles.meta}>{levelNames[routine.level]} · {routine.daysPerWeek} días/semana · {routine.durationWeeks} semanas</Text>
+                  <Text style={[styles.routineTitle, isClient && styles.darkPrimary]}>{routine.title}</Text>
+                  <Text style={[styles.meta, isClient && styles.darkMuted]}>{levelNames[routine.level]} · {routine.daysPerWeek} días/semana · {routine.durationWeeks} semanas</Text>
               </View>
             </View>
           </FloatingCard>
 
           {isClient ? (
             <>
-              <View style={styles.dayTabs}>
+              <View style={[styles.dayTabs, styles.dayTabsDark]}>
                 {dayTabs.map((day) => {
                   const selected = selectedDay === day.value;
                   const count = allBlocks.filter((block) => block.day === day.value).length;
                   return (
-                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setSelectedDay(day.value); setRestTimer(null); setLogMessage(null); }} style={[styles.dayTab, selected && styles.dayTabSelected]}>
-                      <Text style={[styles.dayTabText, selected && styles.dayTabTextSelected]}>{day.label}</Text>
+                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setSelectedDay(day.value); setRestTimer(null); setLogMessage(null); }} style={[styles.dayTab, styles.dayTabDark, selected && styles.dayTabSelectedDark]}>
+                      <Text style={[styles.dayTabText, styles.dayTabTextDark, selected && styles.dayTabTextSelectedDark]}>{day.label}</Text>
                       <View style={[styles.dayDot, count > 0 && (selected ? styles.dayDotSelected : styles.dayDotActive)]} />
                     </Pressable>
                   );
                 })}
               </View>
-              <Text style={styles.selectedDayTitle}>{dayNames[selectedDay]}</Text>
+              <Text style={styles.selectedDayTitleDark}>{dayNames[selectedDay]}</Text>
 
               {!dayBlocks.length ? (
-                <FloatingCard style={styles.restCard}>
+                <FloatingCard style={[styles.restCard, styles.darkBlockCard]}>
                   <IconBadge name="self-improvement" color={palette.cyan} size={56} />
-                  <Text style={styles.restTitle}>Día de descanso</Text>
-                  <Text style={styles.restCopy}>No hay bloques programados para hoy. Recupérate y vuelve con energía.</Text>
+                  <Text style={styles.darkHeading}>Día de descanso</Text>
+                  <Text style={styles.darkBody}>No hay bloques programados para hoy. Recupérate y vuelve con energía.</Text>
                 </FloatingCard>
               ) : (
                 <>
@@ -258,72 +261,85 @@ export default function RoutinesScreen() {
                     const done = completedSets[blockId] ?? [];
                     const typeLabel = block.blockType === 'single' ? 'Individual' : block.blockType === 'superset' ? 'Superset' : 'Circuito';
                     return (
-                      <FloatingCard key={blockId} style={styles.blockCard}>
+                      <FloatingCard key={blockId} style={[styles.blockCard, styles.darkBlockCard]}>
                         <View style={styles.blockHeader}>
                           <IconBadge name={block.blockType === 'single' ? 'fitness-center' : block.blockType === 'superset' ? 'sync-alt' : 'autorenew'} color={block.blockType === 'single' ? palette.neon : palette.violet} />
                           <View style={styles.flex}>
-                            <Text style={styles.blockTitle}>Bloque {blockIndex + 1} · {typeLabel}</Text>
-                            <Text style={styles.meta}>{block.sets} rondas · {block.restSeconds}s descanso entre rondas</Text>
+                            <Text style={styles.darkHeading}>Bloque {blockIndex + 1} · {typeLabel}</Text>
+                            <Text style={styles.darkMuted}>{restTimer?.blockId === blockId ? `Descanso · ${restTimer.remaining}s` : `${block.sets} rondas · ${block.restSeconds}s descanso`}</Text>
                           </View>
                           <View style={styles.progressPill}><Text style={styles.progressText}>{done.length}/{block.sets}</Text></View>
                         </View>
 
-                        {block.exercises.map((exercise, exerciseIndex) => {
+                        <View style={styles.exerciseList}>
+                          {block.exercises.map((exercise, exerciseIndex) => {
                           const cardio = isCardio(exercise);
-                          const equipment = exercise.equipment ?? (typeof exercise.equipmentId === 'object' ? exercise.equipmentId.name : exercise.bodyweight ? 'Peso corporal / libre' : 'Equipo');
+                          const equipment = exercise.equipment ?? (typeof exercise.equipmentId === 'object' && exercise.equipmentId !== null ? exercise.equipmentId.name : exercise.bodyweight ? 'Peso corporal / libre' : 'Equipo');
                           return (
-                            <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.exercisePanel}>
-                              <View style={styles.exerciseHeading}>
-                                <Text style={styles.exerciseNumber}>{String.fromCharCode(65 + exerciseIndex)}</Text>
-                                <View style={styles.flex}>
-                                  <View style={styles.exerciseNameRow}>
-                                    <Text style={styles.exerciseName}>{exercise.name}</Text>
-                                    {exercise.gifUrl ? (
-                                      <Pressable accessibilityRole="button" accessibilityLabel={`Ver animación de ${exercise.name}`} onPress={() => setActiveGif({ name: exercise.name, url: exercise.gifUrl as string })}>
-                                        <MaterialIcons name="play-circle-filled" size={23} color={palette.cyan} />
-                                      </Pressable>
-                                    ) : null}
-                                  </View>
-                                  <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {equipment}</Text>
-                                  {cardio ? <Text style={styles.targetText}>{[exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ') || 'Meta de cardio'}</Text> : <Text style={styles.targetText}>{exercise.reps}{exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}</Text>}
+                            <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.exerciseSummary}>
+                              <Text style={styles.exerciseNumberDark}>{String.fromCharCode(65 + exerciseIndex)}</Text>
+                              <View style={styles.flex}>
+                                <View style={styles.exerciseNameRow}>
+                                  <Text style={styles.exerciseNameDark}>{exercise.name}</Text>
+                                  {exercise.gifUrl ? (
+                                    <Pressable accessibilityRole="button" accessibilityLabel={`Ver animación de ${exercise.name}`} onPress={() => setActiveGif({ name: exercise.name, url: exercise.gifUrl as string })}>
+                                      <MaterialIcons name="play-circle-filled" size={22} color="#55D6D0" />
+                                    </Pressable>
+                                  ) : null}
                                 </View>
+                                <Text style={styles.darkMuted}>{exercise.muscleGroup} · {equipment}</Text>
+                                <Text style={styles.darkAccent}>{cardio ? [exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ') || 'Cardio' : `${exercise.reps ?? ''}${exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}`}</Text>
                               </View>
-                              {Array.from({ length: block.sets }, (_, index) => {
-                                const setNumber = index + 1;
-                                const values = inputs[inputKey(block, setNumber, exercise, exerciseIndex)] ?? emptyInput();
-                                const isDone = done.includes(setNumber);
-                                return (
-                                  <View key={setNumber} style={styles.setRow}>
-                                    <Text style={styles.setLabel}>Ronda {setNumber}</Text>
-                                    {cardio ? (
-                                      <>
-                                        <MetricInput label="min" keyboard="number-pad" value={values.durationMinutes} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'durationMinutes', value)} disabled={isDone} />
-                                        <MetricInput label="km" keyboard="decimal-pad" value={values.distanceKm} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'distanceKm', value)} disabled={isDone} />
-                                        <MetricInput label="nivel" keyboard="number-pad" value={values.level} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'level', value)} disabled={isDone} />
-                                      </>
-                                    ) : (
-                                      <>
-                                        <MetricInput label="reps" keyboard="number-pad" value={values.reps} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'reps', value)} disabled={isDone} />
-                                        <MetricInput label="kg" keyboard="decimal-pad" value={values.weightKg} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'weightKg', value)} disabled={isDone} />
-                                      </>
-                                    )}
-                                  </View>
-                                );
-                              })}
                             </View>
                           );
                         })}
+                        </View>
 
                         {Array.from({ length: block.sets }, (_, index) => index + 1).map((setNumber) => {
                           const isDone = done.includes(setNumber);
                           const canComplete = isSetComplete(block, setNumber, inputs);
                           const timerActive = restTimer?.blockId === blockId;
                           const nextSetNumber = Array.from({ length: block.sets }, (_, setIndex) => setIndex + 1).find((number) => !done.includes(number));
+                          const waitingOnRest = timerActive && setNumber === nextSetNumber;
                           return (
-                            <Pressable key={`complete-${setNumber}`} accessibilityRole="button" disabled={!canComplete || isDone || savingDay || (timerActive && setNumber === nextSetNumber)} onPress={() => finishBlockSet(block, setNumber)} style={[styles.completeSetButton, (!canComplete || isDone || (timerActive && setNumber === nextSetNumber)) && styles.completeDisabled]}>
-                              <MaterialIcons name={isDone ? 'check-circle' : 'check'} size={18} color={isDone ? palette.green : palette.deepGreen} />
-                              <Text style={[styles.completeText, isDone && styles.completeTextDone]}>{isDone ? `Ronda ${setNumber} completada` : timerActive && setNumber === nextSetNumber ? `Descanso ${restTimer.remaining}s` : `Completar ronda ${setNumber}`}</Text>
-                            </Pressable>
+                            <View key={`set-${setNumber}`} style={styles.compactSetRow}>
+                              <View style={[styles.setNumberBadge, isDone && styles.setNumberBadgeDone]}>
+                                <Text style={[styles.setNumberText, isDone && styles.setNumberTextDone]}>{setNumber}</Text>
+                              </View>
+                              <View style={styles.compactSetMetrics}>
+                                {block.exercises.map((exercise, exerciseIndex) => {
+                                  const cardio = isCardio(exercise);
+                                  const values = inputs[inputKey(block, setNumber, exercise, exerciseIndex)] ?? emptyInput();
+                                  const disabled = isDone || savingDay;
+                                  return (
+                                    <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.compactExerciseMetrics}>
+                                      {block.exercises.length > 1 ? <Text style={styles.compactExerciseTag}>{String.fromCharCode(65 + exerciseIndex)}</Text> : null}
+                                      {cardio ? (
+                                        <>
+                                          <MetricInput label="min" keyboard="number-pad" value={values.durationMinutes} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'durationMinutes', value)} disabled={disabled} />
+                                          <MetricInput label="km" keyboard="decimal-pad" value={values.distanceKm} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'distanceKm', value)} disabled={disabled} />
+                                          <MetricInput label="lvl" keyboard="number-pad" value={values.level} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'level', value)} disabled={disabled} />
+                                        </>
+                                      ) : (
+                                        <>
+                                          <MetricInput label="reps" keyboard="number-pad" value={values.reps} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'reps', value)} disabled={disabled} />
+                                          <MetricInput label="kg" keyboard="decimal-pad" value={values.weightKg} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'weightKg', value)} disabled={disabled} />
+                                        </>
+                                      )}
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                              <Pressable
+                                accessibilityRole="checkbox"
+                                accessibilityLabel={`Completar serie ${setNumber} del bloque ${blockIndex + 1}`}
+                                accessibilityState={{ checked: isDone, disabled: !canComplete || savingDay || waitingOnRest }}
+                                disabled={!canComplete || isDone || savingDay || waitingOnRest}
+                                onPress={() => finishBlockSet(block, setNumber)}
+                                style={[styles.roundCheck, isDone && styles.roundCheckDone, (!canComplete || waitingOnRest) && styles.roundCheckDisabled]}>
+                                {isDone ? <MaterialIcons name="check" size={19} color="#081009" /> : waitingOnRest ? <Text style={styles.restCountdown}>{restTimer?.remaining}</Text> : null}
+                              </Pressable>
+                            </View>
                           );
                         })}
                       </FloatingCard>
@@ -340,9 +356,9 @@ export default function RoutinesScreen() {
               <SectionTitle>Bloques de la rutina</SectionTitle>
               {allBlocks.map((block, index) => (
                 <FloatingCard key={block._id ?? block.order} style={styles.blockCard}>
-                  <Text style={styles.blockTitle}>{dayNames[block.day]} · {block.blockType} · {block.sets} series</Text>
-                  {block.exercises.map((exercise) => <Text key={exercise._id} style={styles.exerciseMeta}>{exercise.name} · {exercise.metricType === 'cardio' ? 'Cardio' : exercise.reps}</Text>)}
-                  <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}><Text style={styles.retry}>Editar rutina</Text></Pressable>
+                          <Text style={[styles.blockTitle, styles.darkPrimary]}>{dayNames[block.day]} · {block.blockType} · {block.sets} series</Text>
+                          {block.exercises.map((exercise) => <Text key={exercise._id} style={[styles.exerciseMeta, styles.darkMuted]}>{exercise.name} · {exercise.metricType === 'cardio' ? 'Cardio' : exercise.reps}</Text>)}
+                  <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ routineId: routine?._id ?? '' }))}><Text style={styles.retry}>Editar rutina</Text></Pressable>
                 </FloatingCard>
               ))}
             </>
@@ -426,19 +442,47 @@ const styles = StyleSheet.create({
   routineSummary: { gap: 12 },
   summaryTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   routineTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
+  darkPrimary: { color: '#F4F8F5' },
+  darkMuted: { color: '#91A098' },
   meta: { color: palette.muted, fontSize: 12 },
   dayTabs: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: '#E9ECE3', borderRadius: 20, padding: 5 },
+  dayTabsDark: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
   dayTab: { width: 42, minHeight: 54, alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 16 },
   dayTabSelected: { backgroundColor: palette.deepGreen },
   dayTabText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
   dayTabTextSelected: { color: palette.white },
+  dayTabDark: { backgroundColor: 'transparent' },
+  dayTabSelectedDark: { backgroundColor: '#9BFF63' },
+  dayTabTextDark: { color: '#91A098' },
+  dayTabTextSelectedDark: { color: '#081009' },
   dayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: 'transparent' },
   dayDotActive: { backgroundColor: palette.cyan },
   dayDotSelected: { backgroundColor: palette.neon },
   selectedDayTitle: { color: palette.ink, fontSize: 19, fontWeight: '800' },
+  selectedDayTitleDark: { color: '#F4F8F5', fontSize: 19, fontWeight: '800' },
   restCard: { alignItems: 'center', gap: 10, paddingVertical: 30 },
   restTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
   restCopy: { color: palette.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  darkBlockCard: { backgroundColor: '#111815', borderColor: '#27342E' },
+  darkHeading: { color: '#F4F8F5', fontSize: 16, fontWeight: '800' },
+  darkBody: { color: '#91A098', fontSize: 13, lineHeight: 19, textAlign: 'center' },
+  darkAccent: { color: '#9BFF63', fontSize: 12, fontWeight: '700' },
+  exerciseList: { gap: 9, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
+  exerciseSummary: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  exerciseNumberDark: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#9BFF631C', color: '#9BFF63', fontSize: 12, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
+  exerciseNameDark: { flex: 1, color: '#F4F8F5', fontSize: 13, fontWeight: '800' },
+  compactSetRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 7 },
+  setNumberBadge: { width: 27, height: 27, borderRadius: 14, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#3A4A41', alignItems: 'center', justifyContent: 'center' },
+  setNumberBadgeDone: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
+  setNumberText: { color: '#DCE8E0', fontSize: 12, fontWeight: '900' },
+  setNumberTextDone: { color: '#081009' },
+  compactSetMetrics: { flex: 1, gap: 5 },
+  compactExerciseMetrics: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  compactExerciseTag: { width: 14, color: '#91A098', fontSize: 10, fontWeight: '800' },
+  roundCheck: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#60716A', alignItems: 'center', justifyContent: 'center' },
+  roundCheckDone: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
+  roundCheckDisabled: { opacity: 0.45 },
+  restCountdown: { color: '#9BFF63', fontSize: 10, fontWeight: '900' },
   blockCard: { gap: 12, padding: 16 },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   blockTitle: { color: palette.ink, fontSize: 16, fontWeight: '800', textTransform: 'capitalize' },
@@ -454,9 +498,9 @@ const styles = StyleSheet.create({
   setRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 38 },
   setLabel: { width: 48, color: palette.muted, fontSize: 11, fontWeight: '700' },
   metricGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metricInput: { width: 54, height: 38, borderRadius: 12, backgroundColor: '#F2F4EE', color: palette.ink, textAlign: 'center', fontSize: 14, fontWeight: '700' },
-  inputDone: { backgroundColor: '#E6EED7' },
-  metricUnit: { color: palette.muted, fontSize: 10, fontWeight: '700' },
+  metricInput: { width: 40, height: 30, borderBottomWidth: 1, borderBottomColor: '#52635A', backgroundColor: 'transparent', color: '#F4F8F5', textAlign: 'center', fontSize: 12, fontWeight: '700', paddingHorizontal: 1, paddingVertical: 2 },
+  inputDone: { borderBottomColor: '#9BFF63', color: '#9BFF63' },
+  metricUnit: { color: '#91A098', fontSize: 9, fontWeight: '700' },
   completeSetButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 42, borderRadius: 15, backgroundColor: palette.neon },
   completeDisabled: { backgroundColor: '#E9ECE3' },
   completeText: { color: palette.deepGreen, fontSize: 13, fontWeight: '800' },

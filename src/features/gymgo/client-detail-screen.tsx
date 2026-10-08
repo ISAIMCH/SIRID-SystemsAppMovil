@@ -59,7 +59,7 @@ export default function ClientDetailScreen() {
   const isCoach = person?.role === 'Coach';
 
   return (
-    <Page>
+    <Page dark={user?.role === 'Coach'}>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver al directorio" onPress={() => router.back()}>
           <IconBadge name="arrow-back" color={palette.ink} />

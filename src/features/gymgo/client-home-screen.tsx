@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
+import ClientAccessModal from './client-access-modal';
 
 type Period = 'day' | 'week' | 'month';
 type Analytics = {
@@ -71,6 +72,7 @@ export default function ClientHomeScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
+  const [showAccess, setShowAccess] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return undefined;
@@ -243,12 +245,13 @@ export default function ClientHomeScreen() {
 
         <Text style={styles.sectionTitle}>ACCESOS RÁPIDOS</Text>
         <View style={styles.shortcuts}>
-          <QuickLink icon="qr-code-2" label="Acceso QR" onPress={() => router.push('/(main)/access')} />
+          <QuickLink icon="qr-code-2" label="Acceso QR" onPress={() => setShowAccess(true)} />
           <QuickLink icon="fitness-center" label="Rutinas" onPress={() => router.push('/(main)/routines')} />
           <QuickLink icon="storefront" label="Tienda" onPress={() => router.push('/(main)/store')} />
           <QuickLink icon="monitor-weight" label="Perfil físico" onPress={() => router.push('/(main)/profile')} />
         </View>
       </ScrollView>
+      <ClientAccessModal visible={showAccess} onClose={() => setShowAccess(false)} />
     </SafeAreaView>
   );
 }

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import QRCode from 'react-native-qrcode-svg';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 import { api, getApiErrorMessage } from './api';
-import { ActionButton, AppHeader, Notice, Page, Surface } from './ui';
 import { palette } from './theme';
+import { ActionButton, AppHeader, Notice, Page, Surface } from './ui';
 
 type QrResponse = { qrToken: string; expiresAt: string };
 
@@ -49,7 +49,7 @@ export default function AccessScreen() {
   const remainingSeconds = qr ? Math.max(0, Math.ceil((new Date(qr.expiresAt).getTime() - now) / 1000)) : 0;
 
   return (
-    <Page>
+    <Page dark>
       <AppHeader title="Acceso al gimnasio" detail="Presenta el código al lector de la entrada." />
       <View style={styles.statusRow}>
         <View style={[styles.statusDot, remainingSeconds > 0 && styles.statusReady]} />

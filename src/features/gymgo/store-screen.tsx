@@ -58,7 +58,7 @@ export default function StoreScreen() {
   }
 
   return (
-    <Page>
+    <Page dark>
       <View style={styles.header}>
         <Text style={styles.title}>Tienda</Text>
         <Text style={styles.subtitle}>Marca lo que te interesa y solicítalo en recepción.</Text>
@@ -135,29 +135,29 @@ export default function StoreScreen() {
 
 const styles = StyleSheet.create({
   header: { gap: 4 },
-  title: { color: palette.ink, fontSize: 28, fontWeight: '800' },
-  subtitle: { color: palette.muted, fontSize: 14 },
+  title: { color: '#F4F8F5', fontSize: 28, fontWeight: '800' },
+  subtitle: { color: '#91A098', fontSize: 14 },
   banners: { gap: 12 },
-  banner: { aspectRatio: 16 / 9, borderRadius: 24, overflow: 'hidden', backgroundColor: '#E9ECE3' },
+  banner: { aspectRatio: 16 / 9, borderRadius: 24, overflow: 'hidden', backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
   bannerImage: { width: '100%', height: '100%' },
   bannerLabel: { position: 'absolute', left: 12, bottom: 12, backgroundColor: '#0F2A24CC', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
   bannerText: { color: palette.white, fontSize: 13, fontWeight: '800' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: palette.white },
-  chipSelected: { backgroundColor: palette.deepGreen },
-  chipText: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  chipTextSelected: { color: palette.white },
+  chip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E' },
+  chipSelected: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
+  chipText: { color: '#DCE8E0', fontSize: 13, fontWeight: '700' },
+  chipTextSelected: { color: '#081009' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   cell: { width: '47.5%', flexGrow: 1 },
   card: { gap: 6, padding: 12 },
   image: { height: 110, width: '100%', borderRadius: 18, marginBottom: 6 },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
-  category: { color: palette.muted, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
-  name: { color: palette.ink, fontSize: 14, fontWeight: '700', minHeight: 36 },
-  price: { color: palette.green, fontSize: 18, fontWeight: '800' },
-  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 40, borderRadius: 14, backgroundColor: palette.deepGreen, marginTop: 4 },
-  buttonActive: { backgroundColor: palette.neon },
-  buttonDisabled: { backgroundColor: palette.muted, opacity: 0.6 },
-  buttonText: { color: palette.white, fontSize: 13, fontWeight: '800' },
-  buttonTextActive: { color: palette.deepGreen },
+  category: { color: '#91A098', fontSize: 11, fontWeight: '700', textTransform: 'uppercase' },
+  name: { color: '#F4F8F5', fontSize: 14, fontWeight: '700', minHeight: 36 },
+  price: { color: '#9BFF63', fontSize: 18, fontWeight: '800' },
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 40, borderRadius: 14, backgroundColor: '#27342E', marginTop: 4 },
+  buttonActive: { backgroundColor: '#9BFF63' },
+  buttonDisabled: { backgroundColor: '#27342E', opacity: 0.6 },
+  buttonText: { color: '#F4F8F5', fontSize: 13, fontWeight: '800' },
+  buttonTextActive: { color: '#081009' },
 });

@@ -149,19 +149,13 @@ function ProgressExercise({ exercise, actual, index }: { exercise: Exercise; act
 
   return (
     <View style={styles.exercise}>
-      <Text style={styles.exerciseName}>{String.fromCharCode(65 + index)}. {exercise.name}</Text>
-      <View style={styles.compare}>
-        <View style={styles.column}>
-          <Text style={styles.columnLabel}>Asignado</Text>
-          <Text style={styles.columnValue}>{assigned || 'Sin objetivo'}</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.column}>
-          <Text style={styles.columnLabel}>Último registro</Text>
-          <Text style={styles.columnValue}>{actualLabel || 'Sin registros'}</Text>
-          {actual ? <Text style={styles.columnMeta}>{new Date(actual.completedAt).toLocaleDateString('es-MX')}</Text> : null}
-        </View>
+      <View style={styles.compactLine}>
+        <Text style={styles.exerciseLetter}>{String.fromCharCode(65 + index)}</Text>
+        <Text numberOfLines={1} style={styles.exerciseName}>{exercise.name}</Text>
+        <Text numberOfLines={1} style={styles.assignedTarget}>{assigned || 'Sin objetivo'}</Text>
+        <Text numberOfLines={1} style={styles.actualTarget}>{actualLabel || 'Sin registro'}</Text>
       </View>
+      <Text style={styles.compactLegend}>Objetivo <Text style={styles.legendDot}>·</Text> Último registro{actual ? ` · ${new Date(actual.completedAt).toLocaleDateString('es-MX')}` : ''}</Text>
     </View>
   );
 }
@@ -175,12 +169,12 @@ const styles = StyleSheet.create({
   blockCard: { gap: 12 },
   blockTitle: { color: palette.ink, fontSize: 14, fontWeight: '800', textTransform: 'capitalize' },
   meta: { color: palette.muted, fontSize: 12 },
-  exercise: { gap: 7, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 10 },
-  exerciseName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  compare: { flexDirection: 'row', gap: 12, backgroundColor: '#F2F4EE', borderRadius: 15, padding: 11 },
-  column: { flex: 1, gap: 3 },
-  divider: { width: 1, backgroundColor: palette.line },
-  columnLabel: { color: palette.muted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
-  columnValue: { color: palette.ink, fontSize: 13, fontWeight: '800' },
-  columnMeta: { color: palette.muted, fontSize: 11 },
+  exercise: { gap: 4, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 9 },
+  compactLine: { minHeight: 31, flexDirection: 'row', alignItems: 'center', gap: 7 },
+  exerciseLetter: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#9BFF631C', color: '#9BFF63', fontSize: 11, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
+  exerciseName: { flex: 1, color: '#F4F8F5', fontSize: 12, fontWeight: '800' },
+  assignedTarget: { maxWidth: '25%', color: '#55D6D0', fontSize: 11, fontWeight: '700' },
+  actualTarget: { maxWidth: '25%', color: '#9BFF63', fontSize: 11, fontWeight: '700', textAlign: 'right' },
+  compactLegend: { color: '#91A098', fontSize: 9, textAlign: 'right' },
+  legendDot: { color: '#52635A' },
 });

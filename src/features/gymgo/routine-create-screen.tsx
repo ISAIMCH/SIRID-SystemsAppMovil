@@ -332,7 +332,7 @@ function RoutineForm() {
   const blockIcon = (type: BlockType) => blockTypes.find((item) => item.value === type)?.icon ?? 'fitness-center';
 
   return (
-    <Page>
+    <Page dark>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()}><IconBadge name="arrow-back" color={palette.ink} /></Pressable>
         <View style={styles.flex}>
@@ -358,7 +358,7 @@ function RoutineForm() {
           <View style={styles.chips}>{weekDays.map((day) => <Choice key={day.value} label={day.label} selected={selectedDays.includes(day.value)} onPress={() => toggleDay(day.value)} />)}</View>
         </View>
         {!isTemplate && !isEditing ? (
-          <SelectField label="Asignar a cliente" placeholder="Selecciona un cliente" emptyText="No tienes clientes asignados." options={clients.map((client) => ({ value: client.id, label: `${client.name} - ${client.email}` }))} value={assignedTo} onChange={setAssignedTo} />
+          <SelectField filterable label="Asignar a cliente" placeholder="Selecciona un cliente" emptyText="No tienes clientes asignados." options={clients.map((client) => ({ value: client.id, label: `${client.name} - ${client.email}` }))} value={assignedTo} onChange={setAssignedTo} />
         ) : null}
       </FloatingCard>
 

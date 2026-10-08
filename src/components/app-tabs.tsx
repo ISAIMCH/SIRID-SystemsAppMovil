@@ -18,7 +18,7 @@ type TabName =
   | 'admin-store';
 
 const ROLE_TABS: Record<GymGoRole, TabName[]> = {
-  Cliente: ['index', 'access', 'routines', 'store', 'billing'],
+  Cliente: ['index', 'routines', 'billing'],
   Coach: ['index', 'routines', 'directory'],
   Admin: ['index', 'scanner', 'inventory', 'maintenance', 'billing', 'admin-store', 'directory', 'staff'],
 };
@@ -45,28 +45,35 @@ const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: '
 
 export default function AppTabs() {
   const { user } = useAuth();
+  const isClient = user?.role === 'Cliente';
   const allowed = user ? ROLE_TABS[user.role] : [];
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.green,
-        tabBarInactiveTintColor: palette.muted,
+        tabBarActiveTintColor: isClient ? '#9BFF63' : palette.green,
+        tabBarInactiveTintColor: isClient ? '#84938A' : palette.muted,
         tabBarLabelStyle: { fontSize: 10 },
         tabBarStyle: {
-          backgroundColor: palette.surface,
-          borderTopColor: palette.line,
+          backgroundColor: isClient ? '#070B09' : palette.surface,
+          borderTopColor: isClient ? '#27342E' : palette.line,
           height: 62,
           paddingTop: 6,
           paddingBottom: 6,
         },
-        sceneStyle: { backgroundColor: palette.paper },
+        sceneStyle: { backgroundColor: isClient ? '#070B09' : palette.paper },
       }}>
       {TAB_NAMES.map((name) => {
         const { title, icon } = TAB_META[name];
         const visible = allowed.includes(name);
-        const label = name === 'billing' && user?.role === 'Admin' ? 'Pagos' : title;
+        const label = name === 'directory' && user?.role === 'Coach'
+          ? 'Clientes'
+          : name === 'billing' && isClient
+            ? 'Perfil'
+            : name === 'billing' && user?.role === 'Admin'
+              ? 'Pagos'
+              : title;
 
         return (
           <Tabs.Screen
