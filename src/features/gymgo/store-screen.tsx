@@ -1,14 +1,17 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
+import CartModal from './cart-modal';
 import { FloatingCard } from './fit-ui';
 import { palette } from './theme';
 import { Notice, Page } from './ui';
+import { useCartStore } from '../../store/cartStore';
 
 type Category = 'Todos' | 'Suplementos' | 'Ropa' | 'Accesorios';
-type Product = { _id: string; name: string; category: Exclude<Category, 'Todos'>; price: number; image: string; stock: number };
+type Product = { _id: string; name: string; category: Exclude<Category, 'Todos'>; price: number; image: string; imageUrl?: string; stock: number };
 type Promotion = { _id: string; title: string; image: string };
 
 const categories: Category[] = ['Todos', 'Suplementos', 'Ropa', 'Accesorios'];
@@ -28,7 +31,11 @@ export default function StoreScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [category, setCategory] = useState<Category>('Todos');
-  const [interested, setInterested] = useState<string[]>([]);
+  const [isCartVisible, setIsCartVisible] = useState(false);
+  const addItem = useCartStore((state) => state.addItem);
+  const cartItems = useCartStore((state) => state.items);
+  const totalItems = useCartStore((state) => state.getTotalItems());
+  const [cartAnimation] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     let isCurrent = true;
@@ -50,11 +57,20 @@ export default function StoreScreen() {
     return () => { isCurrent = false; };
   }, []);
 
+  useEffect(() => {
+    if (totalItems > 0) {
+      Animated.spring(cartAnimation, { toValue: 1, friction: 6, tension: 70, useNativeDriver: true }).start();
+    } else {
+      Animated.timing(cartAnimation, { toValue: 0, duration: 160, useNativeDriver: true }).start();
+    }
+  }, [cartAnimation, totalItems]);
+
   const visible = category === 'Todos' ? products : products.filter((product) => product.category === category);
   const bannerWidth = Math.min(width, 760) - 44;
 
-  function toggleInterest(id: string) {
-    setInterested((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+  function addProductToCart(product: Product) {
+    addItem({ id: product._id, name: product.name, price: product.price, imageUrl: product.imageUrl ?? product.image });
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
   return (
@@ -91,14 +107,14 @@ export default function StoreScreen() {
         ))}
       </View>
 
-      {interested.length ? (
-        <Notice>{interested.length === 1 ? '1 producto' : `${interested.length} productos`} en tu lista. Menciónalos en recepción para completar tu compra.</Notice>
+      {cartItems.length ? (
+        <Notice>{cartItems.length === 1 ? '1 producto' : `${cartItems.length} productos`} en tu lista. Menciónalos en recepción para completar tu compra.</Notice>
       ) : null}
       {!isLoading && !error && visible.length === 0 ? <Notice>No hay productos en esta categoría por ahora.</Notice> : null}
 
       <View style={styles.grid}>
         {visible.map((product) => {
-          const isInterested = interested.includes(product._id);
+          const isInterested = cartItems.some((item) => item.id === product._id);
           const soldOut = product.stock === 0;
           const look = categoryStyle[product.category];
           return (
@@ -117,7 +133,7 @@ export default function StoreScreen() {
                 <Pressable
                   accessibilityRole="button"
                   disabled={soldOut}
-                  onPress={() => toggleInterest(product._id)}
+                  onPress={() => addProductToCart(product)}
                   style={[styles.button, isInterested && styles.buttonActive, soldOut && styles.buttonDisabled]}>
                   <MaterialIcons name={isInterested ? 'check' : 'favorite-border'} size={16} color={isInterested ? palette.deepGreen : palette.white} />
                   <Text style={[styles.buttonText, isInterested && styles.buttonTextActive]}>
@@ -129,6 +145,18 @@ export default function StoreScreen() {
           );
         })}
       </View>
+
+      {totalItems > 0 ? (
+        <Animated.View style={[styles.fabWrap, { opacity: cartAnimation, transform: [{ translateY: cartAnimation.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }, { scale: cartAnimation }] }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Abrir carrito, ${totalItems} artículos`} onPress={() => setIsCartVisible(true)} style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}>
+            <MaterialIcons name="shopping-bag" size={22} color="#081009" />
+            <Text style={styles.fabText}>Carrito</Text>
+            <View style={styles.fabBadge}><Text style={styles.fabBadgeText}>{totalItems}</Text></View>
+          </Pressable>
+        </Animated.View>
+      ) : null}
+
+      <CartModal visible={isCartVisible} onClose={() => setIsCartVisible(false)} />
     </Page>
   );
 }
@@ -160,4 +188,10 @@ const styles = StyleSheet.create({
   buttonDisabled: { backgroundColor: '#27342E', opacity: 0.6 },
   buttonText: { color: '#F4F8F5', fontSize: 13, fontWeight: '800' },
   buttonTextActive: { color: '#081009' },
+  fabWrap: { position: 'absolute', right: 22, bottom: 24, zIndex: 2 },
+  fab: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, borderRadius: 28, paddingHorizontal: 18, backgroundColor: '#9BFF63', shadowColor: '#9BFF63', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 8 },
+  fabPressed: { opacity: 0.82 },
+  fabText: { color: '#081009', fontSize: 14, fontWeight: '900' },
+  fabBadge: { alignItems: 'center', justifyContent: 'center', minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 5, backgroundColor: '#081009' },
+  fabBadgeText: { color: '#9BFF63', fontSize: 12, fontWeight: '900' },
 });
