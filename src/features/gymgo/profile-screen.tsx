@@ -34,7 +34,7 @@ export default function ProfileScreen() {
   const isValid = weightKg !== null && heightCm !== null && weightKg >= 20 && weightKg <= 400 && heightCm >= 80 && heightCm <= 260;
   const bmi = isValid ? weightKg / ((heightCm / 100) ** 2) : null;
   const info = bmi ? bmiInfo(bmi) : null;
-  const markerPosition = bmi ? Math.min(100, Math.max(0, ((bmi - 14) / (38 - 14)) * 100)) : 0;
+  const markerPosition = bmi ? Math.min(100, Math.max(0, ((bmi - 14) / 24) * 100)) : 0;
 
   async function save() {
     if (!isValid) return;
@@ -55,7 +55,11 @@ export default function ProfileScreen() {
   return (
     <Page dark>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
           <IconBadge name="arrow-back" color="#F4F8F5" />
         </Pressable>
         <View style={styles.headerText}>
@@ -87,47 +91,22 @@ export default function ProfileScreen() {
           <IconBadge name="fitness-center" color={palette.violet} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Peso (kg)</Text>
-            <TextInput
-              keyboardType="decimal-pad"
-              value={weight}
-              onChangeText={(value) => { setWeight(value); setSaved(false); }}
-              placeholder="70"
-              placeholderTextColor={palette.muted}
-              style={styles.input}
-            />
+            <TextInput keyboardType="decimal-pad" value={weight} onChangeText={(value) => { setWeight(value); setSaved(false); }} placeholder="70" placeholderTextColor={palette.muted} style={styles.input} />
           </View>
         </View>
         <View style={styles.inputRow}>
           <IconBadge name="height" color={palette.cyan} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Altura (cm)</Text>
-            <TextInput
-              keyboardType="decimal-pad"
-              value={height}
-              onChangeText={(value) => { setHeight(value); setSaved(false); }}
-              placeholder="170"
-              placeholderTextColor={palette.muted}
-              style={styles.input}
-            />
+            <TextInput keyboardType="decimal-pad" value={height} onChangeText={(value) => { setHeight(value); setSaved(false); }} placeholder="170" placeholderTextColor={palette.muted} style={styles.input} />
           </View>
         </View>
         {error ? <Notice error>{error}</Notice> : null}
         {saved ? <Notice>Datos guardados correctamente.</Notice> : null}
-        <Pressable
-          accessibilityRole="button"
-          disabled={!isValid || isSaving}
-          onPress={() => void save()}
-          style={[styles.saveButton, (!isValid || isSaving) && styles.disabled]}>
-          {isSaving ? <ActivityIndicator color={palette.deepGreen} /> : (
-            <>
-              <MaterialIcons name="check" size={20} color={palette.deepGreen} />
-              <Text style={styles.saveText}>Guardar datos</Text>
-            </>
-          )}
+        <Pressable accessibilityRole="button" disabled={!isValid || isSaving} onPress={() => void save()} style={[styles.saveButton, (!isValid || isSaving) && styles.disabled]}>
+          {isSaving ? <ActivityIndicator color={palette.deepGreen} /> : <><MaterialIcons name="check" size={20} color={palette.deepGreen} /><Text style={styles.saveText}>Guardar datos</Text></>}
         </Pressable>
-        {!isValid && (weight || height) ? (
-          <Text style={styles.helper}>Peso entre 20 y 400 kg, altura entre 80 y 260 cm.</Text>
-        ) : null}
+        {!isValid && (weight || height) ? <Text style={styles.helper}>Peso entre 20 y 400 kg, altura entre 80 y 260 cm.</Text> : null}
       </FloatingCard>
     </Page>
   );

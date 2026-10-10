@@ -61,7 +61,11 @@ export default function ClientDetailScreen() {
   return (
     <Page dark={user?.role === 'Coach'}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Volver al directorio" onPress={() => router.back()}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Volver al directorio"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
           <IconBadge name="arrow-back" color={palette.ink} />
         </Pressable>
         <View style={styles.flex}>
@@ -212,16 +216,16 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   gap: { gap: 10 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  title: { color: palette.ink, fontSize: 24, fontWeight: '800' },
-  subtitle: { color: palette.muted, fontSize: 13 },
+  title: { color: '#F4F8F5', fontSize: 24, fontWeight: '800' },
+  subtitle: { color: '#91A098', fontSize: 13 },
   loading: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
   details: { paddingVertical: 6 },
   detailRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12 },
   detailDivider: { borderBottomWidth: 1, borderBottomColor: palette.line },
-  detailLabel: { color: palette.muted, fontSize: 13 },
-  detailValue: { flex: 1, color: palette.ink, fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  detailLabel: { color: '#91A098', fontSize: 13 },
+  detailValue: { flex: 1, color: '#F4F8F5', fontSize: 13, fontWeight: '700', textAlign: 'right' },
   coachCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  coachName: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  coachEmail: { color: palette.muted, fontSize: 13 },
+  coachName: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
+  coachEmail: { color: '#91A098', fontSize: 13 },
   form: { gap: 16, padding: 20 },
 });

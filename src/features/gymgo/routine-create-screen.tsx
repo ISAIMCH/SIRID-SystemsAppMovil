@@ -334,7 +334,13 @@ function RoutineForm() {
   return (
     <Page dark>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()}><IconBadge name="arrow-back" color={palette.ink} /></Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
+          <IconBadge name="arrow-back" color={palette.ink} />
+        </Pressable>
         <View style={styles.flex}>
           <Text style={styles.title}>{heading}</Text>
           <Text style={styles.subtitle}>{isTemplate ? 'Una base reutilizable, independiente del cliente.' : 'Organiza ejercicios en bloques de trabajo.'}</Text>
@@ -483,31 +489,31 @@ function Choice({ label, selected, onPress }: { label: string; selected: boolean
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  title: { color: palette.ink, fontSize: 24, fontWeight: '800' },
-  subtitle: { color: palette.muted, fontSize: 13 },
+  title: { color: '#F2F4EE', fontSize: 24, fontWeight: '800' },
+  subtitle: { color: '#91A098', fontSize: 13 },
   loading: { minHeight: 60, alignItems: 'center', justifyContent: 'center' },
   section: { gap: 15, padding: 20 },
   group: { gap: 8 },
   row: { flexDirection: 'row', gap: 12 },
-  label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  helper: { color: palette.muted, fontSize: 12, lineHeight: 18 },
+  label: { color: '#F2F4EE', fontSize: 13, fontWeight: '700' },
+  helper: { color: '#91A098', fontSize: 12, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  typeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, backgroundColor: '#F2F4EE', paddingHorizontal: 13, paddingVertical: 9 },
-  typeChipActive: { backgroundColor: palette.deepGreen },
-  typeText: { color: palette.ink, fontSize: 12, fontWeight: '700' },
+  typeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 13, paddingVertical: 9 },
+  typeChipActive: { backgroundColor: '#18211D', borderColor: '#9BFF63' },
+  typeText: { color: '#DCE8E0', fontSize: 12, fontWeight: '700' },
   typeTextActive: { color: palette.white },
-  choice: { borderRadius: 20, backgroundColor: '#F2F4EE', paddingHorizontal: 14, paddingVertical: 9 },
-  choiceSelected: { backgroundColor: palette.deepGreen },
-  choiceText: { color: palette.ink, fontSize: 12, fontWeight: '700' },
+  choice: { borderRadius: 20, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 14, paddingVertical: 9 },
+  choiceSelected: { backgroundColor: '#18211D', borderColor: '#9BFF63' },
+  choiceText: { color: '#DCE8E0', fontSize: 12, fontWeight: '700' },
   choiceTextSelected: { color: palette.white },
-  rule: { height: 1, backgroundColor: palette.line },
-  draftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, backgroundColor: '#F2F4EE', padding: 10 },
+  rule: { height: 1, backgroundColor: '#27342E' },
+  draftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, backgroundColor: '#141A17', borderWidth: 1, borderColor: '#27342E', padding: 10 },
   blockCard: { gap: 12 },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  blockTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  blockExercise: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 10 },
-  exerciseName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  exerciseMeta: { color: palette.muted, fontSize: 12, lineHeight: 17 },
+  blockTitle: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
+  blockExercise: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
+  exerciseName: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
+  exerciseMeta: { color: '#91A098', fontSize: 12, lineHeight: 17 },
   weightControls: { flexDirection: 'row', gap: 6 },
-  step: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#F2F4EE', alignItems: 'center', justifyContent: 'center' },
+  step: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', alignItems: 'center', justifyContent: 'center' },
 });

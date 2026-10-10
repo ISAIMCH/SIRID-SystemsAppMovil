@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientAccessModal from './client-access-modal';
+import { FloatingCard } from './fit-ui';
 
 type Period = 'day' | 'week' | 'month';
 type Analytics = {
@@ -20,6 +21,7 @@ type Analytics = {
   bestLift: { weightKg: number; exerciseName: string; completedAt: string } | null;
   chartData: { label: string; durationMinutes: number; totalVolumeKg: number; caloriesBurned: number }[];
 };
+type WorkoutStats = { currentStreak: number };
 
 const periods: { value: Period; short: string; label: string; title: string }[] = [
   { value: 'day', short: 'D', label: 'Día', title: 'Hoy' },
@@ -66,13 +68,15 @@ function formatWholeNumber(value: number) {
 
 export default function ClientHomeScreen() {
   const { width } = useWindowDimensions();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [period, setPeriod] = useState<Period>('day');
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
   const [showAccess, setShowAccess] = useState(false);
+  const [workoutStats, setWorkoutStats] = useState<WorkoutStats | null>(null);
+  const [isLoadingStreak, setIsLoadingStreak] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return undefined;
@@ -106,6 +110,22 @@ export default function ClientHomeScreen() {
     };
   }, [period, reloadToken, user?.id]);
 
+  useEffect(() => {
+    if (!user?.id) return undefined;
+    let isCurrent = true;
+    api.get<WorkoutStats>('/workouts/me/stats')
+      .then((response) => {
+        if (isCurrent) setWorkoutStats(response.data);
+      })
+      .catch(() => {
+        if (isCurrent) setWorkoutStats(null);
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingStreak(false);
+      });
+    return () => { isCurrent = false; };
+  }, [user?.id]);
+
   const selectedAnalytics = analytics?.period === period ? analytics : null;
   const maximumCalories = Math.max(5, ...(selectedAnalytics?.chartData.map((item) => item.caloriesBurned) ?? [0]));
   const chartMaximum = Math.ceil(maximumCalories / 4 / 25) * 25 || 25;
@@ -127,10 +147,17 @@ export default function ClientHomeScreen() {
             <Text style={styles.greeting}>Hola, {user?.name?.split(' ')[0] ?? 'deportista'}</Text>
             <Text style={styles.subtitle}>{periodName} · {selectedAnalytics?.date ?? localDateAndTimezone().date}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Cerrar sesión" onPress={() => void signOut()} style={styles.iconButton}>
-            <MaterialIcons name="logout" size={20} color={dark.muted} />
-          </Pressable>
         </View>
+
+        <FloatingCard style={styles.streakCard}>
+          <MaterialIcons name="local-fire-department" size={30} color="#FF7043" />
+          <View style={styles.streakText}>
+            <Text style={styles.streakLabel}>Racha actual</Text>
+            <Text style={styles.streakValue}>
+              {isLoadingStreak ? '—' : `${workoutStats?.currentStreak ?? 0} días seguidos`}
+            </Text>
+          </View>
+        </FloatingCard>
 
         <View accessibilityRole="tablist" style={styles.segmented}>
           {periods.map((item) => (
@@ -154,7 +181,11 @@ export default function ClientHomeScreen() {
           </Pressable>
         ) : null}
 
-        <View style={styles.calorieCard}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Abrir detalle de actividad"
+          onPress={() => router.push('/(main)/client-workout-detail' as Href)}>
+          <View style={styles.calorieCard}>
           <View style={styles.calorieHead}>
             <View>
               <Text style={styles.metricLabel}>CALORÍAS QUEMADAS</Text>
@@ -206,7 +237,8 @@ export default function ClientHomeScreen() {
             <Text style={styles.chartCaption}>{period === 'day' ? 'HORA DEL DÍA' : 'DÍA DEL PERIODO'}</Text>
             <Text style={styles.chartCaption}>TOTAL {period === 'day' ? 'POR HORA' : 'POR DÍA'}</Text>
           </View>
-        </View>
+          </View>
+        </Pressable>
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
@@ -282,6 +314,10 @@ const styles = StyleSheet.create({
   segmentLetterSelected: { color: dark.green },
   segmentLabel: { color: dark.muted, fontSize: 12, fontWeight: '700' },
   segmentLabelSelected: { color: dark.white },
+  streakCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 20, borderColor: dark.line, backgroundColor: dark.surface, padding: 16 },
+  streakText: { flex: 1, gap: 3 },
+  streakLabel: { color: dark.muted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  streakValue: { color: dark.white, fontSize: 18, fontWeight: '800' },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, backgroundColor: '#17221C', padding: 12 },
   errorText: { flex: 1, color: dark.white, fontSize: 12 },
   calorieCard: { borderRadius: 24, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, overflow: 'hidden' },

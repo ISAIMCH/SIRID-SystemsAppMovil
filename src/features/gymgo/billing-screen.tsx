@@ -1,4 +1,4 @@
-import { Redirect } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -7,7 +7,7 @@ import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { IconBadge } from './fit-ui';
 import { palette } from './theme';
-import { ActionButton, AppHeader, Notice, Page, SectionTitle, Surface } from './ui';
+import { ActionButton, Notice, Page, SectionTitle, Surface } from './ui';
 
 type PaymentStatus = 'pending' | 'paid' | 'cancelled';
 type PaymentUser = { id: string; name: string; email: string } | string;
@@ -109,7 +109,20 @@ function ClientMembership() {
 
   return (
     <Page dark>
-      <AppHeader title="Pago y membresía" detail="Consulta tu plan y el estado de tus pagos." />
+      <View style={styles.clientHeader}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Volver al perfil"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}
+          style={styles.clientBackButton}>
+          <IconBadge name="arrow-back" color="#F4F8F5" />
+        </Pressable>
+        <View style={styles.clientHeaderText}>
+          <Text style={styles.clientHeaderTitle}>Pago y membresía</Text>
+          <Text style={styles.clientHeaderDetail}>Consulta tu plan y el estado de tus pagos.</Text>
+        </View>
+      </View>
 
       {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
       {error ? (
@@ -192,6 +205,11 @@ function ClientMembership() {
 }
 
 const styles = StyleSheet.create({
+  clientHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27342E' },
+  clientBackButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  clientHeaderText: { flex: 1, gap: 4 },
+  clientHeaderTitle: { color: '#F4F8F5', fontSize: 22, fontWeight: '800' },
+  clientHeaderDetail: { color: '#91A098', fontSize: 13 },
   loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   feedback: { gap: 10 },
   retry: { color: '#9BFF63', fontSize: 14, fontWeight: '800', paddingVertical: 6 },

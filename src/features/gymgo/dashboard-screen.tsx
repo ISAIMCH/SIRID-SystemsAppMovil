@@ -10,7 +10,7 @@ import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
 import type { Routine } from './types';
-import { ActionButton, AppHeader, Eyebrow, Notice, SectionTitle, Surface } from './ui';
+import { ActionButton, AppHeader, DarkUiProvider, Eyebrow, Notice, SectionTitle, Surface } from './ui';
 
 type OperationsDashboard = {
   period: 'day' | 'week';
@@ -88,7 +88,8 @@ function StaffDashboard() {
   const roleHeading = isClient ? 'Tu semana, a tu ritmo.' : user?.role === 'Admin' ? 'Tu gimnasio, en foco.' : 'Entrena con estrategia.';
 
   return (
-    <>
+    <DarkUiProvider dark={user?.role === 'Coach'}>
+      <>
       <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint]} />
       <View style={[styles.page, user?.role === 'Coach' && styles.darkPage]}>
         <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
@@ -241,7 +242,8 @@ function StaffDashboard() {
           <Text style={styles.footerText}>{user?.role === 'Coach' ? 'COACH CREATOR' : 'GYMGO · MOVIMIENTO CON PROPÓSITO'}</Text>
         </View>
       </View>
-    </>
+      </>
+    </DarkUiProvider>
   );
 }
 

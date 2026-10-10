@@ -1,3 +1,3 @@
-import AdminStoreScreen from '@/features/gymgo/admin-store-screen';
+import AdminCommerceHubScreen from '@/features/gymgo/admin-commerce-hub-screen';
 
-export default AdminStoreScreen;
+export default AdminCommerceHubScreen;

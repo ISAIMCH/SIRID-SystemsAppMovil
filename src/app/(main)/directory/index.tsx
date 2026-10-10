@@ -1,3 +1,3 @@
-import DirectoryScreen from '@/features/gymgo/directory-screen';
+import AdminUsersHubScreen from '@/features/gymgo/admin-users-hub-screen';
 
-export default DirectoryScreen;
+export default AdminUsersHubScreen;

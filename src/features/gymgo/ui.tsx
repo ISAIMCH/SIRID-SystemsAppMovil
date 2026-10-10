@@ -1,12 +1,12 @@
 import { createContext, useContext, type PropsWithChildren, type ReactNode } from 'react';
 import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-    type TextInputProps,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type TextInputProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,15 @@ import { useAuth } from './auth-context';
 import { palette } from './theme';
 
 const DarkUiContext = createContext(false);
+const AdminEmbeddedContext = createContext(false);
+
+export function DarkUiProvider({ children, dark = false }: PropsWithChildren<{ dark?: boolean }>) {
+  return <DarkUiContext.Provider value={dark}>{children}</DarkUiContext.Provider>;
+}
+
+export function AdminEmbeddedProvider({ children }: PropsWithChildren) {
+  return <AdminEmbeddedContext.Provider value>{children}</AdminEmbeddedContext.Provider>;
+}
 
 export function useDarkUi() {
   return useContext(DarkUiContext);
@@ -36,9 +45,11 @@ export function Eyebrow({ children }: PropsWithChildren) {
   return <Text style={[styles.eyebrow, dark && styles.darkAccentText]}>{children}</Text>;
 }
 
-export function AppHeader({ title, detail }: { title: string; detail?: string }) {
+export function AppHeader({ title, detail, showSignOut = true }: { title: string; detail?: string; showSignOut?: boolean }) {
   const { user, signOut } = useAuth();
   const dark = useDarkUi();
+  const embedded = useContext(AdminEmbeddedContext);
+  if (embedded) return null;
   return (
     <View style={styles.appHeader}>
       <View style={styles.appHeaderText}>
@@ -46,9 +57,11 @@ export function AppHeader({ title, detail }: { title: string; detail?: string })
         <Text style={[styles.headerTitle, dark && styles.darkPrimaryText]}>{title}</Text>
         {detail ? <Text style={[styles.detail, dark && styles.darkSecondaryText]}>{detail}</Text> : null}
       </View>
-      <Pressable accessibilityRole="button" onPress={() => void signOut()} style={[styles.signOut, dark && styles.darkControl]}>
-        <Text style={[styles.signOutText, dark && styles.darkAccentText]}>Salir</Text>
-      </Pressable>
+      {showSignOut ? (
+        <Pressable accessibilityRole="button" onPress={() => void signOut()} style={[styles.signOut, dark && styles.darkControl]}>
+          <Text style={[styles.signOutText, dark && styles.darkAccentText]}>Salir</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

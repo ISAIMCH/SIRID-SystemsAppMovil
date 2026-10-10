@@ -1,73 +1,56 @@
-import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
+import {
+    ActivityIndicator,
+    Animated,
+    Easing,
+    KeyboardAvoidingView,
+    Platform,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
 
-import { useAuth } from './auth-context';
 import { getApiErrorMessage } from './api';
-import { ActionButton, Eyebrow, Field, Notice } from './ui';
-import { palette } from './theme';
+import { useAuth } from './auth-context';
 
-const goals = [
-  { value: 'ganar masa muscular', label: 'Ganar masa' },
-  { value: 'perder grasa', label: 'Perder grasa' },
-  { value: 'definición', label: 'Definición' },
-  { value: 'fuerza', label: 'Fuerza' },
-  { value: 'acondicionamiento', label: 'Acondicionamiento' },
-];
-
-const experienceLevels = [
-  { value: 'principiante', label: 'Principiante' },
-  { value: 'intermedio', label: 'Intermedio' },
-  { value: 'avanzado', label: 'Avanzado' },
+const neon = '#9BFF63';
+const background = '#080B09';
+const surface = '#121512';
+const border = '#1E2A21';
+const primaryText = '#F4F8F5';
+const mutedText = '#888F8A';
+const particles = [
+  { left: '13%', top: '28%', size: 3, delay: 0, duration: 2500 },
+  { left: '25%', top: '18%', size: 2, delay: 500, duration: 3000 },
+  { left: '77%', top: '25%', size: 3, delay: 800, duration: 2800 },
+  { left: '86%', top: '49%', size: 2, delay: 300, duration: 2200 },
+  { left: '19%', top: '57%', size: 2, delay: 1100, duration: 3200 },
+  { left: '70%', top: '65%', size: 3, delay: 650, duration: 2600 },
 ] as const;
 
-const trainingDays = [
-  { value: 1, label: 'L' },
-  { value: 2, label: 'M' },
-  { value: 3, label: 'X' },
-  { value: 4, label: 'J' },
-  { value: 5, label: 'V' },
-  { value: 6, label: 'S' },
-  { value: 0, label: 'D' },
-];
-
-const trainingTimes = ['Mañana', 'Tarde', 'Noche', 'Variable'];
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export default function AuthScreen() {
-  const { signIn, signUp } = useAuth();
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [name, setName] = useState('');
+  const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [goal, setGoal] = useState('');
-  const [experienceLevel, setExperienceLevel] = useState<'principiante' | 'intermedio' | 'avanzado' | ''>('');
-  const [availableTrainingDays, setAvailableTrainingDays] = useState<number[]>([]);
-  const [preferredTrainingTime, setPreferredTrainingTime] = useState('');
-  const [restrictions, setRestrictions] = useState('');
-  const [preferredZonesText, setPreferredZonesText] = useState('');
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const buttonScale = useRef(new Animated.Value(1)).current;
 
   async function submit() {
     setError('');
     if (!email.trim() || !password) {
       setError('Escribe tu correo y contraseña para continuar.');
-      return;
-    }
-    if (isRegistering && name.trim().length < 2) {
-      setError('El nombre debe tener al menos 2 caracteres.');
-      return;
-    }
-    if (isRegistering && !goal) {
-      setError('Selecciona tu objetivo deportivo.');
-      return;
-    }
-    if (isRegistering && !experienceLevel) {
-      setError('Selecciona tu nivel de experiencia.');
-      return;
-    }
-    if (isRegistering && availableTrainingDays.length === 0) {
-      setError('Selecciona al menos un día disponible para entrenar.');
       return;
     }
     if (password.length < 10) {
@@ -77,22 +60,8 @@ export default function AuthScreen() {
 
     setIsSubmitting(true);
     try {
-      if (isRegistering) {
-        await signUp({
-          name,
-          email,
-          password,
-          goal,
-          experienceLevel: experienceLevel as 'principiante' | 'intermedio' | 'avanzado',
-          availableTrainingDays,
-          ...(preferredTrainingTime ? { preferredTrainingTime } : {}),
-          ...(restrictions.trim() ? { restrictions: restrictions.trim() } : {}),
-          ...(preferredZonesText.trim()
-            ? { preferredZones: preferredZonesText.split(',').map((zone) => zone.trim()).filter(Boolean) }
-            : {}),
-        });
-      }
-      else await signIn(email, password);
+      await signIn(email, password);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(main)');
     } catch (requestError) {
       setError(getApiErrorMessage(requestError, 'No se pudo conectar con GymGo. Intenta de nuevo.'));
@@ -101,179 +70,159 @@ export default function AuthScreen() {
     }
   }
 
+  function pressIn() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.spring(buttonScale, { toValue: 0.96, friction: 5, tension: 100, useNativeDriver: true }).start();
+  }
+
+  function pressOut() {
+    Animated.spring(buttonScale, { toValue: 1, friction: 5, tension: 100, useNativeDriver: true }).start();
+  }
+
   return (
-    <View style={styles.screen}>
-      <View style={styles.colorBand} />
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.content}>
-        <View style={styles.brandRow}>
-          <View style={styles.brandMark}><Text style={styles.markText}>G</Text></View>
-          <Text style={styles.brand}>GYMGO</Text>
+    // <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#0a0f0d' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#0a0f0d' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} enabled={Platform.OS === 'ios'}>
+      <View style={styles.backgroundLayer} pointerEvents="none">
+        <View style={styles.hero} pointerEvents="none">
+          <LinearGradient pointerEvents="none" colors={['#142316', '#080B09']} style={StyleSheet.absoluteFill} />
+          {particles.map((particle, index) => <Particle key={index} {...particle} />)}
+          <EnergyTrails />
+          <View style={styles.brandOverlay}>
+            <View style={styles.brandMark}><Text style={styles.brandMarkText}>G</Text></View>
+            <Text style={styles.brand}>GYMGO</Text>
+          </View>
+          <View style={styles.athleteGlow}>
+            <MaterialIcons name="fitness-center" size={112} color={neon} />
+          </View>
+          <Text style={styles.heroCaption}>ENTRENA CON INTENCIÓN</Text>
         </View>
-        <Eyebrow>ENTRENA CON INTENCIÓN</Eyebrow>
-        <Text style={styles.title}>{isRegistering ? 'Tu ritmo empieza aquí.' : 'Vuelve a tu mejor versión.'}</Text>
-        <Text style={styles.subtitle}>
-          {isRegistering ? 'Crea tu cuenta de cliente y conecta con tu gimnasio.' : 'Accede a tus rutinas y a tu espacio en el gimnasio.'}
-        </Text>
-
-        <View style={styles.form}>
-          {isRegistering ? <Field label="Nombre completo" autoCapitalize="words" value={name} onChangeText={setName} /> : null}
-          {isRegistering ? (
-            <>
-              <View style={styles.selectionGroup}>
-                <Text style={styles.selectionLabel}>Objetivo deportivo</Text>
-                <View style={styles.options}>
-                  {goals.map((option) => (
-                    <OptionChip
-                      key={option.value}
-                      label={option.label}
-                      selected={goal === option.value}
-                      onPress={() => setGoal(option.value)}
-                    />
-                  ))}
-                </View>
-              </View>
-              <View style={styles.selectionGroup}>
-                <Text style={styles.selectionLabel}>Nivel de experiencia</Text>
-                <View style={styles.options}>
-                  {experienceLevels.map((option) => (
-                    <OptionChip
-                      key={option.value}
-                      label={option.label}
-                      selected={experienceLevel === option.value}
-                      onPress={() => setExperienceLevel(option.value)}
-                    />
-                  ))}
-                </View>
-              </View>
-              <View style={styles.selectionGroup}>
-                <Text style={styles.selectionLabel}>Días disponibles</Text>
-                <View style={styles.dayOptions}>
-                  {trainingDays.map((day) => {
-                    const selected = availableTrainingDays.includes(day.value);
-                    return (
-                      <Pressable
-                        key={day.value}
-                        accessibilityRole="checkbox"
-                        accessibilityLabel={['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'][day.value]}
-                        accessibilityState={{ checked: selected }}
-                        onPress={() => setAvailableTrainingDays((current) => (
-                          selected ? current.filter((value) => value !== day.value) : [...current, day.value]
-                        ))}
-                        style={[styles.dayChip, selected && styles.optionSelected]}>
-                        <Text style={[styles.dayText, selected && styles.optionTextSelected]}>{day.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
-              <View style={styles.selectionGroup}>
-                <Text style={styles.selectionLabel}>Horario habitual (opcional)</Text>
-                <View style={styles.options}>
-                  {trainingTimes.map((time) => (
-                    <OptionChip
-                      key={time}
-                      label={time}
-                      selected={preferredTrainingTime === time}
-                      onPress={() => setPreferredTrainingTime(preferredTrainingTime === time ? '' : time)}
-                    />
-                  ))}
-                </View>
-              </View>
-              <Field
-                label="Restricciones o lesiones (opcional)"
-                value={restrictions}
-                onChangeText={setRestrictions}
-                multiline
-                numberOfLines={3}
-                style={styles.multiline}
-              />
-              <Field
-                label="Zonas preferidas, separadas por coma (opcional)"
-                placeholder="Cardio, peso libre"
-                value={preferredZonesText}
-                onChangeText={setPreferredZonesText}
-              />
-            </>
-          ) : null}
-          <Field
-            label="Correo electrónico"
-            autoCapitalize="none"
-            autoComplete="email"
-            keyboardType="email-address"
-            value={email}
-            onChangeText={setEmail}
-          />
-          <Field
-            label="Contraseña"
-            autoCapitalize="none"
-            autoComplete={isRegistering ? 'new-password' : 'password'}
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-            onSubmitEditing={() => void submit()}
-            returnKeyType="done"
-          />
-          {error ? <Notice error>{error}</Notice> : null}
-          <ActionButton onPress={() => void submit()} disabled={isSubmitting}>
-            {isSubmitting ? <ActivityIndicator color={palette.white} /> : isRegistering ? 'Crear cuenta' : 'Iniciar sesión'}
-          </ActionButton>
-        </View>
-
-        <View style={styles.switchRow}>
-          <Text style={styles.switchText}>{isRegistering ? '¿Ya tienes cuenta?' : '¿Primera vez en GymGo?'}</Text>
-          <Text
-            accessibilityRole="button"
-            onPress={() => { setIsRegistering(!isRegistering); setError(''); }}
-            style={styles.switchAction}>
-            {isRegistering ? 'Inicia sesión' : 'Crear cuenta'}
-          </Text>
-        </View>
-        {isRegistering ? <Text style={styles.footnote}>Tu cuenta se activa cuando el gimnasio confirma tu membresía.</Text> : null}
       </View>
+
+      {/* <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} keyboardShouldPersistTaps="handled" bounces={false}> */}
+        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} keyboardShouldPersistTaps="always" bounces={false}>
+        <View style={styles.card}>
+          <Text style={styles.title}>VUELVE A TU MEJOR VERSIÓN</Text>
+          <Text style={styles.subtitle}>Accede a tus rutinas y a tu espacio en el gimnasio.</Text>
+
+          <View style={styles.form}>
+            <LoginInput
+              icon="fitness-center"
+              label="Correo electrónico"
+              value={email}
+              onChangeText={(value) => { setEmail(value); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              onFocus={() => setEmailFocused(true)}
+              focused={emailFocused}
+              autoCapitalize="none"
+              autoComplete="email"
+              keyboardType="email-address"
+              returnKeyType="next"
+            />
+            <LoginInput
+              icon="vpn-key"
+              label="Contraseña"
+              value={password}
+              onChangeText={(value) => { setPassword(value); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              onFocus={() => setPasswordFocused(true)}
+              focused={passwordFocused}
+              autoCapitalize="none"
+              autoComplete="password"
+              secureTextEntry
+              onSubmitEditing={() => void submit()}
+              returnKeyType="done"
+            />
+          </View>
+
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+
+          <AnimatedPressable
+            accessibilityRole="button"
+            disabled={isSubmitting}
+            onPress={() => void submit()}
+            onPressIn={pressIn}
+            onPressOut={pressOut}
+            style={[styles.submitButton, { transform: [{ scale: buttonScale }] }, isSubmitting && styles.disabled]}>
+            {isSubmitting ? <ActivityIndicator color="#071007" /> : <Text style={styles.submitText}>INICIAR SESIÓN</Text>}
+          </AnimatedPressable>
+          <Text style={styles.secureNote}>Acceso seguro para miembros GymGo</Text>
+        </View>
       </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+function LoginInput({ icon, label, focused, ...props }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; focused: boolean } & React.ComponentProps<typeof TextInput>) {
+  return (
+    <View style={[styles.inputShell, focused && styles.inputFocused]}>
+      <MaterialIcons name={icon} size={18} color={focused ? neon : mutedText} />
+      <TextInput {...props} placeholder={label} placeholderTextColor={mutedText} style={styles.input} />
     </View>
   );
 }
 
-function OptionChip({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+function Particle({ left, top, size, delay, duration }: { left: `${number}%`; top: `${number}%`; size: number; delay: number; duration: number }) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.delay(delay),
+      Animated.timing(progress, { toValue: 1, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(progress, { toValue: 0, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [delay, duration, progress]);
+
   return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      onPress={onPress}
-      style={[styles.optionChip, selected && styles.optionSelected]}>
-      <Text style={[styles.optionText, selected && styles.optionTextSelected]}>{label}</Text>
-    </Pressable>
+    <Animated.View style={[styles.particle, { left, top, width: size, height: size, opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }), transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, -12] }) }] }]} />
+  );
+}
+
+function EnergyTrails() {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(Animated.sequence([
+      Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      Animated.timing(pulse, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+    ]));
+    animation.start();
+    return () => animation.stop();
+  }, [pulse]);
+
+  return (
+    <Animated.View style={[styles.trails, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.48, 0.92] }), transform: [{ rotate: '-12deg' }, { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.04] }) }] }]}>
+      <View style={styles.trailOne} />
+      <View style={styles.trailTwo} />
+      <View style={styles.trailThree} />
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: palette.paper },
-  scroll: { flex: 1 },
-  scrollContent: { flexGrow: 1, justifyContent: 'center' },
-  colorBand: { position: 'absolute', top: 0, left: 0, right: 0, height: '34%', backgroundColor: palette.deepGreen },
-  content: { width: '100%', maxWidth: 520, alignSelf: 'center', padding: 24, gap: 16 },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
-  brandMark: { width: 38, height: 38, borderRadius: 10, backgroundColor: palette.lime, alignItems: 'center', justifyContent: 'center' },
-  markText: { color: palette.deepGreen, fontSize: 22, fontWeight: '900' },
-  brand: { color: palette.white, fontWeight: '900', fontSize: 16 },
-  title: { color: palette.ink, fontSize: 34, lineHeight: 39, fontWeight: '800', maxWidth: 390 },
-  subtitle: { color: palette.muted, fontSize: 15, lineHeight: 22, marginBottom: 8 },
-  form: { gap: 16, marginTop: 10 },
-  selectionGroup: { gap: 8 },
-  selectionLabel: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  options: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  optionChip: { minHeight: 38, justifyContent: 'center', borderWidth: 1, borderColor: palette.line, borderRadius: 7, backgroundColor: palette.surface, paddingHorizontal: 11, paddingVertical: 7 },
-  optionSelected: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
-  optionText: { color: palette.ink, fontSize: 12, fontWeight: '700' },
-  optionTextSelected: { color: palette.white },
-  dayOptions: { flexDirection: 'row', justifyContent: 'space-between', gap: 7 },
-  dayChip: { width: 38, height: 38, borderWidth: 1, borderColor: palette.line, borderRadius: 19, backgroundColor: palette.surface, justifyContent: 'center', alignItems: 'center' },
-  dayText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
-  multiline: { minHeight: 84, textAlignVertical: 'top', paddingTop: 12 },
-  switchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 4 },
-  switchText: { color: palette.muted, fontSize: 14 },
-  switchAction: { color: palette.green, fontWeight: '800', fontSize: 14, paddingVertical: 6 },
-  footnote: { color: palette.muted, fontSize: 12, lineHeight: 18 },
+  screen: { flex: 1, backgroundColor: background },
+  backgroundLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
+  hero: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  brandOverlay: { position: 'absolute', top: 28, left: 24, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandMark: { width: 38, height: 38, borderRadius: 12, backgroundColor: neon, alignItems: 'center', justifyContent: 'center' },
+  brandMarkText: { color: '#071007', fontSize: 23, fontWeight: '900' },
+  brand: { color: primaryText, fontSize: 16, fontWeight: '900', letterSpacing: 2 },
+  athleteGlow: { width: 190, height: 190, borderRadius: 95, alignItems: 'center', justifyContent: 'center', backgroundColor: '#9BFF6315', shadowColor: neon, shadowOpacity: 0.55, shadowRadius: 44, shadowOffset: { width: 0, height: 0 }, elevation: 12 },
+  heroCaption: { position: 'absolute', bottom: 26, color: '#B8C5B9', fontSize: 10, fontWeight: '900', letterSpacing: 2 },
+  trails: { position: 'absolute', width: 320, height: 220, alignItems: 'center', justifyContent: 'center' },
+  trailOne: { position: 'absolute', width: 260, height: 2, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  trailTwo: { position: 'absolute', width: 220, height: 2, marginTop: 34, marginLeft: 18, backgroundColor: '#55D6D0', opacity: 0.65 },
+  trailThree: { position: 'absolute', width: 180, height: 1, marginTop: -48, marginLeft: -18, backgroundColor: neon, opacity: 0.7 },
+  particle: { position: 'absolute', borderRadius: 9, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  card: { gap: 16, zIndex: 10, elevation: 10, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(155, 255, 99, 0.15)', backgroundColor: 'rgba(20, 25, 22, 0.75)', overflow: 'hidden' },
+  title: { color: primaryText, fontSize: 25, lineHeight: 30, fontWeight: '900', letterSpacing: 0.5 },
+  subtitle: { color: mutedText, fontSize: 14, lineHeight: 21, maxWidth: 330 },
+  form: { gap: 12, marginTop: 4 },
+  inputShell: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#1E1E1E', borderRadius: 14, backgroundColor: 'rgba(13, 16, 14, 0.8)', paddingHorizontal: 16 },
+  inputFocused: { borderColor: neon, shadowColor: neon, shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  input: { flex: 1, color: primaryText, fontSize: 15, minHeight: 54 },
+  error: { color: '#FF8A80', fontSize: 12, lineHeight: 18 },
+  submitButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
+  submitText: { color: '#071007', fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  disabled: { opacity: 0.6 },
+  secureNote: { color: '#626A64', fontSize: 11, textAlign: 'center' },
 });

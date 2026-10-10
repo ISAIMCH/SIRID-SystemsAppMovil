@@ -1,3 +1,3 @@
-import InventoryScreen from '@/features/gymgo/inventory-screen';
+import AdminInventoryHubScreen from '@/features/gymgo/admin-inventory-hub-screen';
 
-export default InventoryScreen;
+export default AdminInventoryHubScreen;

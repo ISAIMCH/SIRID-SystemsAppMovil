@@ -119,7 +119,11 @@ export default function PlansScreen() {
   return (
     <Page>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={() => router.back()}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Volver"
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
           <IconBadge name="arrow-back" color={palette.ink} />
         </Pressable>
         <View style={styles.flex}>

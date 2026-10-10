@@ -136,11 +136,11 @@ export default function DirectoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  segments: { flexDirection: 'row', backgroundColor: '#E9ECE3', borderRadius: 20, padding: 4 },
+  segments: { flexDirection: 'row', backgroundColor: '#111815', borderColor: '#27342E', borderWidth: 1, borderRadius: 20, padding: 4 },
   segment: { flex: 1, borderRadius: 16, paddingVertical: 11, alignItems: 'center' },
-  segmentSelected: { backgroundColor: palette.deepGreen },
-  segmentText: { color: palette.ink, fontSize: 14, fontWeight: '700' },
-  segmentTextSelected: { color: palette.white },
+  segmentSelected: { backgroundColor: '#9BFF63' },
+  segmentText: { color: '#91A098', fontSize: 14, fontWeight: '700' },
+  segmentTextSelected: { color: '#081009' },
   loading: { minHeight: 120, justifyContent: 'center', alignItems: 'center' },
   feedback: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
@@ -148,9 +148,9 @@ const styles = StyleSheet.create({
   coachAvatar: { backgroundColor: '#18B7E826' },
   avatarText: { color: palette.deepGreen, fontSize: 18, fontWeight: '800' },
   info: { flex: 1, gap: 3 },
-  name: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  email: { color: palette.muted, fontSize: 12 },
-  coach: { color: palette.green, fontSize: 11, fontWeight: '700' },
+  name: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
+  email: { color: '#91A098', fontSize: 12 },
+  coach: { color: '#9BFF63', fontSize: 11, fontWeight: '700' },
   chip: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: '#FF8A3D26' },
   chipActive: { backgroundColor: '#19D98B26' },
   chipText: { color: palette.orange, fontSize: 10, fontWeight: '800' },

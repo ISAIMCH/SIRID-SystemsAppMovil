@@ -199,7 +199,7 @@ export default function RoutinesScreen() {
 
   return (
     <Page dark={isClient || user?.role === 'Coach'}>
-      <AppHeader title="Rutinas" detail={isClient ? 'Elige el día y registra cada ronda de tu entrenamiento.' : 'Rutinas asignadas a tus clientes.'} />
+      <AppHeader showSignOut={false} title="Rutinas" detail={isClient ? 'Elige el día y registra cada ronda de tu entrenamiento.' : 'Rutinas asignadas a tus clientes.'} />
 
       {!isClient ? (
         <>
