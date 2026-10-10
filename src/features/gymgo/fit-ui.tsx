@@ -1,13 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { useDarkUi } from './ui';
+import { useAdminEmbedded, useDarkUi } from './ui';
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
 
 export function FloatingCard({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
   const dark = useDarkUi();
+  const admin = useAdminEmbedded();
+  if (admin) return <BlurView tint="light" intensity={40} style={[styles.card, styles.adminGlassCard, style]}>{children}</BlurView>;
   return <View style={[styles.card, dark && styles.darkCard, style]}>{children}</View>;
 }
 
@@ -49,6 +52,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   darkCard: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
+  adminGlassCard: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
   badge: { alignItems: 'center', justifyContent: 'center' },
   metric: { flex: 1, gap: 6, minWidth: 140 },
   metricValue: { fontSize: 28, lineHeight: 32, fontWeight: '800', marginTop: 6 },

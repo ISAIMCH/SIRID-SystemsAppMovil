@@ -95,7 +95,7 @@ export default function InventoryScreen() {
   }
 
   return (
-    <Page>
+    <Page admin>
       <AppHeader
         title="Inventario / Equipos"
         detail={isAdmin ? 'Administra el catálogo y las unidades disponibles.' : 'Consulta equipos y su disponibilidad.'}
@@ -358,10 +358,10 @@ const styles = StyleSheet.create({
   form: { gap: 14 },
   group: { gap: 8 },
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  select: { height: 52, borderRadius: 8, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  select: { height: 52, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.7)', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectText: { color: palette.ink, fontSize: 16 },
   placeholder: { color: palette.muted },
-  options: { borderRadius: 12, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.white, overflow: 'hidden' },
+  options: { borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.7)', overflow: 'hidden' },
   option: { paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: palette.line },
   optionText: { color: palette.ink, fontSize: 15 },
   optionSelected: { color: palette.green, fontWeight: '800' },

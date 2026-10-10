@@ -15,8 +15,8 @@ type Promotion = { _id: string; title: string; image: string; active: boolean };
 const categories: Category[] = ['Suplementos', 'Ropa', 'Accesorios'];
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
-export default function AdminStoreScreen() {
-  const [tab, setTab] = useState<'products' | 'promotions'>('products');
+export default function AdminStoreScreen({ initialTab = 'products', hideTabs = false }: { initialTab?: 'products' | 'promotions'; hideTabs?: boolean }) {
+  const [tab, setTab] = useState<'products' | 'promotions'>(initialTab);
   const [products, setProducts] = useState<Product[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,10 +45,10 @@ export default function AdminStoreScreen() {
   }, [retryNumber]);
 
   return (
-    <Page>
+    <Page admin>
       <AppHeader title="Tienda y promociones" detail="Lo que publiques aquí lo ve el cliente en su app." />
 
-      <View style={styles.tabs}>
+      {!hideTabs ? <View style={styles.tabs}>
         {([['products', 'Productos'], ['promotions', 'Promociones']] as const).map(([value, label]) => (
           <Pressable
             key={value}
@@ -59,7 +59,7 @@ export default function AdminStoreScreen() {
             <Text style={[styles.tabText, tab === value && styles.tabTextSelected]}>{label}</Text>
           </Pressable>
         ))}
-      </View>
+      </View> : null}
 
       {error ? (
         <View style={styles.gap}>
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: palette.deepGreen },
   chipText: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   chipTextSelected: { color: palette.white },
-  imageBox: { width: '100%', borderRadius: 18, overflow: 'hidden', backgroundColor: '#F2F4EE' },
+  imageBox: { width: '100%', borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
   imageFill: { width: '100%', height: '100%' },
   imageEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   imageHint: { color: palette.muted, fontSize: 13 },

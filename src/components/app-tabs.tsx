@@ -20,7 +20,7 @@ type TabName =
 const ROLE_TABS: Record<GymGoRole, TabName[]> = {
   Cliente: ['index', 'routines', 'billing'],
   Coach: ['index', 'routines', 'directory'],
-  Admin: ['index', 'inventory', 'directory', 'admin-store'],
+  Admin: ['index', 'inventory', 'directory'],
 };
 
 const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcons.glyphMap }> = {

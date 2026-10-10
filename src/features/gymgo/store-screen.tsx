@@ -3,12 +3,12 @@ import * as Haptics from 'expo-haptics';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
+import { useCartStore } from '../../store/cartStore';
 import { api, getApiErrorMessage } from './api';
 import CartModal from './cart-modal';
 import { FloatingCard } from './fit-ui';
 import { palette } from './theme';
 import { Notice, Page } from './ui';
-import { useCartStore } from '../../store/cartStore';
 
 type Category = 'Todos' | 'Suplementos' | 'Ropa' | 'Accesorios';
 type Product = { _id: string; name: string; category: Exclude<Category, 'Todos'>; price: number; image: string; imageUrl?: string; stock: number };

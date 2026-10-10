@@ -27,9 +27,9 @@ function estimatedExpiry(days: number) {
   return new Date(Date.now() + days * 86400000).toLocaleDateString('es-MX');
 }
 
-export default function StaffScreen() {
+export default function StaffScreen({ initialRole = 'Coach', hideRoleSelector = false }: { initialRole?: ManagedRole; hideRoleSelector?: boolean }) {
   const { user } = useAuth();
-  const [role, setRole] = useState<ManagedRole>('Coach');
+  const [role, setRole] = useState<ManagedRole>(initialRole);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -127,10 +127,10 @@ export default function StaffScreen() {
   }
 
   return (
-    <Page>
+    <Page admin>
       <AppHeader title="Gestión de personal" detail="Crea cuentas de Coach y Cliente para tu gimnasio." />
 
-      <View accessibilityRole="tablist" style={styles.roleSelector}>
+      {!hideRoleSelector ? <View accessibilityRole="tablist" style={styles.roleSelector}>
         {(['Coach', 'Cliente'] as const).map((option) => {
           const selected = role === option;
           return (
@@ -145,7 +145,7 @@ export default function StaffScreen() {
             </Pressable>
           );
         })}
-      </View>
+      </View> : null}
 
       <FloatingCard style={styles.form}>
         <Field label="Nombre completo" autoCapitalize="words" autoComplete="name" value={name} onChangeText={setName} />
@@ -274,13 +274,13 @@ const styles = StyleSheet.create({
   dayChip: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F2F4EE', justifyContent: 'center', alignItems: 'center' },
   dayText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
   roleSelector: { flexDirection: 'row', gap: 12 },
-  roleOption: { flex: 1, alignItems: 'center', gap: 8, borderRadius: 24, backgroundColor: palette.white, paddingVertical: 16, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.07, shadowRadius: 14, elevation: 3 },
+  roleOption: { flex: 1, alignItems: 'center', gap: 8, borderRadius: 24, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', paddingVertical: 16 },
   selectedRole: { backgroundColor: '#0F2A24' },
   roleLabel: { color: palette.ink, fontSize: 15, fontWeight: '800' },
   selectedRoleLabel: { color: palette.white },
   form: { gap: 16, padding: 20 },
   link: { color: palette.cyan, fontSize: 13, fontWeight: '800' },
-  planSummary: { gap: 8, backgroundColor: '#F2F4EE', borderRadius: 16, padding: 14 },
+  planSummary: { gap: 8, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', borderRadius: 16, padding: 14 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   summaryLabel: { color: palette.muted, fontSize: 13 },
   summaryValue: { color: palette.ink, fontSize: 14, fontWeight: '800' },

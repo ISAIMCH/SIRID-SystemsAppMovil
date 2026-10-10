@@ -3,8 +3,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle, Surface } from './ui';
 import { palette } from './theme';
+import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle, Surface } from './ui';
 
 type Equipment = { _id: string; name: string; zone: string; status: 'available' | 'busy' | 'out_of_service' };
 type MaintenanceReport = {
@@ -108,7 +108,7 @@ export default function MaintenanceScreen() {
   }
 
   return (
-    <Page>
+    <Page admin>
       <AppHeader
         title={isAdmin ? 'Reportes de mantenimiento' : 'Reportar una falla'}
         detail={isAdmin ? 'Atiende alertas y actualiza el estado del equipo.' : 'Selecciona el equipo y describe el problema.'}
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
   retry: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 5 },
   loading: { minHeight: 80, alignItems: 'center', justifyContent: 'center' },
   equipmentList: { gap: 8 },
-  equipmentOption: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: palette.line, borderRadius: 8, backgroundColor: palette.surface, padding: 12 },
+  equipmentOption: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', borderRadius: 8, backgroundColor: 'rgba(255, 255, 255, 0.7)', padding: 12 },
   selectedOption: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
   equipmentInfo: { flex: 1, gap: 4 },
   equipmentName: { color: palette.ink, fontSize: 14, fontWeight: '800' },

@@ -10,6 +10,17 @@ import { Page } from './ui';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
+const dark = {
+  background: '#070B09',
+  surface: '#111815',
+  elevated: '#18211D',
+  line: '#27342E',
+  muted: '#91A098',
+  white: '#F4F8F5',
+  green: '#9BFF63',
+  cyan: '#55D6D0',
+};
+
 function springScale(scale: Animated.Value, toValue: number) {
   Animated.spring(scale, { toValue, friction: 5, tension: 100, useNativeDriver: true }).start();
 }
@@ -144,13 +155,16 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   title: { color: '#F4F8F5', fontSize: 22, fontWeight: '800' },
   subtitle: { color: '#91A098', fontSize: 13, marginTop: 5 },
-  competitionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E1E1E', borderColor: '#27342E', padding: 18 },
+  // competitionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E1E1E', borderColor: '#27342E', padding: 18 },
+  competitionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: dark.surface, borderColor: dark.line, padding: 18 },
   competitionInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   cardTitle: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
   cardSubtitle: { color: '#91A098', fontSize: 12, marginTop: 4 },
   viewButton: { minHeight: 44, minWidth: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#9BFF63', borderRadius: 8, paddingHorizontal: 15 },
-  viewButtonText: { color: '#9BFF63', fontWeight: '800' },
-  menuList: { backgroundColor: '#1E1E1E', borderRadius: 18, borderWidth: 1, borderColor: '#27342E', overflow: 'hidden' },
+  viewButtonText: { color: '#fffffe', fontWeight: '800' },
+  // streakCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 20, borderColor: dark.line, backgroundColor: dark.surface, padding: 16 },
+  // menuList: { backgroundColor: '#1E1E1E', borderRadius: 18, borderWidth: 1, borderColor: '#27342E', overflow: 'hidden' },
+  menuList: { backgroundColor: dark.surface, borderRadius: 18, borderWidth: 1, borderColor: dark.line, overflow: 'hidden' },
   menuRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#27342E' },
   menuTitle: { flex: 1, color: '#F4F8F5', fontSize: 14, fontWeight: '700' },
   warning: { color: '#FF8A80' },

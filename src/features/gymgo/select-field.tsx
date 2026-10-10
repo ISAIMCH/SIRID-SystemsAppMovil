@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { palette } from './theme';
+import { useAdminEmbedded } from './ui';
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
@@ -19,19 +20,20 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const admin = useAdminEmbedded();
   const selected = options.find((option) => option.value === value);
   const visibleOptions = options.filter((option) => `${option.label} ${option.hint ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
 
   return (
     <View style={styles.group}>
       <Text style={styles.label}>{label}</Text>
-      <Pressable accessibilityRole="button" onPress={() => { setIsOpen((open) => !open); setQuery(''); }} style={styles.select}>
+      <Pressable accessibilityRole="button" onPress={() => { setIsOpen((open) => !open); setQuery(''); }} style={[styles.select, admin && styles.adminGlassInput]}>
         <Text numberOfLines={1} style={[styles.selectText, !selected && styles.placeholder]}>{selected?.label ?? placeholder}</Text>
         <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={22} color={palette.muted} />
       </Pressable>
       {isOpen ? (
-        <View style={styles.options}>
-          {filterable ? <TextInput value={query} onChangeText={setQuery} placeholder="Buscar..." placeholderTextColor={palette.muted} style={styles.filterInput} autoFocus /> : null}
+        <View style={[styles.options, admin && styles.adminGlassInput]}>
+          {filterable ? <TextInput value={query} onChangeText={setQuery} placeholder="Buscar..." placeholderTextColor={palette.muted} style={[styles.filterInput, admin && styles.adminGlassInput]} autoFocus /> : null}
           {clearLabel ? (
             <Pressable accessibilityRole="button" onPress={() => { onChange(''); setIsOpen(false); }} style={styles.option}>
               <Text style={[styles.optionText, styles.clearText]}>{clearLabel}</Text>
@@ -70,4 +72,5 @@ const styles = StyleSheet.create({
   hint: { color: palette.muted, fontSize: 12 },
   empty: { color: palette.muted, fontSize: 13, padding: 16 },
   filterInput: { height: 44, color: palette.ink, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: palette.line, fontSize: 14 },
+  adminGlassInput: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
 });

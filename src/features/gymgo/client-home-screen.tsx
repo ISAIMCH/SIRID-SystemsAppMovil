@@ -68,7 +68,7 @@ function formatWholeNumber(value: number) {
 
 export default function ClientHomeScreen() {
   const { width } = useWindowDimensions();
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [period, setPeriod] = useState<Period>('day');
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -147,6 +147,9 @@ export default function ClientHomeScreen() {
             <Text style={styles.greeting}>Hola, {user?.name?.split(' ')[0] ?? 'deportista'}</Text>
             <Text style={styles.subtitle}>{periodName} · {selectedAnalytics?.date ?? localDateAndTimezone().date}</Text>
           </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Cerrar sesión" onPress={() => void signOut()} style={styles.iconButton}>
+            <MaterialIcons name="logout" size={20} color={dark.muted} />
+          </Pressable>
         </View>
 
         <FloatingCard style={styles.streakCard}>

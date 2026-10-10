@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AdminPillToggle } from './admin-hub';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
@@ -14,10 +15,10 @@ type Segment = 'Cliente' | 'Coach';
 
 const membershipLabels = { active: 'Activa', pending: 'Pendiente', suspended: 'Suspendida', expired: 'Vencida' } as const;
 
-export default function DirectoryScreen() {
+export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmentToggle = false }: { initialSegment?: Segment; hideSegmentToggle?: boolean }) {
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
-  const [segment, setSegment] = useState<Segment>('Cliente');
+  const [segment, setSegment] = useState<Segment>(initialSegment);
   const [people, setPeople] = useState<DirectoryClient[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -55,25 +56,14 @@ export default function DirectoryScreen() {
   const noun = segment === 'Cliente' ? 'clientes' : 'coaches';
 
   return (
-    <Page dark={user?.role === 'Coach'}>
+    <Page admin={user?.role === 'Admin'} dark={user?.role === 'Coach'}>
       <AppHeader
         title={user?.role === 'Coach' ? 'Clientes' : 'Directorio'}
         detail={user?.role === 'Coach' ? 'Clientes asignados a tu perfil.' : 'Consulta y edita clientes y coaches.'}
       />
 
-      {isAdmin ? (
-        <View accessibilityRole="tablist" style={styles.segments}>
-          {([['Cliente', 'Clientes'], ['Coach', 'Coaches']] as const).map(([value, label]) => (
-            <Pressable
-              key={value}
-              accessibilityRole="button"
-              accessibilityState={{ selected: segment === value }}
-              onPress={() => changeSegment(value)}
-              style={[styles.segment, segment === value && styles.segmentSelected]}>
-              <Text style={[styles.segmentText, segment === value && styles.segmentTextSelected]}>{label}</Text>
-            </Pressable>
-          ))}
-        </View>
+      {isAdmin && !hideSegmentToggle ? (
+        <AdminPillToggle value={segment} onChange={changeSegment} options={[{ value: 'Cliente', label: 'Clientes' }, { value: 'Coach', label: 'Coaches' }]} />
       ) : null}
 
       <Field
@@ -136,11 +126,6 @@ export default function DirectoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  segments: { flexDirection: 'row', backgroundColor: '#111815', borderColor: '#27342E', borderWidth: 1, borderRadius: 20, padding: 4 },
-  segment: { flex: 1, borderRadius: 16, paddingVertical: 11, alignItems: 'center' },
-  segmentSelected: { backgroundColor: '#9BFF63' },
-  segmentText: { color: '#91A098', fontSize: 14, fontWeight: '700' },
-  segmentTextSelected: { color: '#081009' },
   loading: { minHeight: 120, justifyContent: 'center', alignItems: 'center' },
   feedback: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
@@ -148,9 +133,9 @@ const styles = StyleSheet.create({
   coachAvatar: { backgroundColor: '#18B7E826' },
   avatarText: { color: palette.deepGreen, fontSize: 18, fontWeight: '800' },
   info: { flex: 1, gap: 3 },
-  name: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
-  email: { color: '#91A098', fontSize: 12 },
-  coach: { color: '#9BFF63', fontSize: 11, fontWeight: '700' },
+  name: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  email: { color: palette.muted, fontSize: 12 },
+  coach: { color: palette.green, fontSize: 11, fontWeight: '700' },
   chip: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: '#FF8A3D26' },
   chipActive: { backgroundColor: '#19D98B26' },
   chipText: { color: palette.orange, fontSize: 10, fontWeight: '800' },

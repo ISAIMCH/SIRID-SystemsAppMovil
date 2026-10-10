@@ -3,9 +3,9 @@ import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useCartStore } from '../../store/cartStore';
 import { api, getApiErrorMessage } from './api';
 import { palette } from './theme';
-import { useCartStore } from '../../store/cartStore';
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 

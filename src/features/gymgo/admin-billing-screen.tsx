@@ -113,7 +113,7 @@ export default function AdminBillingScreen() {
   }
 
   return (
-    <Page>
+    <Page admin>
       <AppHeader title="Cobros en recepción" detail="Valida el PIN que te muestra el cliente." />
 
       <Pressable accessibilityRole="button" onPress={() => router.push('/(main)/plans' as Href)} style={styles.plansLink}>
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   pinHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   pinTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
   searchRow: { flexDirection: 'row', gap: 10 },
-  pinInput: { flex: 1, height: 58, borderRadius: 18, backgroundColor: '#F2F4EE', color: palette.ink, fontSize: 28, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
+  pinInput: { flex: 1, height: 58, borderRadius: 18, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', color: palette.ink, fontSize: 28, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
   searchButton: { width: 58, height: 58, borderRadius: 18, backgroundColor: palette.neon, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.5 },
   result: { gap: 6, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 14 },
