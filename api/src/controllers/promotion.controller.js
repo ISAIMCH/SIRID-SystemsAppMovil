@@ -7,6 +7,7 @@ const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
 const promotionSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).default(''),
+  imageUrl: z.string().trim().default(''),
   discountPercentage: z.coerce.number().min(0).max(100),
   validUntil: z.coerce.date(),
   isActive: z.boolean().default(true),

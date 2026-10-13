@@ -5,6 +5,7 @@ const HttpError = require('../utils/http-error');
 const productSchema = z.object({
   name: z.string().trim().min(1),
   category: z.string().trim().min(1),
+  imageUrl: z.string().trim().default(''),
   price: z.coerce.number().min(0),
   stock: z.coerce.number().int().min(0),
 });
