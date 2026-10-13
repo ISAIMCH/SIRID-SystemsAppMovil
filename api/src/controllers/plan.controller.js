@@ -2,13 +2,45 @@ const { z } = require('zod');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('../utils/http-error');
 
-const planSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  price: z.number().min(0).max(1000000),
-  durationInDays: z.number().int().min(1).max(730),
-  specifications: z.array(z.string().trim().min(1).max(120)).max(15).default([]),
-  isActive: z.boolean().default(true),
+const specificationsSchema = z.union([
+  z.array(z.string().trim().min(1).max(120)).max(15),
+  z.string().transform((value) => value.split('\n').map((item) => item.trim()).filter(Boolean)),
+]);
+
+const planInputSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  nombre: z.string().trim().min(1).max(80).optional(),
+  price: z.coerce.number().min(0).max(1000000).optional(),
+  precio: z.coerce.number().min(0).max(1000000).optional(),
+  durationInDays: z.coerce.number().int().min(1).max(730).optional(),
+  duracion: z.coerce.number().int().min(1).max(730).optional(),
+  specifications: specificationsSchema.optional(),
+  especificaciones: specificationsSchema.optional(),
+  isActive: z.boolean().optional(),
+  tipoCobro: z.string().trim().min(1).max(30).optional(),
 });
+
+function parsePlanInput(body, { partial = false } = {}) {
+  const input = planInputSchema.parse(body);
+  const plan = {
+    ...(input.name !== undefined || input.nombre !== undefined ? { name: input.name ?? input.nombre } : {}),
+    ...(input.price !== undefined || input.precio !== undefined ? { price: input.price ?? input.precio } : {}),
+    ...(input.durationInDays !== undefined || input.duracion !== undefined
+      ? { durationInDays: input.durationInDays ?? input.duracion } : {}),
+    ...(input.specifications !== undefined || input.especificaciones !== undefined
+      ? { specifications: input.specifications ?? input.especificaciones } : {}),
+    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+  };
+
+  if (!partial) {
+    if (plan.name === undefined) throw new HttpError(400, 'El nombre del plan es obligatorio.');
+    if (plan.price === undefined) throw new HttpError(400, 'El precio del plan es obligatorio.');
+    if (plan.durationInDays === undefined) throw new HttpError(400, 'La duración del plan es obligatoria.');
+    if (plan.specifications === undefined) plan.specifications = [];
+    if (plan.isActive === undefined) plan.isActive = true;
+  }
+  return plan;
+}
 
 function assertId(id) {
   if (!/^[a-f\d]{24}$/i.test(id)) throw new HttpError(400, 'ID de plan inválido.');
@@ -21,13 +53,13 @@ async function listPlans(req, res) {
 }
 
 async function createPlan(req, res) {
-  const plan = await MembershipPlan.create(planSchema.parse(req.body));
+  const plan = await MembershipPlan.create(parsePlanInput(req.body));
   res.status(201).json({ plan });
 }
 
 async function updatePlan(req, res) {
   assertId(req.params.id);
-  const input = planSchema.partial().parse(req.body);
+  const input = parsePlanInput(req.body, { partial: true });
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
   const plan = await MembershipPlan.findByIdAndUpdate(req.params.id, input, { new: true, runValidators: true });
   if (!plan) throw new HttpError(404, 'Plan no encontrado.');

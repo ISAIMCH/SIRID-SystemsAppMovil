@@ -251,6 +251,39 @@ async function updateDirectoryUser(req, res) {
   res.json({ user: serializeDirectoryUser(updated) });
 }
 
+async function updateUser(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
+  const input = z.object({
+    firstName: z.string().trim().min(1).max(50).optional(),
+    lastName: z.string().trim().max(50).optional(),
+    email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
+    role: z.enum(['Admin', 'Coach', 'Cliente']).optional(),
+  }).parse(req.body);
+  if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+
+  const user = await User.findById(req.params.id);
+  if (!user) throw new HttpError(404, 'Usuario no encontrado.');
+
+  if (input.email && input.email !== user.email) {
+    if (await User.exists({ email: input.email, _id: { $ne: user._id } })) {
+      throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
+    }
+    user.email = input.email;
+  }
+  if (input.firstName !== undefined || input.lastName !== undefined) {
+    const currentParts = user.name.trim().split(/\s+/);
+    const currentFirstName = currentParts.shift() || '';
+    const currentLastName = currentParts.join(' ');
+    const firstName = input.firstName ?? currentFirstName;
+    const lastName = input.lastName ?? currentLastName;
+    user.name = [firstName, lastName].filter(Boolean).join(' ').slice(0, 100);
+  }
+  if (input.role !== undefined) user.role = input.role;
+  await user.save();
+
+  res.json({ user: user.toSafeJSON() });
+}
+
 async function updateMembership(req, res) {
   const input = z.object({
     status: z.enum(['pending', 'active', 'suspended', 'expired']),
@@ -304,11 +337,24 @@ async function getCurrentUser(req, res) {
 
 async function updatePhysicalProfile(req, res) {
   const input = z.object({
-    weightKg: z.number().min(20).max(400),
-    heightCm: z.number().min(80).max(260),
+    email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
+    phone: z.union([phoneSchema, z.literal('')]).optional(),
+    goal: z.string().trim().max(120).optional(),
+    experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+    weightKg: z.number().min(20).max(400).optional(),
+    heightCm: z.number().min(80).max(260).optional(),
   }).parse(req.body);
 
-  const user = await User.findByIdAndUpdate(req.user.id, { $set: input }, { new: true, runValidators: true });
+  if (input.email && await User.exists({ email: input.email, _id: { $ne: req.user._id } })) {
+    throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
+  }
+
+  const user = await User.findByIdAndUpdate(req.user.id, {
+    $set: {
+      ...input,
+      ...(input.phone !== undefined ? { phone: input.phone || undefined } : {}),
+    },
+  }, { new: true, runValidators: true });
   res.json({ user: user.toSafeJSON() });
 }
 
@@ -319,6 +365,7 @@ module.exports = {
   listDirectoryUsers,
   getDirectoryUser,
   updateDirectoryUser,
+  updateUser,
   updateMembership,
   login,
   getCurrentUser,

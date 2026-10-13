@@ -4,6 +4,7 @@ import { api } from './api';
 import { readAccessToken, removeAccessToken, writeAccessToken } from './token-storage';
 
 export type GymGoRole = 'Admin' | 'Coach' | 'Cliente';
+export type GymGoCoach = { id?: string; name?: string; email?: string };
 
 export type GymGoUser = {
   id: string;
@@ -31,7 +32,7 @@ export type GymGoUser = {
     durationDays?: number;
     autoRenew?: boolean;
   };
-  assignedCoach?: string | null;
+  assignedCoach?: string | GymGoCoach | null;
 };
 
 type AuthContextValue = {
