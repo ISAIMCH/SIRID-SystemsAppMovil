@@ -7,12 +7,30 @@ const equipmentSchema = z.object({
   name: z.string().trim().min(1).max(120),
   zone: z.string().trim().min(1).max(80),
   brand: z.string().trim().max(80).optional(),
+  type: z.enum(['strength', 'cardio']).default('strength'),
+  totalQuantity: z.coerce.number().int().min(1).max(500).default(1),
+  maintenanceQuantity: z.coerce.number().int().min(0).max(500).default(0),
   status: z.enum(['available', 'out_of_service']).default('available'),
   usageFrequency: z.enum(['low', 'medium', 'high']).default('medium'),
 });
 
 function assertId(id) {
   if (!/^[a-f\d]{24}$/i.test(id)) throw new HttpError(400, 'ID de equipo inválido.');
+}
+
+function serializeEquipment(item, activeReportsCount = 0) {
+  return {
+    _id: item._id,
+    name: item.name,
+    zone: item.zone,
+    brand: item.brand,
+    type: item.type,
+    totalQuantity: item.totalQuantity,
+    maintenanceQuantity: item.maintenanceQuantity,
+    status: item.status,
+    usageFrequency: item.usageFrequency,
+    activeReportsCount,
+  };
 }
 
 async function getEquipment(req, res) {
@@ -25,15 +43,14 @@ async function getEquipment(req, res) {
 
   res.json({
     equipment: equipment.map((item) => ({
-      ...item,
-      activeReportsCount: reportCounts.get(item._id.toString()) ?? 0,
+      ...serializeEquipment(item, reportCounts.get(item._id.toString()) ?? 0),
     })),
   });
 }
 
 async function createEquipment(req, res) {
   const equipment = await Equipment.create(equipmentSchema.parse(req.body));
-  res.status(201).json({ equipment });
+  res.status(201).json({ equipment: serializeEquipment(equipment.toObject()) });
 }
 
 async function updateEquipment(req, res) {
@@ -46,7 +63,7 @@ async function updateEquipment(req, res) {
     runValidators: true,
   }).lean();
   if (!equipment) throw new HttpError(404, 'Equipo no encontrado.');
-  res.json({ equipment });
+  res.json({ equipment: serializeEquipment(equipment) });
 }
 
 async function deleteEquipment(req, res) {
