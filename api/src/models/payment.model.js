@@ -7,6 +7,7 @@ const paymentSchema = new mongoose.Schema({
   planName: { type: String, required: true, trim: true, maxlength: 80 },
   amount: { type: Number, required: true, min: 0 },
   paymentMethod: { type: String, enum: ['Cash', 'Card', 'Transfer'] },
+  source: { type: String, enum: ['reception'], index: true },
   paymentDate: { type: Date, default: Date.now },
   currency: { type: String, required: true, uppercase: true, trim: true, maxlength: 3, default: 'MXN' },
   durationDays: { type: Number, required: true, min: 1, max: 730 },
