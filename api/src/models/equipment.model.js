@@ -7,6 +7,7 @@ const equipmentSchema = new mongoose.Schema({
   type: { type: String, enum: ['strength', 'cardio'], default: 'strength', required: true },
   totalQuantity: { type: Number, default: 1, min: 1, max: 500, required: true },
   maintenanceQuantity: { type: Number, default: 0, min: 0, required: true },
+  usageFrequency: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
   // Derivado de las cantidades; se conserva para consultas y rutinas existentes.
   status: { type: String, enum: ['available', 'out_of_service'], default: 'available', index: true },
 }, { timestamps: true });

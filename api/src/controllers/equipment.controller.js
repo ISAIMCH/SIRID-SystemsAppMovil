@@ -1,13 +1,14 @@
 const { z } = require('zod');
-const Equipment = require('../models/managed-equipment.model');
+const Equipment = require('../models/equipment.model');
+const MaintenanceReport = require('../models/maintenance-report.model');
 const HttpError = require('../utils/http-error');
 
 const equipmentSchema = z.object({
-  name: z.string().trim().min(1),
-  type: z.string().trim().min(1),
-  status: z.enum(['operational', 'maintenance', 'broken']).default('operational'),
-  lastMaintenance: z.coerce.date().optional(),
-  nextMaintenance: z.coerce.date().optional(),
+  name: z.string().trim().min(1).max(120),
+  zone: z.string().trim().min(1).max(80),
+  brand: z.string().trim().max(80).optional(),
+  status: z.enum(['available', 'out_of_service']).default('available'),
+  usageFrequency: z.enum(['low', 'medium', 'high']).default('medium'),
 });
 
 function assertId(id) {
@@ -16,7 +17,18 @@ function assertId(id) {
 
 async function getEquipment(req, res) {
   const equipment = await Equipment.find({}).sort({ name: 1 }).lean();
-  res.json({ equipment });
+  const activeReports = await MaintenanceReport.aggregate([
+    { $match: { status: { $in: ['pending', 'in_progress'] } } },
+    { $group: { _id: '$equipment', activeReportsCount: { $sum: 1 } } },
+  ]);
+  const reportCounts = new Map(activeReports.map((item) => [item._id.toString(), item.activeReportsCount]));
+
+  res.json({
+    equipment: equipment.map((item) => ({
+      ...item,
+      activeReportsCount: reportCounts.get(item._id.toString()) ?? 0,
+    })),
+  });
 }
 
 async function createEquipment(req, res) {
