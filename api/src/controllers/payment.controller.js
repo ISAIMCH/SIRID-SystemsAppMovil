@@ -21,6 +21,24 @@ function assertId(id) {
   if (!/^[a-f\d]{24}$/i.test(id)) throw new HttpError(400, 'ID de pago inválido.');
 }
 
+async function activateMembership(session, payment) {
+  const user = await User.findOne({ _id: payment.user ?? payment.userId, role: 'Cliente' }).session(session);
+  if (!user) throw new HttpError(404, 'No se encontró el cliente del pago.');
+
+  const now = new Date();
+  const currentExpiry = user.membership.expiresAt;
+  const isMembershipCurrent = currentExpiry && currentExpiry > now;
+  const periodStartsAt = isMembershipCurrent ? currentExpiry : now;
+  user.membership.status = 'active';
+  if (!isMembershipCurrent) user.membership.startsAt = now;
+  user.membership.expiresAt = new Date(periodStartsAt.getTime() + payment.durationDays * 86400000);
+  user.membership.planName = payment.planName;
+  user.membership.price = payment.amount;
+  user.membership.currency = payment.currency;
+  user.membership.durationDays = payment.durationDays;
+  await user.save({ session });
+}
+
 async function getPayments(req, res) {
   const payments = await Payment.find({})
     .populate('userId', 'name email')
@@ -79,6 +97,38 @@ async function updatePayment(req, res) {
   res.json({ payment });
 }
 
+async function redeemPaymentByPin(req, res) {
+  const { pin } = z.object({ pin: z.string().trim().regex(/^\d{5}$/, 'El PIN debe tener 5 dígitos.') }).parse(req.body);
+  const session = await User.startSession();
+  let paymentId;
+
+  try {
+    await session.withTransaction(async () => {
+      const payment = await Payment.findOne({
+        status: 'pending',
+        $or: [{ pin }, { validationPin: pin }],
+      }).session(session);
+      if (!payment) throw new HttpError(404, 'No hay un pago pendiente con ese PIN.');
+
+      payment.status = 'paid';
+      payment.processedBy = req.user.id;
+      payment.processedAt = new Date();
+      await payment.save({ session });
+      await activateMembership(session, payment);
+      paymentId = payment._id;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const payment = await Payment.findById(paymentId)
+    .populate('userId', 'name email')
+    .populate('planId', 'name')
+    .populate('user', 'name email')
+    .lean();
+  res.json({ payment });
+}
+
 async function deletePayment(req, res) {
   assertId(req.params.id);
   const payment = await Payment.findByIdAndDelete(req.params.id);
@@ -86,4 +136,4 @@ async function deletePayment(req, res) {
   res.status(204).end();
 }
 
-module.exports = { getPayments, createPayment, updatePayment, deletePayment };
+module.exports = { getPayments, createPayment, updatePayment, redeemPaymentByPin, deletePayment };

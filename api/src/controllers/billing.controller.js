@@ -38,9 +38,10 @@ async function getMyBilling(req, res) {
   const user = await User.findById(req.user.id).select('membership');
   const payments = await Payment.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
   for (const payment of payments) {
-    if (payment.status === 'pending' && !payment.validationPin) {
+    if (payment.status === 'pending' && (!payment.validationPin || !payment.pin)) {
       payment.validationPin = await generateUniquePin();
-      await Payment.updateOne({ _id: payment._id }, { $set: { validationPin: payment.validationPin } });
+      payment.pin = payment.validationPin;
+      await Payment.updateOne({ _id: payment._id }, { $set: { validationPin: payment.validationPin, pin: payment.pin } });
     }
   }
   res.json({ membership: user.membership, payments: payments.map((payment) => serializePayment(payment, { includePin: true })) });
@@ -56,6 +57,7 @@ async function requestReceptionPayment(req, res) {
   }
   const existingRequest = await Payment.findOne({ user: user.id, status: 'pending' });
   if (existingRequest) throw new HttpError(409, 'Ya tienes una solicitud de pago pendiente.');
+  const pin = await generateUniquePin();
 
   const payment = await Payment.create({
     user: user.id,
@@ -66,7 +68,8 @@ async function requestReceptionPayment(req, res) {
     method: 'reception',
     status: 'pending',
     reference: `GYM-${randomBytes(5).toString('hex').toUpperCase()}`,
-    validationPin: await generateUniquePin(),
+    pin,
+    validationPin: pin,
   });
 
   res.status(201).json({ payment: serializePayment(payment.toObject(), { includePin: true }) });

@@ -8,6 +8,7 @@ const router = express.Router();
 router.use(authenticate, authorize('Admin'));
 router.get('/', asyncHandler(controller.getPayments));
 router.post('/', asyncHandler(controller.createPayment));
+router.patch('/redeem', asyncHandler(controller.redeemPaymentByPin));
 router.put('/:id', asyncHandler(controller.updatePayment));
 router.delete('/:id', asyncHandler(controller.deletePayment));
 
