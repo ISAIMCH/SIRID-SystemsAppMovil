@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
@@ -8,11 +8,9 @@ import { pickImageAsDataUri } from './pick-image';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
-type Category = 'Suplementos' | 'Ropa' | 'Accesorios';
-type Product = { _id: string; name: string; category: Category; price: number; image: string; stock: number };
+type Product = { _id: string; name: string; category: string; price: number; image: string; stock: number };
 type Promotion = { _id: string; title: string; image: string; active: boolean };
 
-const categories: Category[] = ['Suplementos', 'Ropa', 'Accesorios'];
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
 export default function AdminStoreScreen({ initialTab = 'products', hideTabs = false }: { initialTab?: 'products' | 'promotions'; hideTabs?: boolean }) {
@@ -113,17 +111,22 @@ function ImagePickerField({ value, aspect, onChange, onError }: {
 function ProductsSection({ products, setProducts }: { products: Product[]; setProducts: (updater: (current: Product[]) => Product[]) => void }) {
   const [editing, setEditing] = useState<Product | null>(null);
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<Category>('Suplementos');
+  const [category, setCategory] = useState('');
+  const [customCategory, setCustomCategory] = useState('');
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [price, setPrice] = useState('');
   const [stock, setStock] = useState('');
   const [image, setImage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
+  const categories = [...new Set(products.map((product) => product.category.trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 
   function reset() {
     setEditing(null);
     setName('');
-    setCategory('Suplementos');
+    setCategory('');
+    setCustomCategory('');
+    setIsCustomCategory(false);
     setPrice('');
     setStock('');
     setImage('');
@@ -134,6 +137,8 @@ function ProductsSection({ products, setProducts }: { products: Product[]; setPr
     setEditing(product);
     setName(product.name);
     setCategory(product.category);
+    setCustomCategory(categories.includes(product.category) ? '' : product.category);
+    setIsCustomCategory(!categories.includes(product.category));
     setPrice(String(product.price));
     setStock(String(product.stock));
     setImage(product.image);
@@ -143,13 +148,15 @@ function ProductsSection({ products, setProducts }: { products: Product[]; setPr
   async function save() {
     const priceValue = Number(price.replace(',', '.'));
     const stockValue = Number(stock);
+    const selectedCategory = (isCustomCategory ? customCategory : category).trim();
     if (!name.trim()) return setError('El nombre es obligatorio.');
+    if (!selectedCategory) return setError('Selecciona o escribe una categoría.');
     if (!Number.isFinite(priceValue) || priceValue < 0 || price.trim() === '') return setError('Ingresa un precio válido.');
     if (!Number.isInteger(stockValue) || stockValue < 0 || stock.trim() === '') return setError('Ingresa un stock válido.');
 
     setError('');
     setIsSaving(true);
-    const payload = { name: name.trim(), category, price: priceValue, stock: stockValue, image };
+    const payload = { name: name.trim(), category: selectedCategory, price: priceValue, stock: stockValue, image };
     try {
       if (editing) {
         const response = await api.patch<{ product: Product }>(`/store/products/${editing._id}`, payload);
@@ -186,11 +193,15 @@ function ProductsSection({ products, setProducts }: { products: Product[]; setPr
           <Text style={styles.label}>Categoría</Text>
           <View style={styles.chips}>
             {categories.map((entry) => (
-              <Pressable key={entry} accessibilityRole="button" accessibilityState={{ selected: category === entry }} onPress={() => setCategory(entry)} style={[styles.chip, category === entry && styles.chipSelected]}>
+              <Pressable key={entry} accessibilityRole="button" accessibilityState={{ selected: !isCustomCategory && category === entry }} onPress={() => { setCategory(entry); setCustomCategory(''); setIsCustomCategory(false); }} style={[styles.chip, !isCustomCategory && category === entry && styles.chipSelected]}>
                 <Text style={[styles.chipText, category === entry && styles.chipTextSelected]}>{entry}</Text>
               </Pressable>
             ))}
+            <Pressable accessibilityRole="button" accessibilityState={{ selected: isCustomCategory }} onPress={() => { setIsCustomCategory(true); setCategory(''); }} style={[styles.chip, isCustomCategory && styles.chipSelected]}>
+              <Text style={[styles.chipText, isCustomCategory && styles.chipTextSelected]}>+ Otra</Text>
+            </Pressable>
           </View>
+          {isCustomCategory ? <TextInput autoFocus value={customCategory} onChangeText={setCustomCategory} placeholder="Escribe una categoría" placeholderTextColor={palette.muted} style={styles.customCategoryInput} /> : null}
         </View>
         <View style={styles.row}>
           <View style={styles.flex}><Field label="Precio (MXN)" keyboardType="decimal-pad" value={price} onChangeText={setPrice} /></View>
@@ -322,6 +333,7 @@ const styles = StyleSheet.create({
   chipSelected: { backgroundColor: palette.deepGreen },
   chipText: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   chipTextSelected: { color: palette.white },
+  customCategoryInput: { minHeight: 44, borderRadius: 12, borderWidth: 1, borderColor: '#D4D9CF', paddingHorizontal: 12, color: palette.ink, backgroundColor: '#FAFBF8' },
   imageBox: { width: '100%', borderRadius: 18, overflow: 'hidden', backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
   imageFill: { width: '100%', height: '100%' },
   imageEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },

@@ -10,13 +10,10 @@ import { FloatingCard } from './fit-ui';
 import { palette } from './theme';
 import { Notice, Page } from './ui';
 
-type Category = 'Todos' | 'Suplementos' | 'Ropa' | 'Accesorios';
-type Product = { _id: string; name: string; category: Exclude<Category, 'Todos'>; price: number; image: string; imageUrl?: string; stock: number };
+type Product = { _id: string; name: string; category: string; price: number; image: string; imageUrl?: string; stock: number };
 type Promotion = { _id: string; title: string; image: string };
 
-const categories: Category[] = ['Todos', 'Suplementos', 'Ropa', 'Accesorios'];
-
-const categoryStyle: Record<Product['category'], { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
+const categoryStyle: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
   Suplementos: { icon: 'local-drink', color: palette.neon },
   Ropa: { icon: 'checkroom', color: palette.violet },
   Accesorios: { icon: 'sports-bar', color: palette.orange },
@@ -30,7 +27,7 @@ export default function StoreScreen() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [category, setCategory] = useState<Category>('Todos');
+  const [category, setCategory] = useState('Todos');
   const [isCartVisible, setIsCartVisible] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const cartItems = useCartStore((state) => state.items);
@@ -65,6 +62,7 @@ export default function StoreScreen() {
     }
   }, [cartAnimation, totalItems]);
 
+  const categories = ['Todos', ...new Set(products.map((product) => product.category.trim()).filter(Boolean))];
   const visible = category === 'Todos' ? products : products.filter((product) => product.category === category);
   const bannerWidth = Math.min(width, 760) - 44;
 
@@ -116,7 +114,7 @@ export default function StoreScreen() {
         {visible.map((product) => {
           const isInterested = cartItems.some((item) => item.id === product._id);
           const soldOut = product.stock === 0;
-          const look = categoryStyle[product.category];
+          const look = categoryStyle[product.category] ?? { icon: 'category', color: palette.cyan };
           return (
             <View key={product._id} style={styles.cell}>
               <FloatingCard style={styles.card}>
