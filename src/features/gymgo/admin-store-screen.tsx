@@ -8,7 +8,7 @@ import { pickImageAsDataUri } from './pick-image';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
-type Product = { _id: string; name: string; category: string; price: number; image: string; stock: number };
+type Product = { _id: string; name: string; category: string; price: number; imageUrl?: string; image?: string; stock: number };
 type Promotion = { _id: string; title: string; image: string; active: boolean };
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -141,7 +141,7 @@ function ProductsSection({ products, setProducts }: { products: Product[]; setPr
     setIsCustomCategory(!categories.includes(product.category));
     setPrice(String(product.price));
     setStock(String(product.stock));
-    setImage(product.image);
+    setImage(product.imageUrl ?? product.image ?? '');
     setError('');
   }
 
@@ -156,7 +156,7 @@ function ProductsSection({ products, setProducts }: { products: Product[]; setPr
 
     setError('');
     setIsSaving(true);
-    const payload = { name: name.trim(), category: selectedCategory, price: priceValue, stock: stockValue, image };
+    const payload = { name: name.trim(), category: selectedCategory, price: priceValue, stock: stockValue, imageUrl: image };
     try {
       if (editing) {
         const response = await api.patch<{ product: Product }>(`/store/products/${editing._id}`, payload);
@@ -219,7 +219,7 @@ function ProductsSection({ products, setProducts }: { products: Product[]; setPr
       {products.length === 0 ? <Notice>Aún no hay productos publicados.</Notice> : null}
       {products.map((product) => (
         <FloatingCard key={product._id} style={styles.item}>
-          {product.image ? <Image source={{ uri: product.image }} style={styles.thumb} /> : <IconBadge name="inventory-2" color={palette.violet} size={56} />}
+          {(product.imageUrl ?? product.image) ? <Image source={{ uri: product.imageUrl ?? product.image }} style={styles.thumb} /> : <IconBadge name="inventory-2" color={palette.violet} size={56} />}
           <View style={styles.itemInfo}>
             <Text style={styles.itemName}>{product.name}</Text>
             <Text style={styles.itemMeta}>{product.category} · {currency.format(product.price)}</Text>
