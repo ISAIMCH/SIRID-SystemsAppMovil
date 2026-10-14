@@ -89,6 +89,65 @@ const simpleRoutineSchema = z.object({
 
 const simpleRoutineUpdateSchema = simpleRoutineSchema.partial();
 
+const advancedExerciseInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  muscleGroup: z.string().trim().max(80).optional(),
+  equipment: z.string().trim().max(100).optional(),
+  reps: z.coerce.number().int().min(1).max(1000).optional(),
+  time: z.union([z.string().trim().min(1), z.coerce.number().positive()]).optional(),
+  suggestedWeight: z.string().trim().max(40).optional(),
+  videoUrl: z.string().trim().max(500).optional(),
+});
+
+const advancedBlockInputSchema = z.object({
+  day: z.number().int().min(0).max(6).optional(),
+  order: z.number().int().min(0).optional(),
+  structure: z.enum(['Individual', 'Superset', 'Circuito']),
+  blockSets: z.coerce.number().int().min(1).max(50),
+  restTime: z.coerce.number().int().min(0).max(3600),
+  exercises: z.array(advancedExerciseInputSchema).min(1).max(20),
+});
+
+const advancedRoutineSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(2000).optional(),
+  objective: z.string().trim().max(2000).optional(),
+  durationWeeks: z.coerce.number().int().min(1).max(52).default(4),
+  level: z.enum(['Principiante', 'Intermedio', 'Avanzado', 'principiante', 'intermedio', 'avanzado']),
+  days: z.array(z.string().trim().min(1).max(30)).default([]),
+  type: z.enum(['template', 'custom']).default('template'),
+  assignedTo: z.string().regex(/^[a-f\d]{24}$/i).nullable().optional(),
+  blocks: z.array(advancedBlockInputSchema).min(1).max(100),
+});
+
+const advancedRoutineUpdateSchema = advancedRoutineSchema.partial();
+
+function isAdvancedRoutinePayload(body) {
+  return body.objective !== undefined || body.days !== undefined
+    || (Array.isArray(body.blocks) && body.blocks.some((block) => block.structure !== undefined));
+}
+
+function normalizeAdvancedBlocks(blocks) {
+  const blockTypeByStructure = { Individual: 'single', Superset: 'superset', Circuito: 'circuit' };
+  return blocks.map((block, order) => ({
+    ...block,
+    day: block.day ?? order % 7,
+    order: block.order ?? order,
+    blockType: blockTypeByStructure[block.structure],
+    sets: block.blockSets,
+    restSeconds: block.restTime,
+    exercises: block.exercises.map((exercise, exerciseOrder) => ({
+      ...exercise,
+      muscleGroup: exercise.muscleGroup ?? 'General',
+      metricType: exercise.time !== undefined && exercise.reps === undefined ? 'cardio' : 'strength',
+      reps: exercise.reps === undefined ? undefined : String(exercise.reps),
+      suggestedWeight: exercise.suggestedWeight,
+      targetDurationMinutes: typeof exercise.time === 'number' ? exercise.time : undefined,
+      order: exerciseOrder,
+    })),
+  }));
+}
+
 async function validateSimpleAssignment(assignedTo, req) {
   if (!assignedTo) {
     if (req.body.type === 'custom') throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
@@ -203,7 +262,20 @@ async function listRoutines(req, res) {
 }
 
 async function createRoutine(req, res) {
-  if (req.body.type || req.body.exercises) {
+  if (isAdvancedRoutinePayload(req.body)) {
+    const input = advancedRoutineSchema.parse(req.body);
+    const assignedTo = await validateSimpleAssignment(input.assignedTo, req);
+    const routine = await Routine.create({
+      ...input,
+      objective: input.objective ?? input.description,
+      assignedTo: input.type === 'custom' ? assignedTo : null,
+      blocks: normalizeAdvancedBlocks(input.blocks),
+      createdBy: req.user.id,
+    });
+    return res.status(201).json({ routine: routineResponse(routine) });
+  }
+
+  if (req.body.exercises && !req.body.blocks) {
     const input = simpleRoutineSchema.parse(req.body);
     const assignedTo = await validateSimpleAssignment(input.assignedTo, req);
     const routine = await Routine.create({
@@ -240,6 +312,31 @@ async function getRoutine(req, res) {
 }
 
 async function updateRoutine(req, res) {
+  if (isAdvancedRoutinePayload(req.body)) {
+    const input = advancedRoutineUpdateSchema.parse(req.body);
+    if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+    const routine = await Routine.findById(req.params.id);
+    if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
+    const isAssignedCoach = req.user.role === 'Coach'
+      && String(routine.createdBy) === req.user.id
+      && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
+    if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede modificar esta rutina.');
+
+    const nextType = input.type ?? routine.type;
+    const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
+    if (nextType === 'custom' && !nextAssignedTo) throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
+    if (input.assignedTo) await validateSimpleAssignment(input.assignedTo, req);
+    Object.assign(routine, {
+      ...input,
+      objective: input.objective ?? routine.objective,
+      type: nextType,
+      assignedTo: nextType === 'custom' ? nextAssignedTo : null,
+      ...(input.blocks ? { blocks: normalizeAdvancedBlocks(input.blocks) } : {}),
+    });
+    await routine.save();
+    return res.json({ routine: routineResponse(routine) });
+  }
+
   if (req.body.type || req.body.exercises) {
     const input = simpleRoutineUpdateSchema.parse(req.body);
     if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');

@@ -12,10 +12,12 @@ const simpleExerciseSchema = new mongoose.Schema({
 const routineSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true, maxlength: 120 },
   description: { type: String, trim: true, maxlength: 2000 },
+  objective: { type: String, trim: true, maxlength: 2000 },
   type: { type: String, enum: ['template', 'custom'], required: true, default: 'template', index: true },
+  days: { type: [String], default: undefined },
   exercises: { type: [simpleExerciseSchema], default: undefined },
   goal: { type: String, trim: true, maxlength: 120 },
-  level: { type: String, enum: ['principiante', 'intermedio', 'avanzado'], required: true },
+  level: { type: String, enum: ['Principiante', 'Intermedio', 'Avanzado', 'principiante', 'intermedio', 'avanzado'], required: true },
   durationWeeks: { type: Number, min: 1, max: 52, default: 4 },
   daysPerWeek: { type: Number, required: true, min: 1, max: 7, default: 1 },
   scheduleDays: { type: [{ type: Number, min: 0, max: 6 }], default: [0] },

@@ -9,7 +9,9 @@ const exerciseSchema = new mongoose.Schema({
   bodyweight: { type: Boolean, default: false },
   metricType: { type: String, enum: ['strength', 'cardio'], default: 'strength', required: true },
   reps: { type: String, trim: true, maxlength: 30 },
-  suggestedWeight: { type: Number, min: 0, max: 1000 },
+  time: { type: mongoose.Schema.Types.Mixed },
+  suggestedWeight: { type: mongoose.Schema.Types.Mixed, min: 0, max: 1000 },
+  videoUrl: { type: String, trim: true, maxlength: 500 },
   order: { type: Number, required: true, min: 0 },
   targetDurationMinutes: { type: Number, min: 1, max: 600 },
   targetDistanceKm: { type: Number, min: 0.01, max: 1000 },
@@ -18,6 +20,9 @@ const exerciseSchema = new mongoose.Schema({
 
 const blockSchema = new mongoose.Schema({
   day: { type: Number, required: true, min: 0, max: 6 },
+  structure: { type: String, enum: ['Individual', 'Superset', 'Circuito'] },
+  blockSets: { type: Number, min: 1, max: 50 },
+  restTime: { type: Number, min: 0, max: 3600 },
   blockType: { type: String, enum: ['single', 'superset', 'circuit'], required: true, default: 'single' },
   sets: { type: Number, required: true, min: 1, max: 50 },
   restSeconds: { type: Number, required: true, min: 0, max: 3600, default: 60 },
