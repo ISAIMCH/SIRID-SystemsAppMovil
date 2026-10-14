@@ -9,6 +9,7 @@ router.use(authenticate);
 router.get('/', asyncHandler(controller.listRoutines));
 router.post('/', authorize('Admin', 'Coach'), asyncHandler(controller.createRoutine));
 router.get('/:id', asyncHandler(controller.getRoutine));
+router.put('/:id', authorize('Admin', 'Coach'), asyncHandler(controller.updateRoutine));
 router.patch('/:id', authorize('Admin', 'Coach'), asyncHandler(controller.updateRoutine));
 router.delete('/:id', authorize('Admin', 'Coach'), asyncHandler(controller.deleteRoutine));
 

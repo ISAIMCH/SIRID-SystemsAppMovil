@@ -71,6 +71,37 @@ function scheduleRefinement(routine, context) {
 
 const routineSchema = routineBaseSchema.superRefine(scheduleRefinement);
 
+const simpleExerciseInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  sets: z.coerce.number().int().min(1).max(50),
+  reps: z.coerce.number().int().min(1).max(1000),
+  restTime: z.string().trim().max(40).optional(),
+  notes: z.string().trim().max(1000).optional(),
+});
+
+const simpleRoutineSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(2000).optional(),
+  type: z.enum(['template', 'custom']).default('template'),
+  assignedTo: z.string().regex(/^[a-f\d]{24}$/i).nullable().optional(),
+  exercises: z.array(simpleExerciseInputSchema).min(1).max(100),
+});
+
+const simpleRoutineUpdateSchema = simpleRoutineSchema.partial();
+
+async function validateSimpleAssignment(assignedTo, req) {
+  if (!assignedTo) {
+    if (req.body.type === 'custom') throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
+    return null;
+  }
+  const client = await User.findOne({ _id: assignedTo, role: 'Cliente', isActive: true });
+  if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
+  if (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
+    throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
+  }
+  return client._id;
+}
+
 function normalizeBlocks(source) {
   if (source.blocks?.length) return source.blocks;
   return (source.exercises ?? []).map((exercise, order) => {
@@ -172,6 +203,17 @@ async function listRoutines(req, res) {
 }
 
 async function createRoutine(req, res) {
+  if (req.body.type || req.body.exercises) {
+    const input = simpleRoutineSchema.parse(req.body);
+    const assignedTo = await validateSimpleAssignment(input.assignedTo, req);
+    const routine = await Routine.create({
+      ...input,
+      assignedTo: input.type === 'custom' ? assignedTo : null,
+      createdBy: req.user.id,
+    });
+    return res.status(201).json({ routine: routineResponse(routine) });
+  }
+
   const input = routineSchema.parse(req.body);
   await ensureEligibleBlocks(input.blocks);
   const client = await User.findOne({ _id: input.assignedTo, role: 'Cliente', isActive: true });
@@ -198,6 +240,29 @@ async function getRoutine(req, res) {
 }
 
 async function updateRoutine(req, res) {
+  if (req.body.type || req.body.exercises) {
+    const input = simpleRoutineUpdateSchema.parse(req.body);
+    if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+    const routine = await Routine.findById(req.params.id);
+    if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
+    const isAssignedCoach = req.user.role === 'Coach'
+      && String(routine.createdBy) === req.user.id
+      && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
+    if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede modificar esta rutina.');
+
+    const nextType = input.type ?? routine.type;
+    const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
+    if (nextType === 'custom' && !nextAssignedTo) throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
+    if (input.assignedTo) await validateSimpleAssignment(input.assignedTo, req);
+    Object.assign(routine, {
+      ...input,
+      type: nextType,
+      assignedTo: nextType === 'custom' ? nextAssignedTo : null,
+    });
+    await routine.save();
+    return res.json({ routine: routineResponse(routine) });
+  }
+
   const input = routineBaseSchema.partial().omit({ assignedTo: true }).parse(req.body);
   const routine = await Routine.findById(req.params.id);
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
