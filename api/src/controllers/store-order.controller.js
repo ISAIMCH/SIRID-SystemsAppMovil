@@ -88,6 +88,14 @@ async function getOrders(req, res) {
   res.json({ orders });
 }
 
+async function getMyOrders(req, res) {
+  const orders = await StoreOrder.find({ userId: req.user._id, gymId: getGymId(req) })
+    .populate('items.productId', 'name imageUrl price')
+    .sort({ createdAt: -1 })
+    .lean();
+  res.json({ orders });
+}
+
 async function updateOrderStatus(req, res) {
   assertId(req.params.id);
   const input = z.object({
@@ -119,4 +127,4 @@ async function updateOrderStatus(req, res) {
   }
 }
 
-module.exports = { createOrder, getOrders, updateOrderStatus };
+module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus };

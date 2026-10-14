@@ -7,6 +7,7 @@ import { useCartStore } from '../../store/cartStore';
 import { api, getApiErrorMessage } from './api';
 import CartModal from './cart-modal';
 import { FloatingCard } from './fit-ui';
+import OrdersModal from './orders-modal';
 import { palette } from './theme';
 import { Notice, Page } from './ui';
 
@@ -29,6 +30,7 @@ export default function StoreScreen() {
   const [error, setError] = useState('');
   const [category, setCategory] = useState('Todos');
   const [isCartVisible, setIsCartVisible] = useState(false);
+  const [isOrdersVisible, setIsOrdersVisible] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
   const cartItems = useCartStore((state) => state.items);
   const totalItems = useCartStore((state) => state.getTotalItems());
@@ -74,8 +76,16 @@ export default function StoreScreen() {
   return (
     <Page dark>
       <View style={styles.header}>
-        <Text style={styles.title}>Tienda</Text>
-        <Text style={styles.subtitle}>Marca lo que te interesa y solicítalo en recepción.</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.headerCopy}>
+            <Text style={styles.title}>Tienda</Text>
+            <Text style={styles.subtitle}>Marca lo que te interesa y solicítalo en recepción.</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Abrir mis pedidos" onPress={() => setIsOrdersVisible(true)} style={styles.ordersButton}>
+            <MaterialIcons name="receipt-long" size={20} color={palette.neon} />
+            <Text style={styles.ordersButtonText}>Mis pedidos</Text>
+          </Pressable>
+        </View>
       </View>
 
       {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : null}
@@ -156,14 +166,19 @@ export default function StoreScreen() {
       ) : null}
 
       <CartModal visible={isCartVisible} onClose={() => setIsCartVisible(false)} />
+      <OrdersModal visible={isOrdersVisible} onClose={() => setIsOrdersVisible(false)} />
     </Page>
   );
 }
 
 const styles = StyleSheet.create({
   header: { gap: 4 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  headerCopy: { flex: 1, gap: 4 },
   title: { color: '#F4F8F5', fontSize: 28, fontWeight: '800' },
   subtitle: { color: '#91A098', fontSize: 14 },
+  ordersButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, borderRadius: 14, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#18211D', paddingHorizontal: 10 },
+  ordersButtonText: { color: palette.neon, fontSize: 12, fontWeight: '800' },
   banners: { gap: 12 },
   banner: { aspectRatio: 16 / 9, borderRadius: 24, overflow: 'hidden', backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
   bannerImage: { width: '100%', height: '100%' },
