@@ -114,12 +114,13 @@ export default function StoreScreen() {
         {visible.map((product) => {
           const isInterested = cartItems.some((item) => item.id === product._id);
           const soldOut = product.stock === 0;
+          const imageUrl = typeof product.imageUrl === 'string' ? product.imageUrl.trim() : '';
           const look = categoryStyle[product.category] ?? { icon: 'category', color: palette.cyan };
           return (
             <View key={product._id} style={styles.cell}>
               <FloatingCard style={styles.card}>
-                {product.image ? (
-                  <Image source={{ uri: product.image }} style={styles.image} resizeMode="cover" />
+                {imageUrl ? (
+                  <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
                 ) : (
                   <View style={[styles.image, styles.placeholder, { backgroundColor: `${look.color}26` }]}>
                     <MaterialIcons name={look.icon} size={44} color={look.color} />
@@ -135,7 +136,7 @@ export default function StoreScreen() {
                   style={[styles.button, isInterested && styles.buttonActive, soldOut && styles.buttonDisabled]}>
                   <MaterialIcons name={isInterested ? 'check' : 'favorite-border'} size={16} color={isInterested ? palette.deepGreen : palette.white} />
                   <Text style={[styles.buttonText, isInterested && styles.buttonTextActive]}>
-                    {soldOut ? 'Agotado' : isInterested ? 'En tu lista' : 'Me interesa'}
+                    {soldOut ? 'Agotado' : isInterested ? 'En tu carrito' : 'Agregar al carrito'}
                   </Text>
                 </Pressable>
               </FloatingCard>

@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useCartStore } from '../../store/cartStore';
 import { api, getApiErrorMessage } from './api';
@@ -24,11 +24,12 @@ export default function CartModal({ visible, onClose }: { visible: boolean; onCl
     setIsSubmitting(true);
     try {
       await api.post('/store/orders', {
-        items: items.map(({ id, quantity }) => ({ productId: id, quantity })),
+        items: items.map(({ id, quantity, price }) => ({ productId: id, quantity, price })),
       });
       clearCart();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
+      Alert.alert('Pedido generado', 'Pasa a recepción a pagar y recoger tus productos.');
     } catch (requestError: unknown) {
       setError(getApiErrorMessage(requestError, 'No se pudo generar el pedido.'));
     } finally {
