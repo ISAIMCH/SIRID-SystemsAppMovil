@@ -11,7 +11,6 @@ const equipmentSchema = z.object({
   totalQuantity: z.coerce.number().int().min(1).max(500).default(1),
   maintenanceQuantity: z.coerce.number().int().min(0).max(500).default(0),
   status: z.enum(['available', 'out_of_service']).default('available'),
-  usageFrequency: z.enum(['low', 'medium', 'high']).default('medium'),
 });
 
 function assertId(id) {
