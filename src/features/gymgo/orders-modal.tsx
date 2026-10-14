@@ -16,6 +16,7 @@ type Order = {
   items: OrderItem[];
   totalAmount: number;
   status: 'pending' | 'paid' | 'cancelled';
+  pickupPin?: string;
   createdAt: string;
 };
 
@@ -84,6 +85,7 @@ export default function OrdersModal({ visible, onClose }: { visible: boolean; on
                   <Text style={styles.orderDate}>{new Date(order.createdAt).toLocaleDateString('es-MX')}</Text>
                   <Text style={[styles.status, order.status === 'paid' && styles.paidStatus, order.status === 'cancelled' && styles.cancelledStatus]}>{statusLabels[order.status]}</Text>
                 </View>
+                {order.status === 'pending' && order.pickupPin ? <View style={styles.pin}><Text style={styles.pinLabel}>PIN de entrega</Text><Text style={styles.pinValue}>{order.pickupPin}</Text></View> : null}
                 {order.items.map((item, index) => (
                   <View key={`${order._id}-${index}`} style={styles.item}>
                     {productImage(item) ? <Image source={{ uri: productImage(item) }} style={styles.itemImage} /> : <View style={styles.itemPlaceholder}><MaterialIcons name="shopping-bag" size={18} color={palette.neon} /></View>}
@@ -118,6 +120,9 @@ const styles = StyleSheet.create({
   status: { color: '#F4C66D', fontSize: 12, fontWeight: '800', textAlign: 'right' },
   paidStatus: { color: palette.neon },
   cancelledStatus: { color: '#FF9A88' },
+  pin: { alignItems: 'center', gap: 2, borderRadius: 12, backgroundColor: '#263A2D', paddingVertical: 10 },
+  pinLabel: { color: '#B9D8BC', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
+  pinValue: { color: palette.neon, fontSize: 28, fontWeight: '900', letterSpacing: 5 },
   item: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   itemImage: { width: 38, height: 38, borderRadius: 10 },
   itemPlaceholder: { alignItems: 'center', justifyContent: 'center', width: 38, height: 38, borderRadius: 10, backgroundColor: '#23352A' },

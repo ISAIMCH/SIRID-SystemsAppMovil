@@ -1,3 +1,4 @@
+const { randomInt } = require('node:crypto');
 const mongoose = require('mongoose');
 const { z } = require('zod');
 const StoreOrder = require('../models/store-order.model');
@@ -5,6 +6,7 @@ const Product = require('../models/product.model');
 const HttpError = require('../utils/http-error');
 
 const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
+const PICKUP_PIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 const orderSchema = z.object({
   userId: objectIdSchema.optional(),
@@ -25,6 +27,10 @@ function getGymId(req) {
 
 function assertId(id) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(400, 'ID de pedido inválido.');
+}
+
+function generatePickupPin() {
+  return Array.from({ length: 4 }, () => PICKUP_PIN_ALPHABET[randomInt(PICKUP_PIN_ALPHABET.length)]).join('');
 }
 
 async function deductInventory(session, order) {
@@ -71,6 +77,7 @@ async function createOrder(req, res) {
         status,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
+        pickupPin: generatePickupPin(),
       }], { session });
     });
     res.status(201).json({ order });
@@ -127,4 +134,28 @@ async function updateOrderStatus(req, res) {
   }
 }
 
-module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus };
+async function redeemOrderByPin(req, res) {
+  const { pin } = z.object({ pin: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{4}$/, 'El PIN debe tener 4 caracteres.') }).parse(req.body);
+  const session = await mongoose.startSession();
+  try {
+    let order;
+    await session.withTransaction(async () => {
+      order = await StoreOrder.findOne({ pickupPin: pin, status: 'pending', gymId: getGymId(req) }).session(session);
+      if (!order) throw new HttpError(404, 'No hay un pedido pendiente con ese PIN.');
+      await deductInventory(session, order);
+      order.status = 'paid';
+      order.paymentMethod = order.paymentMethod ?? 'reception';
+      await order.save({ session });
+    });
+
+    const updatedOrder = await StoreOrder.findById(order._id)
+      .populate('userId', 'name email')
+      .populate('items.productId', 'name imageUrl price')
+      .lean();
+    res.json({ order: updatedOrder });
+  } finally {
+    await session.endSession();
+  }
+}
+
+module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus, redeemOrderByPin };

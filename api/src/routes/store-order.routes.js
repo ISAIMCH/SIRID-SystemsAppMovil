@@ -12,6 +12,7 @@ const adminRouter = express.Router();
 adminRouter.use(authenticate, authorize('Admin'));
 adminRouter.get('/', asyncHandler(controller.getOrders));
 adminRouter.post('/', asyncHandler(controller.createOrder));
+adminRouter.patch('/redeem', asyncHandler(controller.redeemOrderByPin));
 adminRouter.patch('/:id', asyncHandler(controller.updateOrderStatus));
 adminRouter.put('/:id', asyncHandler(controller.updateOrderStatus));
 adminRouter.put('/:id/status', asyncHandler(controller.updateOrderStatus));

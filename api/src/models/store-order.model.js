@@ -14,6 +14,7 @@ const storeOrderSchema = new mongoose.Schema({
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending', index: true },
   paymentMethod: { type: String, trim: true, maxlength: 40 },
   reference: { type: String, trim: true, maxlength: 120 },
+  pickupPin: { type: String, trim: true, uppercase: true, minlength: 4, maxlength: 4, index: true },
 }, { timestamps: true });
 
 storeOrderSchema.index({ gymId: 1, createdAt: -1 });
