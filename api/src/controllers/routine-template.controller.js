@@ -105,7 +105,8 @@ async function assignTemplate(req, res) {
   const template = await findOwnedTemplate(req);
   const client = await User.findOne({ _id: clientId, role: 'Cliente', isActive: true });
   if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
-  if (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
+  const isAdmin = req.user.role === 'Admin';
+  if (!isAdmin && req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
     throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
   }
 
