@@ -24,6 +24,7 @@ const registrationSchema = credentialsSchema.extend({
   availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
     .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
     .optional(),
+  observations: z.string().trim().max(4000).optional(),
   preferredTrainingTime: z.string().trim().max(80).optional(),
   restrictions: z.string().trim().max(1000).optional(),
   preferredZones: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
@@ -108,7 +109,7 @@ async function createManagedUser(req, res) {
     membershipPlanName: z.string().trim().min(1).max(80).optional(),
     membershipPrice: z.coerce.number().min(0).max(1000000).optional(),
     membershipDurationDays: z.coerce.number().int().min(1).max(730).default(30),
-    assignedCoach: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+    assignedCoach: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || null).optional(),
   }).superRefine((data, context) => {
     if (data.membershipStatus === 'active' && !data.membershipExpiresAt) {
       context.addIssue({ code: 'custom', path: ['membershipExpiresAt'], message: 'La membresía activa requiere vencimiento.' });
@@ -217,7 +218,15 @@ async function updateDirectoryUser(req, res) {
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     phone: z.union([phoneSchema, z.literal('')]).optional(),
     address: z.string().trim().max(200).optional(),
-    assignedCoach: z.string().regex(/^[a-f\d]{24}$/i).nullable().optional(),
+    goal: z.string().trim().max(120).optional(),
+    experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+    availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
+      .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
+      .optional(),
+    assignedCoach: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal(''), z.null()])
+      .transform((value) => value || null)
+      .optional(),
+    observations: z.string().trim().max(4000).optional(),
   }).parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
@@ -232,6 +241,10 @@ async function updateDirectoryUser(req, res) {
   }
   if (input.name) user.name = input.name;
   if (input.phone !== undefined) user.phone = input.phone || undefined;
+  if (input.goal !== undefined) user.goal = input.goal;
+  if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
+  if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
+  if (input.observations !== undefined) user.observations = input.observations;
   if (input.address !== undefined) {
     if (user.role !== 'Coach') throw new HttpError(400, 'La dirección solo aplica a Coaches.');
     user.address = input.address || undefined;
@@ -247,7 +260,7 @@ async function updateDirectoryUser(req, res) {
   await user.save();
 
   const updated = await User.findById(user._id)
-    .select('name email phone address role isActive goal experienceLevel membership assignedCoach')
+    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
   res.json({ user: serializeDirectoryUser(updated) });
@@ -260,6 +273,16 @@ async function updateUser(req, res) {
     lastName: z.string().trim().max(50).optional(),
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     role: z.enum(['Admin', 'Coach', 'Cliente']).optional(),
+    phone: z.union([phoneSchema, z.literal('')]).optional(),
+    goal: z.string().trim().max(120).optional(),
+    experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+    availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
+      .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
+      .optional(),
+    assignedCoach: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal(''), z.null()])
+      .transform((value) => value || null)
+      .optional(),
+    observations: z.string().trim().max(4000).optional(),
   }).parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
@@ -281,6 +304,12 @@ async function updateUser(req, res) {
     user.name = [firstName, lastName].filter(Boolean).join(' ').slice(0, 100);
   }
   if (input.role !== undefined) user.role = input.role;
+  if (input.phone !== undefined) user.phone = input.phone || undefined;
+  if (input.goal !== undefined) user.goal = input.goal;
+  if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
+  if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
+  if (input.assignedCoach !== undefined) user.assignedCoach = input.assignedCoach;
+  if (input.observations !== undefined) user.observations = input.observations;
   await user.save();
 
   res.json({ user: user.toSafeJSON() });
