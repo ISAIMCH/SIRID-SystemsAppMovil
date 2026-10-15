@@ -7,7 +7,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.get('/', asyncHandler(controller.listEquipment));
-router.post('/', authorize('Admin'), asyncHandler(controller.createEquipment));
-router.patch('/:id', authorize('Admin'), asyncHandler(controller.updateEquipment));
+router.post('/', authorize('Admin', 'Coach'), asyncHandler(controller.createEquipment));
+router.patch('/:id', authorize('Admin', 'Coach'), asyncHandler(controller.updateEquipment));
 
 module.exports = router;

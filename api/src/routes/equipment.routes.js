@@ -5,7 +5,7 @@ const controller = require('../controllers/equipment.controller');
 
 const router = express.Router();
 
-router.use(authenticate, authorize('Admin'));
+router.use(authenticate, authorize('Admin', 'Coach'));
 router.get('/', asyncHandler(controller.getEquipment));
 router.post('/', asyncHandler(controller.createEquipment));
 router.put('/:id', asyncHandler(controller.updateEquipment));

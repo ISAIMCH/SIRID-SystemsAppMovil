@@ -1,10 +1,11 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { FloatingCard, IconBadge } from './fit-ui';
+import { pickImageAsDataUri } from './pick-image';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
@@ -14,6 +15,7 @@ type Equipment = {
   name: string;
   zone: string;
   brand?: string;
+  imageUrl?: string;
   type: EquipmentType;
   totalQuantity: number;
   maintenanceQuantity: number;
@@ -34,6 +36,7 @@ function isOperational(item: Pick<Equipment, 'totalQuantity' | 'maintenanceQuant
 export default function InventoryScreen() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
+  const canManageEquipment = isAdmin || user?.role === 'Coach';
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -98,7 +101,7 @@ export default function InventoryScreen() {
     <Page admin>
       <AppHeader
         title="Inventario / Equipos"
-        detail={isAdmin ? 'Administra el catálogo y las unidades disponibles.' : 'Consulta equipos y su disponibilidad.'}
+        detail={canManageEquipment ? 'Administra el catálogo y las unidades disponibles.' : 'Consulta equipos y su disponibilidad.'}
       />
 
       {loadError ? (
@@ -108,7 +111,7 @@ export default function InventoryScreen() {
         </View>
       ) : null}
 
-      {isAdmin ? (
+      {canManageEquipment ? (
         <FloatingCard style={styles.panel}>
           <SectionTitle>Agregar equipo</SectionTitle>
           <EquipmentForm
@@ -135,7 +138,7 @@ export default function InventoryScreen() {
         return (
           <FloatingCard key={item._id} style={styles.card}>
             <View style={styles.cardHeader}>
-              <IconBadge name={typeInfo.icon} color={item.type === 'cardio' ? palette.cyan : palette.violet} />
+              {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.equipmentThumb} /> : <IconBadge name={typeInfo.icon} color={item.type === 'cardio' ? palette.cyan : palette.violet} />}
               <View style={styles.cardTitle}>
                 <Text style={styles.name}>{item.name}</Text>
                 <Text style={styles.sub}>{item.zone}{item.brand ? ` · ${item.brand}` : ''} · {typeInfo.label}</Text>
@@ -148,7 +151,7 @@ export default function InventoryScreen() {
             </View>
             <Text style={styles.availability}>{available} de {item.totalQuantity} unidades disponibles</Text>
 
-            {isAdmin ? (
+            {canManageEquipment ? (
               <>
                 <View style={styles.stepperRow}>
                   <Stepper
@@ -233,6 +236,7 @@ function EquipmentForm({ zones, initial, submitLabel, resetOnSubmit = false, onS
   const [newZone, setNewZone] = useState('');
   const [isZoneOpen, setIsZoneOpen] = useState(false);
   const [brand, setBrand] = useState(initial?.brand ?? '');
+  const [imageUrl, setImageUrl] = useState(initial?.imageUrl ?? '');
   const [type, setType] = useState<EquipmentType>(initial?.type ?? 'strength');
   const [total, setTotal] = useState(String(initial?.totalQuantity ?? 1));
   const [maintenance, setMaintenance] = useState(String(initial?.maintenanceQuantity ?? 0));
@@ -253,12 +257,13 @@ function EquipmentForm({ zones, initial, submitLabel, resetOnSubmit = false, onS
     setError('');
     setIsSaving(true);
     try {
-      await onSubmit({ name: name.trim(), zone, brand: brand.trim() || undefined, type, totalQuantity, maintenanceQuantity });
+      await onSubmit({ name: name.trim(), zone, brand: brand.trim() || undefined, imageUrl: imageUrl || undefined, type, totalQuantity, maintenanceQuantity });
       if (resetOnSubmit) {
         setName('');
         setZoneChoice('');
         setNewZone('');
         setBrand('');
+        setImageUrl('');
         setType('strength');
         setTotal('1');
         setMaintenance('0');
@@ -298,6 +303,7 @@ function EquipmentForm({ zones, initial, submitLabel, resetOnSubmit = false, onS
       </View>
 
       <Field label="Marca (opcional)" value={brand} onChangeText={setBrand} />
+      <EquipmentImageField value={imageUrl} onChange={setImageUrl} onError={setError} />
 
       <View style={styles.group}>
         <Text style={styles.label}>Tipo de máquina</Text>
@@ -334,12 +340,39 @@ function EquipmentForm({ zones, initial, submitLabel, resetOnSubmit = false, onS
   );
 }
 
+function EquipmentImageField({ value, onChange, onError }: { value: string; onChange: (value: string) => void; onError: (message: string) => void }) {
+  async function choose() {
+    try {
+      const image = await pickImageAsDataUri([4, 3]);
+      if (image) onChange(image);
+    } catch (pickError) {
+      onError(pickError instanceof Error ? pickError.message : 'No se pudo abrir la galería.');
+    }
+  }
+
+  return (
+    <View style={styles.imageGroup}>
+      <Text style={styles.label}>Imagen del equipo</Text>
+      <Pressable accessibilityRole="button" onPress={() => void choose()} style={styles.imageBox}>
+        {value ? <Image source={{ uri: value }} style={styles.imageFill} resizeMode="cover" /> : (
+          <View style={styles.imageEmpty}>
+            <MaterialIcons name="add-photo-alternate" size={32} color={palette.muted} />
+            <Text style={styles.imageHint}>Subir imagen del aparato</Text>
+          </View>
+        )}
+      </Pressable>
+      {value ? <Pressable accessibilityRole="button" onPress={() => onChange('')}><Text style={styles.removeImage}>Quitar imagen</Text></Pressable> : null}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   panel: { gap: 14 },
   feedback: { gap: 10 },
   loading: { minHeight: 100, justifyContent: 'center', alignItems: 'center' },
   card: { gap: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  equipmentThumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#F2F4EE' },
   cardTitle: { flex: 1, gap: 3 },
   name: { color: palette.ink, fontSize: 16, fontWeight: '800' },
   sub: { color: palette.muted, fontSize: 12 },
@@ -373,4 +406,10 @@ const styles = StyleSheet.create({
   chipTextSelected: { color: palette.white },
   quantityRow: { flexDirection: 'row', gap: 12 },
   quantityField: { flex: 1 },
+  imageGroup: { gap: 8 },
+  imageBox: { width: '100%', height: 150, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.7)' },
+  imageFill: { width: '100%', height: '100%' },
+  imageEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  imageHint: { color: palette.muted, fontSize: 13 },
+  removeImage: { color: palette.danger, fontSize: 13, fontWeight: '700' },
 });

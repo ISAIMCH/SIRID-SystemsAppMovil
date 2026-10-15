@@ -40,6 +40,7 @@ app.use(cors({
   },
 }));
 app.use('/api/store', express.json({ limit: '6mb' }));
+app.use('/api/inventory', express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '1mb' }));
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));

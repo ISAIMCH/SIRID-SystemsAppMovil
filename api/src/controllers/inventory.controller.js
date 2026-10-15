@@ -2,10 +2,12 @@ const { z } = require('zod');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
 
+const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const equipmentSchema = z.object({
   name: z.string().trim().min(1).max(120),
   zone: z.string().trim().min(1).max(80),
   brand: z.string().trim().max(80).optional(),
+  imageUrl: z.string().trim().max(MAX_IMAGE_LENGTH).default(''),
   type: z.enum(['strength', 'cardio']),
   totalQuantity: z.number().int().min(1).max(500),
   maintenanceQuantity: z.number().int().min(0).max(500),
@@ -21,6 +23,7 @@ function serializeEquipment(item) {
     name: item.name,
     zone: item.zone,
     brand: item.brand,
+    imageUrl: item.imageUrl ?? '',
     type: item.type ?? (/^cardio$/i.test(item.zone) ? 'cardio' : 'strength'),
     totalQuantity,
     maintenanceQuantity,

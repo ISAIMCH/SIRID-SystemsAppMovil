@@ -3,10 +3,12 @@ const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const HttpError = require('../utils/http-error');
 
+const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const equipmentSchema = z.object({
   name: z.string().trim().min(1).max(120),
   zone: z.string().trim().min(1).max(80),
   brand: z.string().trim().max(80).optional(),
+  imageUrl: z.string().trim().max(MAX_IMAGE_LENGTH).default(''),
   type: z.enum(['strength', 'cardio']).default('strength'),
   totalQuantity: z.coerce.number().int().min(1).max(500).default(1),
   maintenanceQuantity: z.coerce.number().int().min(0).max(500).default(0),
@@ -23,6 +25,7 @@ function serializeEquipment(item, activeReportsCount = 0) {
     name: item.name,
     zone: item.zone,
     brand: item.brand,
+    imageUrl: item.imageUrl,
     type: item.type,
     totalQuantity: item.totalQuantity,
     maintenanceQuantity: item.maintenanceQuantity,
