@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
@@ -94,6 +94,10 @@ function RoutineForm() {
   const [durationWeeks, setDurationWeeks] = useState('4');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [assignedTo, setAssignedTo] = useState(params.clientId ?? '');
+  const [isClientFileOpen, setIsClientFileOpen] = useState(false);
+  const [clientObservations, setClientObservations] = useState('');
+  const [isSavingObservations, setIsSavingObservations] = useState(false);
+  const [observationsError, setObservationsError] = useState('');
   const [blocks, setBlocks] = useState<DraftBlock[]>([]);
 
   const [blockType, setBlockType] = useState<BlockType>('single');
@@ -162,6 +166,29 @@ function RoutineForm() {
     ? 'strength'
     : selectedEquipment?.type ?? (equipmentChoice.startsWith('catalog:') ? selectedDictionaryExercise?.metricType : undefined) ?? 'strength';
   const maxBlockExercises = blockType === 'single' ? 1 : 20;
+  const selectedClient = clients.find((client) => client.id === assignedTo);
+
+  function openClientFile() {
+    if (!selectedClient) return;
+    setClientObservations(selectedClient.observations ?? '');
+    setObservationsError('');
+    setIsClientFileOpen(true);
+  }
+
+  async function saveClientObservations() {
+    if (!selectedClient) return;
+    setObservationsError('');
+    setIsSavingObservations(true);
+    try {
+      const response = await api.patch<{ user: DirectoryClient }>(`/users/${selectedClient.id}/observations`, { observations: clientObservations.trim() });
+      setClients((current) => current.map((client) => client.id === response.data.user.id ? { ...client, observations: response.data.user.observations } : client));
+      setIsClientFileOpen(false);
+    } catch (requestError) {
+      setObservationsError(getApiErrorMessage(requestError, 'No se pudieron guardar las observaciones.'));
+    } finally {
+      setIsSavingObservations(false);
+    }
+  }
 
   async function selectDictionaryExercise(exercise: ExerciseDictionaryEntry) {
     setSelectedDictionaryExercise(exercise);
@@ -222,7 +249,7 @@ function RoutineForm() {
       }
       exercise = {
         name: exerciseName.trim(), muscleGroup, equipment: selectedEquipment?.name ?? selectedDictionaryExercise?.equipment,
-        metricType: 'cardio', gifUrl: selectedDictionaryExercise?.gifUrl, order: draftExercises.length,
+        metricType: 'cardio', gifUrl: selectedDictionaryExercise?.gifUrl, videoUrl: selectedDictionaryExercise?.gifUrl, order: draftExercises.length,
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
         ...(duration ? { targetDurationMinutes: duration } : {}),
         ...(distance ? { targetDistanceKm: distance } : {}),
@@ -235,7 +262,7 @@ function RoutineForm() {
       exercise = {
         name: exerciseName.trim(), muscleGroup,
         equipment: selectedEquipment?.name ?? (equipmentChoice === BODYWEIGHT ? 'Peso corporal / libre' : selectedDictionaryExercise?.equipment),
-        metricType: 'strength', gifUrl: selectedDictionaryExercise?.gifUrl, reps: reps.trim(), order: draftExercises.length,
+        metricType: 'strength', gifUrl: selectedDictionaryExercise?.gifUrl, videoUrl: selectedDictionaryExercise?.gifUrl, reps: reps.trim(), order: draftExercises.length,
         bodyweight: equipmentChoice === BODYWEIGHT || selectedDictionaryExercise?.equipment.toLowerCase().includes('body weight') === true,
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
         ...(weight !== undefined ? { suggestedWeight: weight } : {}),
@@ -364,9 +391,63 @@ function RoutineForm() {
           <View style={styles.chips}>{weekDays.map((day) => <Choice key={day.value} label={day.label} selected={selectedDays.includes(day.value)} onPress={() => toggleDay(day.value)} />)}</View>
         </View>
         {!isTemplate && !isEditing ? (
-          <SelectField filterable label="Asignar a cliente" placeholder="Selecciona un cliente" emptyText="No tienes clientes asignados." options={clients.map((client) => ({ value: client.id, label: `${client.name} - ${client.email}` }))} value={assignedTo} onChange={setAssignedTo} />
+          <View style={styles.clientAssignment}>
+            <View style={styles.clientSelect}>
+              <SelectField filterable label="Asignar a cliente" placeholder="Selecciona un cliente" emptyText="No tienes clientes asignados." options={clients.map((client) => ({ value: client.id, label: `${client.name} - ${client.email}` }))} value={assignedTo} onChange={(value) => { setAssignedTo(value); setClientObservations(clients.find((client) => client.id === value)?.observations ?? ''); }} />
+            </View>
+            {selectedClient ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Ver ficha del cliente" onPress={openClientFile} style={styles.clientFileButton}>
+                <MaterialIcons name="assignment" size={19} color={palette.deepGreen} />
+                <Text style={styles.clientFileButtonText}>Ver ficha</Text>
+              </Pressable>
+            ) : null}
+          </View>
         ) : null}
       </FloatingCard>
+
+      <Modal visible={isClientFileOpen} transparent animationType="slide" onRequestClose={() => setIsClientFileOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.flex}>
+                <Text style={styles.modalTitle}>Ficha del cliente</Text>
+                <Text style={styles.modalSubtitle}>{selectedClient?.name}</Text>
+              </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cerrar ficha del cliente" onPress={() => setIsClientFileOpen(false)} hitSlop={10}>
+                <MaterialIcons name="close" size={24} color={palette.ink} />
+              </Pressable>
+            </View>
+            <View style={styles.modalStats}>
+              <View style={styles.modalStat}>
+                <Text style={styles.modalLabel}>Nivel de experiencia</Text>
+                <Text style={styles.modalValue}>{selectedClient?.experienceLevel ? `${selectedClient.experienceLevel[0].toUpperCase()}${selectedClient.experienceLevel.slice(1)}` : 'No definido'}</Text>
+              </View>
+              <View style={styles.modalStat}>
+                <Text style={styles.modalLabel}>Objetivo deportivo</Text>
+                <Text style={styles.modalValue}>{selectedClient?.goal || 'No definido'}</Text>
+              </View>
+              <View style={styles.modalStat}>
+                <Text style={styles.modalLabel}>Días disponibles</Text>
+                <Text style={styles.modalValue}>{selectedClient?.availableTrainingDays?.map((day) => weekDayNames[day]).filter(Boolean).join(', ') || 'No definidos'}</Text>
+              </View>
+            </View>
+            <Text style={styles.modalLabel}>Observaciones médicas y técnicas</Text>
+            <TextInput
+              multiline
+              value={clientObservations}
+              onChangeText={setClientObservations}
+              placeholder="Lesiones, limitaciones, precauciones o notas relevantes..."
+              placeholderTextColor={palette.muted}
+              style={styles.observationsInput}
+              textAlignVertical="top"
+            />
+            {observationsError ? <Notice error>{observationsError}</Notice> : null}
+            <ActionButton onPress={() => void saveClientObservations()} disabled={isSavingObservations}>
+              {isSavingObservations ? <ActivityIndicator color={palette.white} /> : 'Guardar observaciones'}
+            </ActionButton>
+          </View>
+        </View>
+      </Modal>
 
       <FloatingCard style={styles.section}>
         <SectionTitle>Nuevo bloque</SectionTitle>
@@ -390,15 +471,16 @@ function RoutineForm() {
 
         <View style={styles.rule} />
         <SectionTitle>Ejercicio {draftExercises.length + 1}{blockType === 'single' ? '' : ` de ${maxBlockExercises}`}</SectionTitle>
+        <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={muscleGroups.map((name) => ({ value: name, label: name }))} value={muscleGroup} onChange={(value) => { setMuscleGroup(value); setExerciseName(''); setSelectedDictionaryExercise(null); setEquipmentChoice(''); }} addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }} />
         <ExerciseSearch
           value={exerciseName}
+          muscleGroup={muscleGroup}
           onChangeText={(value) => {
             setExerciseName(value);
             setSelectedDictionaryExercise(null);
           }}
           onSelect={selectDictionaryExercise}
         />
-        <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={muscleGroups.map((name) => ({ value: name, label: name }))} value={muscleGroup} onChange={setMuscleGroup} addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }} />
         {isAddingGroup ? (
           <View style={styles.group}>
             <Field label="Nuevo grupo muscular" placeholder="Antebrazo" value={newGroup} onChangeText={setNewGroup} />
@@ -495,6 +577,10 @@ const styles = StyleSheet.create({
   section: { gap: 15, padding: 20 },
   group: { gap: 8 },
   row: { flexDirection: 'row', gap: 12 },
+  clientAssignment: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
+  clientSelect: { flex: 1 },
+  clientFileButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: palette.neon, paddingHorizontal: 12 },
+  clientFileButtonText: { color: palette.deepGreen, fontSize: 12, fontWeight: '800' },
   label: { color: '#F2F4EE', fontSize: 13, fontWeight: '700' },
   helper: { color: '#91A098', fontSize: 12, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -516,4 +602,14 @@ const styles = StyleSheet.create({
   exerciseMeta: { color: '#91A098', fontSize: 12, lineHeight: 17 },
   weightControls: { flexDirection: 'row', gap: 6 },
   step: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', alignItems: 'center', justifyContent: 'center' },
+  modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.58)' },
+  modalCard: { gap: 14, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#F2F4EE', padding: 20, paddingBottom: 28 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  modalTitle: { color: palette.ink, fontSize: 22, fontWeight: '800' },
+  modalSubtitle: { color: palette.muted, fontSize: 13, marginTop: 3 },
+  modalStats: { gap: 10 },
+  modalStat: { borderRadius: 14, backgroundColor: palette.white, padding: 12, gap: 4 },
+  modalLabel: { color: palette.muted, fontSize: 12, fontWeight: '700' },
+  modalValue: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  observationsInput: { minHeight: 140, borderRadius: 16, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.white, color: palette.ink, padding: 14, fontSize: 15, lineHeight: 21 },
 });

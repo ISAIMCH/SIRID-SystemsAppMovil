@@ -11,6 +11,7 @@ export type Exercise = {
   };
   equipment?: string;
   gifUrl?: string;
+  videoUrl?: string;
   bodyweight?: boolean;
   metricType?: 'strength' | 'cardio';
   day?: number;

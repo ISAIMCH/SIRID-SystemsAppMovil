@@ -1,13 +1,14 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { api } from './api';
 import { palette } from './theme';
 import type { ExerciseDictionaryEntry } from './types';
 
-export function ExerciseSearch({ value, onChangeText, onSelect }: {
+export function ExerciseSearch({ value, muscleGroup, onChangeText, onSelect }: {
   value: string;
+  muscleGroup: string;
   onChangeText: (value: string) => void;
   onSelect: (exercise: ExerciseDictionaryEntry) => void;
 }) {
@@ -15,10 +16,12 @@ export function ExerciseSearch({ value, onChangeText, onSelect }: {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedName, setSelectedName] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
     const query = value.trim();
-    if (query.length < 2 || selectedName === query) {
+    const group = muscleGroup.trim();
+    if (!group || (query.length > 0 && selectedName === query)) {
       return undefined;
     }
 
@@ -27,7 +30,7 @@ export function ExerciseSearch({ value, onChangeText, onSelect }: {
       setIsLoading(true);
       setError('');
       api.get<{ exercises: ExerciseDictionaryEntry[] }>('/dictionary/search', {
-        params: { q: query },
+        params: { q: query.length >= 2 ? query : undefined, muscleGroup: group },
         signal: controller.signal,
       })
         .then((response) => setResults(response.data.exercises))
@@ -44,7 +47,7 @@ export function ExerciseSearch({ value, onChangeText, onSelect }: {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [value, selectedName]);
+  }, [muscleGroup, value, selectedName]);
 
   function changeValue(text: string) {
     setSelectedName('');
@@ -58,7 +61,7 @@ export function ExerciseSearch({ value, onChangeText, onSelect }: {
     onSelect(exercise);
   }
 
-  const activeQuery = value.trim().length >= 2 && selectedName !== value.trim();
+  const activeQuery = muscleGroup.trim().length > 0 && selectedName !== value.trim();
 
   return (
     <View style={styles.wrapper}>
@@ -74,24 +77,28 @@ export function ExerciseSearch({ value, onChangeText, onSelect }: {
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
+          onFocus={() => setIsFocused(true)}
         />
         {activeQuery && isLoading ? <ActivityIndicator size="small" color={palette.green} /> : null}
       </View>
       {activeQuery && error ? <Text style={styles.error}>{error}</Text> : null}
       {activeQuery && results.length ? (
         <View style={styles.dropdown}>
-          {results.map((exercise) => (
-            <Pressable key={exercise._id} accessibilityRole="button" onPress={() => select(exercise)} style={styles.result}>
-              <View style={styles.resultIcon}><MaterialIcons name="fitness-center" size={18} color={palette.green} /></View>
-              <View style={styles.resultText}>
-                <Text numberOfLines={1} style={styles.resultName}>{exercise.name}</Text>
-                <Text numberOfLines={1} style={styles.resultMeta}>{exercise.targetMuscle} · {exercise.equipment}</Text>
-              </View>
-              <MaterialIcons name="north-west" size={17} color={palette.muted} />
-            </Pressable>
-          ))}
+          <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={styles.resultList}>
+            {results.map((exercise) => (
+              <Pressable key={exercise._id} accessibilityRole="button" onPress={() => select(exercise)} style={styles.result}>
+                <View style={styles.resultIcon}><MaterialIcons name="fitness-center" size={18} color={palette.green} /></View>
+                <View style={styles.resultText}>
+                  <Text numberOfLines={1} style={styles.resultName}>{exercise.name}</Text>
+                  <Text numberOfLines={1} style={styles.resultMeta}>{exercise.targetMuscle} · {exercise.equipment}</Text>
+                </View>
+                <MaterialIcons name="north-west" size={17} color={palette.muted} />
+              </Pressable>
+            ))}
+          </ScrollView>
         </View>
       ) : null}
+      {isFocused && !muscleGroup.trim() ? <Text style={styles.hint}>Selecciona un grupo muscular para ver sus ejercicios.</Text> : null}
     </View>
   );
 }
@@ -101,7 +108,9 @@ const styles = StyleSheet.create({
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   inputWrap: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: palette.line, borderRadius: 16, backgroundColor: '#F2F4EE', paddingHorizontal: 14 },
   input: { flex: 1, minWidth: 0, height: 50, color: palette.ink, fontSize: 15 },
+  hint: { color: palette.muted, fontSize: 12 },
   dropdown: { position: 'absolute', top: 78, left: 0, right: 0, zIndex: 50, elevation: 8, borderRadius: 16, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line, overflow: 'hidden', shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.14, shadowRadius: 12 },
+  resultList: { maxHeight: 320 },
   result: { minHeight: 58, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: palette.line },
   resultIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#19D98B26', alignItems: 'center', justifyContent: 'center' },
   resultText: { flex: 1, gap: 3 },

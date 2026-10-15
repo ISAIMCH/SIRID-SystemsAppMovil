@@ -6,14 +6,19 @@ function escapeRegex(value) {
 }
 
 async function searchExercises(req, res) {
-  const { q } = z.object({ q: z.string().trim().max(80).default('') }).parse(req.query);
-  if (q.length < 2) return res.json({ exercises: [] });
+  const { q, muscleGroup } = z.object({
+    q: z.string().trim().max(80).default(''),
+    muscleGroup: z.string().trim().max(100).default(''),
+  }).parse(req.query);
+  if (q.length < 2 && !muscleGroup) return res.json({ exercises: [] });
 
-  const expression = new RegExp(escapeRegex(q), 'i');
-  const exercises = await ExerciseDictionary.find({ name: expression })
+  const query = {};
+  if (q.length >= 2) query.name = new RegExp(escapeRegex(q), 'i');
+  if (muscleGroup) query.targetMuscle = new RegExp(`^${escapeRegex(muscleGroup)}$`, 'i');
+  const exercises = await ExerciseDictionary.find(query)
     .select('name targetMuscle equipment gifUrl metricType')
     .sort({ name: 1 })
-    .limit(15)
+    .limit(50)
     .lean();
   res.json({ exercises });
 }

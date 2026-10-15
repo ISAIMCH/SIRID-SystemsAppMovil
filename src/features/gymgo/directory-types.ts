@@ -14,6 +14,8 @@ export type DirectoryClient = {
   isActive: boolean;
   goal?: string;
   experienceLevel?: 'principiante' | 'intermedio' | 'avanzado';
+  availableTrainingDays?: number[];
+  observations?: string;
   membership?: {
     status: 'pending' | 'active' | 'suspended' | 'expired';
     startsAt?: string;

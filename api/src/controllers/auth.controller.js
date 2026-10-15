@@ -169,6 +169,8 @@ function serializeDirectoryUser(user) {
     isActive: user.isActive,
     goal: user.goal,
     experienceLevel: user.experienceLevel,
+    availableTrainingDays: user.availableTrainingDays,
+    observations: user.observations,
     membership: user.membership,
     assignedCoach: coach ? {
       id: String(coach._id),
@@ -186,7 +188,7 @@ async function listDirectoryUsers(req, res) {
   if (req.user.role === 'Coach') filter.assignedCoach = req.user.id;
 
   const users = await User.find(filter)
-    .select('name email phone address role isActive goal experienceLevel membership assignedCoach')
+    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
@@ -196,7 +198,7 @@ async function listDirectoryUsers(req, res) {
 
 async function getDirectoryUser(req, res) {
   const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
-    .select('name email phone address role isActive goal experienceLevel membership assignedCoach')
+    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
 

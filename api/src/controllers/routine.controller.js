@@ -12,6 +12,7 @@ const exerciseSchema = z.object({
   equipment: z.string().trim().max(100).optional(),
   equipmentId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   gifUrl: z.string().url().max(500).optional(),
+  videoUrl: z.string().url().max(500).optional(),
   bodyweight: z.boolean().default(false),
   metricType: z.enum(['strength', 'cardio']).optional(),
   reps: z.string().trim().min(1).max(30).optional(),
