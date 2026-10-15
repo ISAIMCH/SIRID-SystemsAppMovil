@@ -4,64 +4,49 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, 
 
 import { api } from './api';
 import { palette } from './theme';
-import type { ExerciseDictionaryEntry } from './types';
+import type { CuratedExercise } from './types';
 
 export function ExerciseSearch({ value, muscleGroup, onChangeText, onSelect }: {
   value: string;
   muscleGroup: string;
   onChangeText: (value: string) => void;
-  onSelect: (exercise: ExerciseDictionaryEntry) => void;
+  onSelect: (exercise: CuratedExercise) => void;
 }) {
-  const [results, setResults] = useState<ExerciseDictionaryEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [catalog, setCatalog] = useState<CuratedExercise[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedName, setSelectedName] = useState('');
   const [isFocused, setIsFocused] = useState(false);
 
   useEffect(() => {
-    const query = value.trim();
-    const group = muscleGroup.trim();
-    if (!group || (query.length > 0 && selectedName === query)) {
-      return undefined;
-    }
-
     const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setIsLoading(true);
-      setError('');
-      api.get<{ exercises: ExerciseDictionaryEntry[] }>('/dictionary/search', {
-        params: { q: query.length >= 2 ? query : undefined, muscleGroup: group },
-        signal: controller.signal,
+    api.get<{ exercises: CuratedExercise[] }>('/exercises', { signal: controller.signal })
+      .then((response) => setCatalog(response.data.exercises))
+      .catch(() => {
+        if (!controller.signal.aborted) setError('No se pudo cargar el catálogo curado.');
       })
-        .then((response) => setResults(response.data.exercises))
-        .catch(() => {
-          if (!controller.signal.aborted) {
-            setResults([]);
-            setError('No se pudo buscar en el catálogo.');
-          }
-        })
-        .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
-    }, 300);
+      .finally(() => { if (!controller.signal.aborted) setIsLoading(false); });
+    return () => controller.abort();
+  }, []);
 
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [muscleGroup, value, selectedName]);
+  const query = value.trim().toLocaleLowerCase();
+  const group = muscleGroup.trim().toLocaleLowerCase();
+  const activeQuery = group.length > 0 && selectedName !== value.trim();
+  const results = activeQuery
+    ? catalog.filter((exercise) => exercise.muscleGroup.trim().toLocaleLowerCase() === group
+      && (!query || exercise.name.toLocaleLowerCase().includes(query))).slice(0, 50)
+    : [];
 
   function changeValue(text: string) {
     setSelectedName('');
     onChangeText(text);
   }
 
-  function select(exercise: ExerciseDictionaryEntry) {
+  function select(exercise: CuratedExercise) {
     setSelectedName(exercise.name);
-    setResults([]);
     setError('');
     onSelect(exercise);
   }
-
-  const activeQuery = muscleGroup.trim().length > 0 && selectedName !== value.trim();
 
   return (
     <View style={styles.wrapper}>
@@ -90,7 +75,7 @@ export function ExerciseSearch({ value, muscleGroup, onChangeText, onSelect }: {
                 <View style={styles.resultIcon}><MaterialIcons name="fitness-center" size={18} color={palette.green} /></View>
                 <View style={styles.resultText}>
                   <Text numberOfLines={1} style={styles.resultName}>{exercise.name}</Text>
-                  <Text numberOfLines={1} style={styles.resultMeta}>{exercise.targetMuscle} · {exercise.equipment}</Text>
+                  <Text numberOfLines={1} style={styles.resultMeta}>{exercise.muscleGroup} · {exercise.equipment ?? 'Sin equipo'}</Text>
                 </View>
                 <MaterialIcons name="north-west" size={17} color={palette.muted} />
               </Pressable>

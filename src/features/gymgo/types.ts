@@ -35,13 +35,12 @@ export type RoutineBlock = {
   exercises: Exercise[];
 };
 
-export type ExerciseDictionaryEntry = {
+export type CuratedExercise = {
   _id: string;
   name: string;
-  targetMuscle: string;
-  equipment: string;
-  gifUrl: string;
-  metricType: 'strength' | 'cardio';
+  muscleGroup: string;
+  equipment: string | null;
+  videoUrl: string;
 };
 
 export type Routine = {

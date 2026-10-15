@@ -10,7 +10,7 @@ import { ExerciseSearch } from './exercise-search';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { SelectField } from './select-field';
 import { palette } from './theme';
-import type { Exercise, ExerciseDictionaryEntry, Routine, RoutineBlock, RoutineTemplate } from './types';
+import type { CuratedExercise, Exercise, Routine, RoutineBlock, RoutineTemplate } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
 
 type Equipment = { _id: string; name: string; zone: string; type: 'strength' | 'cardio'; status: 'available' | 'busy' | 'out_of_service' };
@@ -107,7 +107,7 @@ function RoutineForm() {
   const [draftExercises, setDraftExercises] = useState<DraftExercise[]>([]);
 
   const [exerciseName, setExerciseName] = useState('');
-  const [selectedDictionaryExercise, setSelectedDictionaryExercise] = useState<ExerciseDictionaryEntry | null>(null);
+  const [selectedCatalogExercise, setSelectedCatalogExercise] = useState<CuratedExercise | null>(null);
   const [muscleGroup, setMuscleGroup] = useState('');
   const [isAddingGroup, setIsAddingGroup] = useState(false);
   const [newGroup, setNewGroup] = useState('');
@@ -164,7 +164,7 @@ function RoutineForm() {
   const selectedEquipment = equipmentChoice === BODYWEIGHT ? undefined : availableEquipment.find((item) => item._id === equipmentChoice);
   const metricType: 'strength' | 'cardio' = equipmentChoice === BODYWEIGHT
     ? 'strength'
-    : selectedEquipment?.type ?? (equipmentChoice.startsWith('catalog:') ? selectedDictionaryExercise?.metricType : undefined) ?? 'strength';
+    : selectedEquipment?.type ?? 'strength';
   const maxBlockExercises = blockType === 'single' ? 1 : 20;
   const selectedClient = clients.find((client) => client.id === assignedTo);
 
@@ -190,13 +190,13 @@ function RoutineForm() {
     }
   }
 
-  async function selectDictionaryExercise(exercise: ExerciseDictionaryEntry) {
-    setSelectedDictionaryExercise(exercise);
+  async function selectCatalogExercise(exercise: CuratedExercise) {
+    setSelectedCatalogExercise(exercise);
     setExerciseName(exercise.name);
-    const targetMuscle = exercise.targetMuscle || 'General';
+    const targetMuscle = exercise.muscleGroup || 'General';
     setMuscleGroups((current) => current.includes(targetMuscle) ? current : [...current, targetMuscle].sort((a, b) => a.localeCompare(b)));
     setMuscleGroup(targetMuscle);
-    setEquipmentChoice(findInventoryEquipment(exercise.equipment, availableEquipment));
+    setEquipmentChoice(exercise.equipment ? findInventoryEquipment(exercise.equipment, availableEquipment) : BODYWEIGHT);
     try {
       const response = await api.post<{ group: { name: string } }>('/muscle-groups', { name: targetMuscle });
       setMuscleGroups((current) => current.includes(response.data.group.name) ? current : [...current, response.data.group.name].sort((a, b) => a.localeCompare(b)));
@@ -248,8 +248,8 @@ function RoutineForm() {
         return setError('Revisa las métricas objetivo de cardio.');
       }
       exercise = {
-        name: exerciseName.trim(), muscleGroup, equipment: selectedEquipment?.name ?? selectedDictionaryExercise?.equipment,
-        metricType: 'cardio', gifUrl: selectedDictionaryExercise?.gifUrl, videoUrl: selectedDictionaryExercise?.gifUrl, order: draftExercises.length,
+        name: exerciseName.trim(), muscleGroup, equipment: selectedCatalogExercise?.equipment ?? selectedEquipment?.name,
+        metricType: 'cardio', gifUrl: selectedCatalogExercise?.videoUrl, videoUrl: selectedCatalogExercise?.videoUrl, order: draftExercises.length,
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
         ...(duration ? { targetDurationMinutes: duration } : {}),
         ...(distance ? { targetDistanceKm: distance } : {}),
@@ -261,9 +261,9 @@ function RoutineForm() {
       if (weight !== undefined && (!Number.isFinite(weight) || weight < 0 || weight > 1000)) return setError('El peso sugerido debe ser de 0 a 1000 kg.');
       exercise = {
         name: exerciseName.trim(), muscleGroup,
-        equipment: selectedEquipment?.name ?? (equipmentChoice === BODYWEIGHT ? 'Peso corporal / libre' : selectedDictionaryExercise?.equipment),
-        metricType: 'strength', gifUrl: selectedDictionaryExercise?.gifUrl, videoUrl: selectedDictionaryExercise?.gifUrl, reps: reps.trim(), order: draftExercises.length,
-        bodyweight: equipmentChoice === BODYWEIGHT || selectedDictionaryExercise?.equipment.toLowerCase().includes('body weight') === true,
+        equipment: selectedCatalogExercise?.equipment ?? (selectedEquipment?.name ?? (equipmentChoice === BODYWEIGHT ? 'Peso corporal / libre' : undefined)),
+        metricType: 'strength', gifUrl: selectedCatalogExercise?.videoUrl, videoUrl: selectedCatalogExercise?.videoUrl, reps: reps.trim(), order: draftExercises.length,
+        bodyweight: equipmentChoice === BODYWEIGHT || selectedCatalogExercise?.equipment?.toLowerCase().includes('body weight') === true,
         ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
         ...(weight !== undefined ? { suggestedWeight: weight } : {}),
       };
@@ -271,7 +271,7 @@ function RoutineForm() {
 
     setDraftExercises((current) => [...current, exercise]);
     setExerciseName('');
-    setSelectedDictionaryExercise(null);
+    setSelectedCatalogExercise(null);
     setMuscleGroup('');
     setEquipmentChoice('');
     setSuggestedWeight('');
@@ -471,15 +471,15 @@ function RoutineForm() {
 
         <View style={styles.rule} />
         <SectionTitle>Ejercicio {draftExercises.length + 1}{blockType === 'single' ? '' : ` de ${maxBlockExercises}`}</SectionTitle>
-        <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={muscleGroups.map((name) => ({ value: name, label: name }))} value={muscleGroup} onChange={(value) => { setMuscleGroup(value); setExerciseName(''); setSelectedDictionaryExercise(null); setEquipmentChoice(''); }} addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }} />
+        <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={muscleGroups.map((name) => ({ value: name, label: name }))} value={muscleGroup} onChange={(value) => { setMuscleGroup(value); setExerciseName(''); setSelectedCatalogExercise(null); setEquipmentChoice(''); }} addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }} />
         <ExerciseSearch
           value={exerciseName}
           muscleGroup={muscleGroup}
           onChangeText={(value) => {
             setExerciseName(value);
-            setSelectedDictionaryExercise(null);
+            setSelectedCatalogExercise(null);
           }}
-          onSelect={selectDictionaryExercise}
+          onSelect={selectCatalogExercise}
         />
         {isAddingGroup ? (
           <View style={styles.group}>
@@ -489,7 +489,7 @@ function RoutineForm() {
         ) : null}
         <SelectField label="Equipo" placeholder="Selecciona el equipo" options={[
           { value: BODYWEIGHT, label: 'Peso Corporal / Libre', hint: 'Fuerza sin máquina' },
-          ...(equipmentChoice.startsWith('catalog:') && selectedDictionaryExercise ? [{ value: equipmentChoice, label: selectedDictionaryExercise.equipment, hint: 'Equipo del catálogo' }] : []),
+          ...(equipmentChoice.startsWith('catalog:') && selectedCatalogExercise?.equipment ? [{ value: equipmentChoice, label: selectedCatalogExercise.equipment, hint: 'Equipo del catálogo' }] : []),
           ...availableEquipment.map((item) => ({ value: item._id, label: item.name, hint: `${item.zone} · ${item.type === 'cardio' ? 'Cardio' : 'Fuerza'}` })),
         ]} value={equipmentChoice} onChange={setEquipmentChoice} />
         {metricType === 'cardio' ? (
