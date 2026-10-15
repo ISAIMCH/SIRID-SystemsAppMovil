@@ -2,7 +2,7 @@ import { create, isAxiosError } from 'axios';
 
 import { readAccessToken } from './token-storage';
 
-const apiOrigin = (process.env.EXPO_PUBLIC_API_URL ?? 'https://sirid-systemsappmovil.onrender.com')
+export const apiOrigin = (process.env.EXPO_PUBLIC_API_URL ?? 'https://sirid-systemsappmovil.onrender.com')
   .replace(/\/+$/, '');
 
 export const api = create({

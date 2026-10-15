@@ -8,6 +8,7 @@ import { api, getApiErrorMessage } from './api';
 import CartModal from './cart-modal';
 import { FloatingCard } from './fit-ui';
 import OrdersModal from './orders-modal';
+import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
 import { Notice, Page } from './ui';
 
@@ -31,6 +32,7 @@ export default function StoreScreen() {
   const [category, setCategory] = useState('Todos');
   const [isCartVisible, setIsCartVisible] = useState(false);
   const [isOrdersVisible, setIsOrdersVisible] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const addItem = useCartStore((state) => state.addItem);
   const cartItems = useCartStore((state) => state.items);
   const totalItems = useCartStore((state) => state.getTotalItems());
@@ -54,6 +56,16 @@ export default function StoreScreen() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
+  }, [reloadKey]);
+
+  useEffect(() => {
+    const realtime = connectSocket();
+    const refreshStore = () => {
+      setIsLoading(true);
+      setReloadKey((value) => value + 1);
+    };
+    realtime.on('sale-updated', refreshStore);
+    return () => { realtime.off('sale-updated', refreshStore); };
   }, []);
 
   useEffect(() => {

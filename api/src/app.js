@@ -28,6 +28,7 @@ const { notFound, errorHandler } = require('./middlewares/error.middleware');
 const app = express();
 app.set('trust proxy', 1);
 const allowedOrigins = env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean);
+app.set('allowedOrigins', allowedOrigins);
 
 app.disable('x-powered-by');
 app.use(helmet());

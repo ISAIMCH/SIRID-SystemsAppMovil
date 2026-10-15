@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
+import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
 
 type OrderItem = {
@@ -39,6 +40,7 @@ export default function OrdersModal({ visible, onClose }: { visible: boolean; on
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -58,6 +60,14 @@ export default function OrdersModal({ visible, onClose }: { visible: boolean; on
         }
       });
     return () => { isCurrent = false; };
+  }, [visible, reloadKey]);
+
+  useEffect(() => {
+    if (!visible) return undefined;
+    const realtime = connectSocket();
+    const refreshOrders = () => setReloadKey((value) => value + 1);
+    realtime.on('sale-updated', refreshOrders);
+    return () => { realtime.off('sale-updated', refreshOrders); };
   }, [visible]);
 
   return (

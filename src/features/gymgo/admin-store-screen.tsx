@@ -5,6 +5,7 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { pickImageAsDataUri } from './pick-image';
+import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
@@ -41,6 +42,16 @@ export default function AdminStoreScreen({ initialTab = 'products', hideTabs = f
       });
     return () => { isCurrent = false; };
   }, [retryNumber]);
+
+  useEffect(() => {
+    const realtime = connectSocket();
+    const refreshStore = () => {
+      setIsLoading(true);
+      setRetryNumber((value) => value + 1);
+    };
+    realtime.on('sale-updated', refreshStore);
+    return () => { realtime.off('sale-updated', refreshStore); };
+  }, []);
 
   return (
     <Page admin>

@@ -3,6 +3,7 @@ const Payment = require('../models/payment.model');
 const User = require('../models/user.model');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('../utils/http-error');
+const { emitRealtime } = require('../utils/realtime');
 
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 const paymentSchema = z.object({
@@ -67,6 +68,7 @@ async function createPayment(req, res) {
     method: input.source,
     reference: input.reference ?? `GYM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
   });
+  emitRealtime(req, 'payment-updated', { action: 'created', payment: payment.toObject() });
   res.status(201).json({ payment });
 }
 
@@ -94,6 +96,7 @@ async function updatePayment(req, res) {
     .populate('planId', 'name')
     .populate('user', 'name email');
   if (!payment) throw new HttpError(404, 'Pago no encontrado.');
+  emitRealtime(req, 'payment-updated', { action: 'updated', payment: payment.toObject() });
   res.json({ payment });
 }
 
@@ -126,6 +129,7 @@ async function redeemPaymentByPin(req, res) {
     .populate('planId', 'name')
     .populate('user', 'name email')
     .lean();
+  emitRealtime(req, 'payment-updated', { action: 'redeemed', payment });
   res.json({ payment });
 }
 
@@ -133,6 +137,7 @@ async function deletePayment(req, res) {
   assertId(req.params.id);
   const payment = await Payment.findByIdAndDelete(req.params.id);
   if (!payment) throw new HttpError(404, 'Pago no encontrado.');
+  emitRealtime(req, 'payment-updated', { action: 'deleted', paymentId: req.params.id });
   res.status(204).end();
 }
 

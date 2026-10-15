@@ -9,6 +9,7 @@ import { useAuth } from './auth-context';
 import CoachTemplates from './coach-templates';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
+import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
 import type { Exercise, Routine, RoutineBlock } from './types';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
@@ -98,6 +99,16 @@ export default function RoutinesScreen() {
       .finally(() => { if (isCurrent) setIsLoading(false); });
     return () => { isCurrent = false; };
   }, [retryNumber]));
+
+  useEffect(() => {
+    const realtime = connectSocket();
+    const refreshRoutines = () => {
+      setIsLoading(true);
+      setRetryNumber((value) => value + 1);
+    };
+    realtime.on('routine-updated', refreshRoutines);
+    return () => { realtime.off('routine-updated', refreshRoutines); };
+  }, []);
 
   useEffect(() => {
     if (!restTimer) return undefined;

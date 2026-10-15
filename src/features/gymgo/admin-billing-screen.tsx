@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
+import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 
@@ -63,6 +64,16 @@ export default function AdminBillingScreen() {
       });
     return () => { isCurrent = false; };
   }, [filter, reloadKey]);
+
+  useEffect(() => {
+    const realtime = connectSocket();
+    const refreshPayments = () => {
+      setIsLoading(true);
+      setReloadKey((value) => value + 1);
+    };
+    realtime.on('payment-updated', refreshPayments);
+    return () => { realtime.off('payment-updated', refreshPayments); };
+  }, []);
 
   async function searchPin() {
     setConfirmed('');

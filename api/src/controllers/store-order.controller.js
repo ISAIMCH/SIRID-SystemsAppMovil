@@ -4,6 +4,7 @@ const { z } = require('zod');
 const StoreOrder = require('../models/store-order.model');
 const Product = require('../models/product.model');
 const HttpError = require('../utils/http-error');
+const { emitRealtime } = require('../utils/realtime');
 
 const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
 const PICKUP_PIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -80,7 +81,12 @@ async function createOrder(req, res) {
         pickupPin: generatePickupPin(),
       }], { session });
     });
-    res.status(201).json({ order });
+    const createdOrder = await StoreOrder.findById(order._id)
+      .populate('userId', 'name email')
+      .populate('items.productId', 'name imageUrl price')
+      .lean();
+    emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder });
+    res.status(201).json({ order: createdOrder });
   } finally {
     await session.endSession();
   }
@@ -128,6 +134,7 @@ async function updateOrderStatus(req, res) {
       .populate('userId', 'name email')
       .populate('items.productId', 'name imageUrl price')
       .lean();
+    emitRealtime(req, 'sale-updated', { action: 'updated', order: updatedOrder });
     res.json({ order: updatedOrder });
   } finally {
     await session.endSession();
@@ -152,6 +159,7 @@ async function redeemOrderByPin(req, res) {
       .populate('userId', 'name email')
       .populate('items.productId', 'name imageUrl price')
       .lean();
+    emitRealtime(req, 'sale-updated', { action: 'redeemed', order: updatedOrder });
     res.json({ order: updatedOrder });
   } finally {
     await session.endSession();

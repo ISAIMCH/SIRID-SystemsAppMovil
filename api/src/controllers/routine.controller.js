@@ -4,6 +4,7 @@ const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
+const { emitRealtime } = require('../utils/realtime');
 
 const exerciseSchema = z.object({
   _id: z.string().regex(/^[a-f\d]{24}$/i).optional(),
@@ -273,7 +274,9 @@ async function createRoutine(req, res) {
       blocks: normalizeAdvancedBlocks(input.blocks),
       createdBy: req.user.id,
     });
-    return res.status(201).json({ routine: routineResponse(routine) });
+    const response = routineResponse(routine);
+    emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+    return res.status(201).json({ routine: response });
   }
 
   if (req.body.exercises && !req.body.blocks) {
@@ -284,7 +287,9 @@ async function createRoutine(req, res) {
       assignedTo: input.type === 'custom' ? assignedTo : null,
       createdBy: req.user.id,
     });
-    return res.status(201).json({ routine: routineResponse(routine) });
+    const response = routineResponse(routine);
+    emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+    return res.status(201).json({ routine: response });
   }
 
   const input = routineSchema.parse(req.body);
@@ -295,7 +300,9 @@ async function createRoutine(req, res) {
     throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
   }
   const routine = await Routine.create({ ...input, createdBy: req.user.id });
-  res.status(201).json({ routine: routineResponse(routine) });
+  const response = routineResponse(routine);
+  emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+  res.status(201).json({ routine: response });
 }
 
 async function getRoutine(req, res) {
@@ -335,7 +342,9 @@ async function updateRoutine(req, res) {
       ...(input.blocks ? { blocks: normalizeAdvancedBlocks(input.blocks) } : {}),
     });
     await routine.save();
-    return res.json({ routine: routineResponse(routine) });
+    const response = routineResponse(routine);
+    emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+    return res.json({ routine: response });
   }
 
   if (req.body.type || req.body.exercises) {
@@ -358,7 +367,9 @@ async function updateRoutine(req, res) {
       assignedTo: nextType === 'custom' ? nextAssignedTo : null,
     });
     await routine.save();
-    return res.json({ routine: routineResponse(routine) });
+    const response = routineResponse(routine);
+    emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+    return res.json({ routine: response });
   }
 
   const input = routineBaseSchema.partial().omit({ assignedTo: true }).parse(req.body);
@@ -384,7 +395,9 @@ async function updateRoutine(req, res) {
   if (input.blocks && routine.exercises) routine.set('exercises', undefined);
   Object.assign(routine, input);
   await routine.save();
-  res.json({ routine: routineResponse(routine) });
+  const response = routineResponse(routine);
+  emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+  res.json({ routine: response });
 }
 
 async function deleteRoutine(req, res) {
@@ -395,6 +408,7 @@ async function deleteRoutine(req, res) {
     && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
   if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede eliminar esta rutina.');
   await routine.deleteOne();
+  emitRealtime(req, 'routine-updated', { action: 'deleted', routineId: req.params.id });
   res.status(204).end();
 }
 
