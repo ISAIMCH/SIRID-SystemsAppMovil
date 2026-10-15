@@ -8,7 +8,7 @@ const exerciseSchema = z.object({
   name: z.string().trim().min(1).max(120),
   muscleGroup: z.string().trim().min(1).max(80),
   equipment: z.string().trim().max(100).nullable().optional(),
-  videoUrl: z.string().trim().min(1).max(500),
+  videoUrl: z.string().trim().max(500).nullable().optional(),
 });
 
 function getGymId(req) {
