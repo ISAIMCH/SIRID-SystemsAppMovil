@@ -31,6 +31,30 @@ const registrationSchema = credentialsSchema.extend({
   preferredZones: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
 });
 
+function parseJsonField(value) {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeMultipartBody(req) {
+  const body = { ...(req.body ?? {}) };
+  body.availableTrainingDays = parseJsonField(body.availableTrainingDays);
+  body.documents = parseJsonField(body.documents);
+  if (body.documents !== undefined && !Array.isArray(body.documents)) body.documents = [body.documents];
+  if (body.isActive === 'true') body.isActive = true;
+  if (body.isActive === 'false') body.isActive = false;
+
+  const uploadedDocuments = (req.files ?? []).map((file) => `/uploads/documents/${file.filename}`);
+  if (uploadedDocuments.length > 0) {
+    body.documents = [...(body.documents ?? []), ...uploadedDocuments];
+  }
+  return body;
+}
+
 function createUserToken(user) {
   return jwt.sign({ role: user.role }, env.JWT_SECRET, {
     subject: user.id,
@@ -118,7 +142,7 @@ async function createManagedUser(req, res) {
     if (data.membershipStartsAt && data.membershipExpiresAt && data.membershipStartsAt >= data.membershipExpiresAt) {
       context.addIssue({ code: 'custom', path: ['membershipExpiresAt'], message: 'El vencimiento debe ser posterior al inicio.' });
     }
-  }).parse(req.body);
+  }).parse(normalizeMultipartBody(req));
 
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
@@ -251,7 +275,7 @@ async function updateDirectoryUser(req, res) {
       .transform((value) => value || null)
       .optional(),
     observations: z.string().trim().max(4000).optional(),
-  }).parse(req.body);
+  }).parse(normalizeMultipartBody(req));
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const user = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } });
@@ -314,7 +338,7 @@ async function updateUser(req, res) {
       .transform((value) => value || null)
       .optional(),
     observations: z.string().trim().max(4000).optional(),
-  }).parse(req.body);
+  }).parse(normalizeMultipartBody(req));
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const user = await User.findById(req.params.id);
