@@ -31,20 +31,25 @@ const registrationSchema = credentialsSchema.extend({
   preferredZones: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
 });
 
-function parseJsonField(value) {
-  if (typeof value !== 'string') return value;
+function parseJsonArrayField(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
   try {
-    return JSON.parse(value);
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return value;
+    return [];
   }
 }
 
 function normalizeMultipartBody(req) {
   const body = { ...(req.body ?? {}) };
-  body.availableTrainingDays = parseJsonField(body.availableTrainingDays);
-  body.documents = parseJsonField(body.documents);
-  if (body.documents !== undefined && !Array.isArray(body.documents)) body.documents = [body.documents];
+  if (Object.prototype.hasOwnProperty.call(body, 'availableTrainingDays')) {
+    body.availableTrainingDays = parseJsonArrayField(body.availableTrainingDays);
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'documents')) {
+    body.documents = parseJsonArrayField(body.documents);
+  }
   if (body.isActive === 'true') body.isActive = true;
   if (body.isActive === 'false') body.isActive = false;
 
