@@ -18,6 +18,7 @@ const credentialsSchema = z.object({
 
 const registrationSchema = credentialsSchema.extend({
   name: z.string().trim().min(2).max(100),
+  lastName: z.string().trim().max(50).optional(),
   phone: phoneSchema.optional(),
   goal: z.string().trim().max(120).optional(),
   experienceLevel: z.union([z.enum(['principiante', 'intermedio', 'avanzado']), z.literal('')]).optional(),
@@ -117,6 +118,7 @@ async function bootstrapAdmin(req, res) {
 
   const user = new User({
     name: input.name,
+    lastName: input.lastName,
     email: input.email,
     phone: input.phone,
     role: 'Admin',
@@ -212,6 +214,7 @@ function serializeDirectoryUser(user) {
   return {
     id: String(user._id),
     name: user.name,
+    lastName: user.lastName,
     email: user.email,
     phone: user.phone,
     address: user.address,
@@ -242,7 +245,7 @@ async function listDirectoryUsers(req, res) {
   }
 
   const users = await User.find(filter)
-    .select('_id name email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
@@ -252,7 +255,7 @@ async function listDirectoryUsers(req, res) {
 
 async function getDirectoryUser(req, res) {
   const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
-    .select('_id name email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
 
@@ -268,6 +271,7 @@ async function updateDirectoryUser(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
   const input = z.object({
     name: z.string().trim().min(2).max(100).optional(),
+    lastName: z.string().trim().max(50).optional(),
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     phone: z.union([phoneSchema, z.literal('')]).optional(),
     address: z.string().trim().max(200).optional(),
@@ -296,6 +300,7 @@ async function updateDirectoryUser(req, res) {
     user.email = input.email;
   }
   if (input.name) user.name = input.name;
+  if (input.lastName !== undefined) user.lastName = input.lastName;
   if (input.phone !== undefined) user.phone = input.phone || undefined;
   if (input.documents !== undefined) user.documents = input.documents;
   if (input.isActive !== undefined) user.isActive = input.isActive;
@@ -319,7 +324,7 @@ async function updateDirectoryUser(req, res) {
   await user.save();
 
   const updated = await User.findById(user._id)
-    .select('_id name email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
   res.json({ user: serializeDirectoryUser(updated) });
@@ -365,6 +370,7 @@ async function updateUser(req, res) {
     const firstName = input.firstName ?? currentFirstName;
     const lastName = input.lastName ?? currentLastName;
     user.name = [firstName, lastName].filter(Boolean).join(' ').slice(0, 100);
+    user.lastName = lastName;
   }
   if (input.role !== undefined) user.role = input.role;
   if (input.phone !== undefined) user.phone = input.phone || undefined;

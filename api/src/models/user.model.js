@@ -18,6 +18,7 @@ const membershipSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 100 },
+  lastName: { type: String, trim: true, maxlength: 50 },
   email: {
     type: String,
     required: true,
@@ -63,6 +64,7 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
   return {
     id: this.id,
     name: this.name,
+    lastName: this.lastName,
     email: this.email,
     phone: this.phone,
     address: this.address,
