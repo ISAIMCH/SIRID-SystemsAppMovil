@@ -11,6 +11,8 @@ const storeOrderSchema = new mongoose.Schema({
   gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true, index: true },
   items: { type: [orderItemSchema], required: true, validate: (items) => items.length > 0 },
   totalAmount: { type: Number, required: true, min: 0 },
+  promotionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Promotion', default: null },
+  discountApplied: { type: Number, default: 0, min: 0 },
   status: { type: String, enum: ['pending', 'paid', 'cancelled'], default: 'pending', index: true },
   paymentMethod: { type: String, trim: true, maxlength: 40 },
   reference: { type: String, trim: true, maxlength: 120 },

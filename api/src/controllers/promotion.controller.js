@@ -4,11 +4,13 @@ const Promotion = require('../models/promotion.model');
 const HttpError = require('../utils/http-error');
 
 const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de producto inválido.');
 const promotionSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).default(''),
   imageUrl: z.string().trim().default(''),
   discountPercentage: z.coerce.number().min(0).max(100),
+  applicableProducts: z.array(objectIdSchema).default([]),
   validUntil: z.coerce.date(),
   isActive: z.boolean().default(true),
 });

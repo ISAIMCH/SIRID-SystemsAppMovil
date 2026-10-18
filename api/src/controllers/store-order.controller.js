@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const { z } = require('zod');
 const StoreOrder = require('../models/store-order.model');
 const Product = require('../models/product.model');
+const Promotion = require('../models/promotion.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
 
@@ -15,6 +16,9 @@ const orderSchema = z.object({
     productId: objectIdSchema,
     quantity: z.coerce.number().int().positive(),
   })).min(1),
+  promotionId: z.union([objectIdSchema, z.literal('')])
+    .transform((value) => value || null)
+    .optional(),
   paymentMethod: z.string().trim().min(1).max(40).default('reception'),
   reference: z.string().trim().max(120).optional(),
   status: z.enum(['pending', 'paid', 'cancelled']).optional(),
@@ -63,7 +67,26 @@ async function createOrder(req, res) {
     quantity: quantities.get(productId),
     price: productById.get(productId).price,
   }));
-  const totalAmount = items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const subtotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
+  let promotionId = null;
+  let discountApplied = 0;
+  if (input.promotionId) {
+    const promotion = await Promotion.findOne({ _id: input.promotionId, gymId }).lean();
+    if (!promotion || promotion.isActive !== true || (promotion.validUntil && promotion.validUntil <= new Date())) {
+      throw new HttpError(400, 'La promoción no existe, está inactiva o ha expirado.');
+    }
+    promotionId = promotion._id;
+    const applicableProductIds = new Set((promotion.applicableProducts ?? []).map((productId) => String(productId)));
+    const discountableSubtotal = applicableProductIds.size === 0
+      ? subtotal
+      : items.reduce((total, item) => (
+        applicableProductIds.has(String(item.productId))
+          ? total + item.price * item.quantity
+          : total
+      ), 0);
+    discountApplied = Math.round((discountableSubtotal * promotion.discountPercentage / 100) * 100) / 100;
+  }
+  const totalAmount = Math.round((subtotal - discountApplied) * 100) / 100;
 
   const session = await mongoose.startSession();
   try {
@@ -75,6 +98,8 @@ async function createOrder(req, res) {
         gymId,
         items,
         totalAmount,
+        promotionId,
+        discountApplied,
         status,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
@@ -84,6 +109,7 @@ async function createOrder(req, res) {
     const createdOrder = await StoreOrder.findById(order._id)
       .populate('userId', 'name email')
       .populate('items.productId', 'name imageUrl price')
+      .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
     emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder });
     res.status(201).json({ order: createdOrder });
@@ -96,6 +122,7 @@ async function getOrders(req, res) {
   const orders = await StoreOrder.find({ gymId: getGymId(req) })
     .populate('userId', 'name email')
     .populate('items.productId', 'name imageUrl price')
+    .populate('promotionId', 'title discountPercentage validUntil')
     .sort({ createdAt: -1 })
     .lean();
   res.json({ orders });
@@ -104,6 +131,7 @@ async function getOrders(req, res) {
 async function getMyOrders(req, res) {
   const orders = await StoreOrder.find({ userId: req.user._id, gymId: getGymId(req) })
     .populate('items.productId', 'name imageUrl price')
+    .populate('promotionId', 'title discountPercentage validUntil')
     .sort({ createdAt: -1 })
     .lean();
   res.json({ orders });
@@ -133,6 +161,7 @@ async function updateOrderStatus(req, res) {
     const updatedOrder = await StoreOrder.findById(order._id)
       .populate('userId', 'name email')
       .populate('items.productId', 'name imageUrl price')
+      .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
     emitRealtime(req, 'sale-updated', { action: 'updated', order: updatedOrder });
     res.json({ order: updatedOrder });
@@ -158,6 +187,7 @@ async function redeemOrderByPin(req, res) {
     const updatedOrder = await StoreOrder.findById(order._id)
       .populate('userId', 'name email')
       .populate('items.productId', 'name imageUrl price')
+      .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
     emitRealtime(req, 'sale-updated', { action: 'redeemed', order: updatedOrder });
     res.json({ order: updatedOrder });
