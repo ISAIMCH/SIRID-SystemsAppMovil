@@ -10,10 +10,12 @@ function errorHandler(error, req, res, next) {
 
   let statusCode = error.statusCode ?? 500;
   let message = error.message ?? 'Error interno del servidor.';
+  let details;
 
   if (error instanceof ZodError) {
     statusCode = 400;
     message = 'Los datos enviados no son válidos.';
+    details = error.issues ?? error.errors ?? error.message;
   } else if (error instanceof mongoose.Error.ValidationError) {
     statusCode = 400;
     message = 'Los datos enviados no cumplen el formato requerido.';
@@ -23,7 +25,11 @@ function errorHandler(error, req, res, next) {
   }
 
   if (statusCode >= 500) console.error(error);
-  res.status(statusCode).json({ error: message });
+  if (details !== undefined) console.error('Validation Error:', error);
+  res.status(statusCode).json({
+    error: message,
+    ...(details !== undefined ? { details } : {}),
+  });
 }
 
 module.exports = { notFound, errorHandler };
