@@ -29,6 +29,7 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true, select: false },
   phone: { type: String, trim: true, maxlength: 30, validate: { validator: (value) => !value || /^\d{10}$/.test(value), message: 'El teléfono debe tener 10 dígitos.' } },
   address: { type: String, trim: true, maxlength: 200 },
+  documents: [{ type: String, trim: true }],
   role: {
     type: String,
     enum: ['Admin', 'Coach', 'Cliente'],
@@ -65,6 +66,7 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
     email: this.email,
     phone: this.phone,
     address: this.address,
+    documents: this.documents,
     role: this.role,
     isActive: this.isActive,
     membership: this.membership,

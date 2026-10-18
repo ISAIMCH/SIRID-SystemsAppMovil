@@ -25,6 +25,7 @@ const registrationSchema = credentialsSchema.extend({
     .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
     .optional(),
   observations: z.string().trim().max(4000).optional(),
+  documents: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
   preferredTrainingTime: z.string().trim().max(80).optional(),
   restrictions: z.string().trim().max(1000).optional(),
   preferredZones: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
@@ -153,6 +154,7 @@ async function createManagedUser(req, res) {
     availableTrainingDays,
     assignedCoach,
     observations: input.observations,
+    documents: input.documents,
     preferredTrainingTime: input.preferredTrainingTime,
     restrictions: input.restrictions,
     preferredZones: input.preferredZones,
@@ -181,6 +183,7 @@ function serializeDirectoryUser(user) {
     email: user.email,
     phone: user.phone,
     address: user.address,
+    documents: user.documents,
     role: user.role,
     isActive: user.isActive,
     goal: user.goal,
@@ -207,7 +210,7 @@ async function listDirectoryUsers(req, res) {
   }
 
   const users = await User.find(filter)
-    .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
@@ -217,7 +220,7 @@ async function listDirectoryUsers(req, res) {
 
 async function getDirectoryUser(req, res) {
   const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
-    .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
 
@@ -236,6 +239,9 @@ async function updateDirectoryUser(req, res) {
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     phone: z.union([phoneSchema, z.literal('')]).optional(),
     address: z.string().trim().max(200).optional(),
+    documents: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
+    isActive: z.boolean().optional(),
+    password: z.string().max(72).optional(),
     goal: z.string().trim().max(120).optional(),
     experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
     availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
@@ -259,6 +265,9 @@ async function updateDirectoryUser(req, res) {
   }
   if (input.name) user.name = input.name;
   if (input.phone !== undefined) user.phone = input.phone || undefined;
+  if (input.documents !== undefined) user.documents = input.documents;
+  if (input.isActive !== undefined) user.isActive = input.isActive;
+  if (input.password?.trim()) await user.setPassword(input.password.trim());
   if (input.goal !== undefined) user.goal = input.goal;
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
@@ -278,7 +287,7 @@ async function updateDirectoryUser(req, res) {
   await user.save();
 
   const updated = await User.findById(user._id)
-    .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
   res.json({ user: serializeDirectoryUser(updated) });
@@ -292,6 +301,10 @@ async function updateUser(req, res) {
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     role: z.enum(['Admin', 'Coach', 'Cliente']).optional(),
     phone: z.union([phoneSchema, z.literal('')]).optional(),
+    address: z.string().trim().max(200).optional(),
+    documents: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
+    isActive: z.boolean().optional(),
+    password: z.string().max(72).optional(),
     goal: z.string().trim().max(120).optional(),
     experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
     availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
@@ -323,6 +336,10 @@ async function updateUser(req, res) {
   }
   if (input.role !== undefined) user.role = input.role;
   if (input.phone !== undefined) user.phone = input.phone || undefined;
+  if (input.address !== undefined) user.address = input.address || undefined;
+  if (input.documents !== undefined) user.documents = input.documents;
+  if (input.isActive !== undefined) user.isActive = input.isActive;
+  if (input.password?.trim()) await user.setPassword(input.password.trim());
   if (input.goal !== undefined) user.goal = input.goal;
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
