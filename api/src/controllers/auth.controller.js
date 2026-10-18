@@ -20,7 +20,7 @@ const registrationSchema = credentialsSchema.extend({
   name: z.string().trim().min(2).max(100),
   phone: phoneSchema.optional(),
   goal: z.string().trim().max(120).optional(),
-  experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+  experienceLevel: z.union([z.enum(['principiante', 'intermedio', 'avanzado']), z.literal('')]).optional(),
   availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
     .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
     .optional(),
@@ -133,6 +133,7 @@ async function createManagedUser(req, res) {
     role: z.enum(['Coach', 'Cliente']),
     address: z.string().trim().min(1).max(200).optional(),
     membershipPlanId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+    planId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).optional(),
     membershipStatus: z.enum(['pending', 'active', 'suspended', 'expired']).optional(),
     membershipStartsAt: z.coerce.date().optional(),
     membershipExpiresAt: z.coerce.date().optional(),
@@ -148,6 +149,8 @@ async function createManagedUser(req, res) {
       context.addIssue({ code: 'custom', path: ['membershipExpiresAt'], message: 'El vencimiento debe ser posterior al inicio.' });
     }
   }).parse(normalizeMultipartBody(req));
+
+  if (input.planId && !input.membershipPlanId) input.membershipPlanId = input.planId;
 
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
@@ -272,7 +275,7 @@ async function updateDirectoryUser(req, res) {
     isActive: z.boolean().optional(),
     password: z.string().max(72).optional(),
     goal: z.string().trim().max(120).optional(),
-    experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+    experienceLevel: z.union([z.enum(['principiante', 'intermedio', 'avanzado']), z.literal('')]).optional(),
     availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
       .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
       .optional(),
@@ -335,7 +338,7 @@ async function updateUser(req, res) {
     isActive: z.boolean().optional(),
     password: z.string().max(72).optional(),
     goal: z.string().trim().max(120).optional(),
-    experienceLevel: z.enum(['principiante', 'intermedio', 'avanzado']).optional(),
+    experienceLevel: z.union([z.enum(['principiante', 'intermedio', 'avanzado']), z.literal('')]).optional(),
     availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
       .refine((days) => new Set(days).size === days.length, 'No repitas los días disponibles.')
       .optional(),
