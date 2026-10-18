@@ -140,8 +140,23 @@ async function createManagedUser(req, res) {
     if (!coach) throw new HttpError(400, 'El Coach asignado no existe o está inactivo.');
   }
 
+  const assignedCoach = input.assignedCoach ?? null;
+  const availableTrainingDays = input.availableTrainingDays ?? [];
+
   const user = new User({
-    ...input,
+    name: input.name,
+    email: input.email,
+    phone: input.phone,
+    role: input.role,
+    goal: input.goal,
+    experienceLevel: input.experienceLevel,
+    availableTrainingDays,
+    assignedCoach,
+    observations: input.observations,
+    preferredTrainingTime: input.preferredTrainingTime,
+    restrictions: input.restrictions,
+    preferredZones: input.preferredZones,
+    address: input.address,
     membership: {
       status: input.membershipStatus ?? 'pending',
       startsAt: input.membershipStartsAt,
@@ -189,7 +204,7 @@ async function listDirectoryUsers(req, res) {
   if (req.user.role === 'Coach') filter.assignedCoach = req.user.id;
 
   const users = await User.find(filter)
-    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
@@ -199,7 +214,7 @@ async function listDirectoryUsers(req, res) {
 
 async function getDirectoryUser(req, res) {
   const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
-    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
 
@@ -260,7 +275,7 @@ async function updateDirectoryUser(req, res) {
   await user.save();
 
   const updated = await User.findById(user._id)
-    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
   res.json({ user: serializeDirectoryUser(updated) });
@@ -308,7 +323,14 @@ async function updateUser(req, res) {
   if (input.goal !== undefined) user.goal = input.goal;
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
-  if (input.assignedCoach !== undefined) user.assignedCoach = input.assignedCoach;
+  if (input.assignedCoach !== undefined) {
+    if (user.role !== 'Cliente') throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
+    if (input.assignedCoach) {
+      const coach = await User.findOne({ _id: input.assignedCoach, role: 'Coach', isActive: true });
+      if (!coach) throw new HttpError(400, 'El Coach asignado no existe o está inactivo.');
+    }
+    user.assignedCoach = input.assignedCoach;
+  }
   if (input.observations !== undefined) user.observations = input.observations;
   await user.save();
 
