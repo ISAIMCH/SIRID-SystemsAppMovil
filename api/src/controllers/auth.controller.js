@@ -198,10 +198,13 @@ function serializeDirectoryUser(user) {
 
 async function listDirectoryUsers(req, res) {
   const input = z.object({ role: z.enum(['Cliente', 'Coach']).optional() }).parse(req.query);
-  const role = input.role ?? 'Cliente';
-  if (role === 'Coach' && req.user.role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
-  const filter = { role };
-  if (req.user.role === 'Coach') filter.assignedCoach = req.user.id;
+  if (input.role === 'Coach' && req.user.role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
+  const filter = {};
+  if (input.role) filter.role = input.role;
+  if (req.user.role === 'Coach') {
+    filter.role = 'Cliente';
+    filter.assignedCoach = req.user.id;
+  }
 
   const users = await User.find(filter)
     .select('_id name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
