@@ -2,6 +2,12 @@ const { z } = require('zod');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('../utils/http-error');
 
+const booleanSchema = z.preprocess((value) => {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+}, z.boolean());
+
 const specificationsSchema = z.union([
   z.array(z.string().trim().min(1).max(120)).max(15),
   z.string().transform((value) => value.split('\n').map((item) => item.trim()).filter(Boolean)),
@@ -16,7 +22,8 @@ const planInputSchema = z.object({
   duracion: z.coerce.number().int().min(1).max(730).optional(),
   specifications: specificationsSchema.optional(),
   especificaciones: specificationsSchema.optional(),
-  isActive: z.boolean().optional(),
+  autoRenew: booleanSchema.optional(),
+  isActive: booleanSchema.optional(),
   tipoCobro: z.string().trim().min(1).max(30).optional(),
 });
 
@@ -30,6 +37,7 @@ function parsePlanInput(body, { partial = false } = {}) {
     ...(input.specifications !== undefined || input.especificaciones !== undefined
       ? { specifications: input.specifications ?? input.especificaciones } : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
   };
 
   if (!partial) {
@@ -37,6 +45,7 @@ function parsePlanInput(body, { partial = false } = {}) {
     if (plan.price === undefined) throw new HttpError(400, 'El precio del plan es obligatorio.');
     if (plan.durationInDays === undefined) throw new HttpError(400, 'La duración del plan es obligatoria.');
     if (plan.specifications === undefined) plan.specifications = [];
+    if (plan.autoRenew === undefined) plan.autoRenew = true;
     if (plan.isActive === undefined) plan.isActive = true;
   }
   return plan;

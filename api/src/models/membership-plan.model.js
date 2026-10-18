@@ -5,6 +5,7 @@ const membershipPlanSchema = new mongoose.Schema({
   price: { type: Number, required: true, min: 0, max: 1000000 },
   durationInDays: { type: Number, required: true, min: 1, max: 730 },
   specifications: [{ type: String, trim: true, maxlength: 120 }],
+  autoRenew: { type: Boolean, default: true },
   isActive: { type: Boolean, default: true, index: true },
 }, { timestamps: true });
 
