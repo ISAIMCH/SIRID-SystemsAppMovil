@@ -6,6 +6,7 @@ const membershipPlanSchema = new mongoose.Schema({
   durationInDays: { type: Number, required: true, min: 1, max: 730 },
   specifications: [{ type: String, trim: true, maxlength: 120 }],
   autoRenew: { type: Boolean, default: true },
+  planType: { type: String, enum: ['standard', 'promotional'], default: 'standard' },
   isActive: { type: Boolean, default: true, index: true },
 }, { timestamps: true });
 

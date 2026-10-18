@@ -23,6 +23,7 @@ const planInputSchema = z.object({
   specifications: specificationsSchema.optional(),
   especificaciones: specificationsSchema.optional(),
   autoRenew: booleanSchema.optional(),
+  planType: z.enum(['standard', 'promotional']).optional(),
   isActive: booleanSchema.optional(),
   tipoCobro: z.string().trim().min(1).max(30).optional(),
 });
@@ -38,6 +39,7 @@ function parsePlanInput(body, { partial = false } = {}) {
       ? { specifications: input.specifications ?? input.especificaciones } : {}),
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
+    ...(input.planType !== undefined ? { planType: input.planType } : {}),
   };
 
   if (!partial) {
@@ -46,6 +48,7 @@ function parsePlanInput(body, { partial = false } = {}) {
     if (plan.durationInDays === undefined) throw new HttpError(400, 'La duración del plan es obligatoria.');
     if (plan.specifications === undefined) plan.specifications = [];
     if (plan.autoRenew === undefined) plan.autoRenew = true;
+    if (plan.planType === undefined) plan.planType = 'standard';
     if (plan.isActive === undefined) plan.isActive = true;
   }
   return plan;
