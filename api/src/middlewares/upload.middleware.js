@@ -24,5 +24,5 @@ function fileFilter(req, file, callback) {
 module.exports = multer({
   storage,
   fileFilter,
-  limits: { files: 5 },
+  limits: { files: 5, fileSize: 20 * 1024 * 1024 },
 });
