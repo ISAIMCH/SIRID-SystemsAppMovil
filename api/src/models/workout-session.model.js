@@ -35,6 +35,8 @@ const workoutSessionSchema = new mongoose.Schema({
   durationMinutes: { type: Number, required: true, min: 0, max: 600 },
   totalVolumeKg: { type: Number, required: true, min: 0, default: 0 },
   caloriesBurned: { type: Number, required: true, min: 0, default: 0 },
+  perceivedExertion: { type: Number, min: 1, max: 5 },
+  clientNotes: { type: String },
   blocks: { type: [workoutBlockSchema], required: true, validate: (items) => items.length > 0 },
 }, { timestamps: true, strict: false });
 

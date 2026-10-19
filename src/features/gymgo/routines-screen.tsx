@@ -5,13 +5,13 @@ import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { connectSocket } from '../../services/socket';
-import { api, getApiErrorMessage } from './api';
+import { api, getApiErrorMessage, getEquipmentTraffic } from './api';
 import { useAuth } from './auth-context';
 import CoachTemplates from './coach-templates';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
-import type { Exercise, Routine, RoutineBlock, WorkoutSessionLog } from './types';
+import type { EquipmentTraffic, Exercise, Routine, RoutineBlock, WorkoutSessionLog, WorkoutSessionPayload } from './types';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 
 type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
@@ -101,6 +101,30 @@ function isEquipmentOutOfService(exercise: Exercise) {
   return typeof exercise.equipmentId === 'object' && exercise.equipmentId?.status === 'out_of_service';
 }
 
+const trafficPriority: Record<EquipmentTraffic['trafficLevel'], number> = { free: 0, moderate: 1, busy: 2, out_of_service: 3 };
+
+function trafficForExercise(exercise: Exercise, trafficById: Map<string, EquipmentTraffic>) {
+  if (!exercise.equipmentId && !exercise.equipment) return null;
+  const equipmentId = typeof exercise.equipmentId === 'object' ? exercise.equipmentId._id : exercise.equipmentId;
+  if (equipmentId && trafficById.has(equipmentId)) return trafficById.get(equipmentId) ?? null;
+  const equipmentName = (exercise.equipment ?? (typeof exercise.equipmentId === 'object' ? exercise.equipmentId.name : '')).trim().toLocaleLowerCase();
+  return equipmentName ? [...trafficById.values()].find((item) => item.name.toLocaleLowerCase() === equipmentName) ?? null : null;
+}
+
+function blockTrafficLevel(block: RoutineBlock, trafficById: Map<string, EquipmentTraffic>): EquipmentTraffic['trafficLevel'] {
+  return block.exercises.reduce<EquipmentTraffic['trafficLevel']>((worst, exercise) => {
+    const traffic = trafficForExercise(exercise, trafficById);
+    return traffic && trafficPriority[traffic.trafficLevel] > trafficPriority[worst] ? traffic.trafficLevel : worst;
+  }, 'free');
+}
+
+function trafficLabel(traffic: EquipmentTraffic | null) {
+  if (!traffic || traffic.trafficLevel === 'free') return 'Aparato libre · Sugerido ahora';
+  if (traffic.trafficLevel === 'moderate') return `Demanda media · ~${traffic.estimatedWaitMinutes} min`;
+  if (traffic.trafficLevel === 'busy') return `Alta demanda · ~${traffic.estimatedWaitMinutes} min`;
+  return 'En mantenimiento';
+}
+
 function isSetComplete(block: RoutineBlock, setNumber: number, inputs: Record<string, MetricValues>, skipped: Record<string, boolean>) {
   return block.exercises.every((exercise, index) => {
     if (skipped[inputKey(block, setNumber, exercise, index)]) return true;
@@ -140,6 +164,11 @@ export default function RoutinesScreen() {
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [activeGif, setActiveGif] = useState<{ name: string; url: string } | null>(null);
   const [workoutReward, setWorkoutReward] = useState<WorkoutReward | null>(null);
+  const [equipmentTraffic, setEquipmentTraffic] = useState<EquipmentTraffic[]>([]);
+  const [smartOrderEnabled, setSmartOrderEnabled] = useState(true);
+  const [pendingWorkout, setPendingWorkout] = useState<WorkoutSessionPayload | null>(null);
+  const [perceivedExertion, setPerceivedExertion] = useState(3);
+  const [clientNotes, setClientNotes] = useState('');
   const [savingDay, setSavingDay] = useState(false);
   const [logMessage, setLogMessage] = useState<{ text: string; error: boolean } | null>(null);
   const startedAt = useRef<number | null>(null);
@@ -150,11 +179,13 @@ export default function RoutinesScreen() {
     Promise.all([
       api.get<{ routines: Routine[] }>('/routines'),
       isClient ? api.get<{ sessions: WorkoutSessionLog[] }>('/workouts/me') : Promise.resolve({ data: { sessions: [] as WorkoutSessionLog[] } }),
+      isClient ? getEquipmentTraffic() : Promise.resolve([] as EquipmentTraffic[]),
     ])
-      .then(([routineResponse, historyResponse]) => {
+      .then(([routineResponse, historyResponse, traffic]) => {
         if (!isCurrent) return;
         setRoutines(routineResponse.data.routines);
         setLastPerformance(buildLastPerformanceMap(historyResponse.data.sessions));
+        setEquipmentTraffic(traffic);
       })
       .catch((requestError: unknown) => { if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas.')); })
       .finally(() => { if (isCurrent) setIsLoading(false); });
@@ -202,6 +233,18 @@ export default function RoutinesScreen() {
   const routine = routines.find((entry) => entry.status === 'active') ?? routines[0];
   const allBlocks = routine ? routineBlocks(routine) : [];
   const dayBlocks = allBlocks.filter((block) => block.day === selectedDay).sort((left, right) => left.order - right.order);
+  const trafficById = new Map(equipmentTraffic.map((item) => [item.equipmentId, item]));
+  const blockHasStarted = (block: RoutineBlock) => (completedSets[block._id] ?? []).length > 0
+    || Object.keys(inputs).some((key) => key.startsWith(`${block._id}.`))
+    || Object.keys(skipped).some((key) => key.startsWith(`${block._id}.`));
+  const startedBlocks = dayBlocks.filter(blockHasStarted);
+  const unstartedBlocks = dayBlocks.filter((block) => !blockHasStarted(block));
+  const optimizedUnstartedBlocks = [...unstartedBlocks].sort((left, right) => (
+    trafficPriority[blockTrafficLevel(left, trafficById)] - trafficPriority[blockTrafficLevel(right, trafficById)]
+      || left.order - right.order
+  ));
+  const displayDayBlocks = smartOrderEnabled ? [...startedBlocks, ...optimizedUnstartedBlocks] : dayBlocks;
+  const hasTrafficOptimization = smartOrderEnabled && optimizedUnstartedBlocks.some((block, index) => block._id !== unstartedBlocks[index]?._id);
 
   function updateMetric(block: RoutineBlock, setNumber: number, exercise: Exercise, index: number, field: keyof MetricValues, value: string) {
     const cleaned = value.replace(/[^0-9.,]/g, '').slice(0, 8);
@@ -283,7 +326,7 @@ export default function RoutinesScreen() {
                 }
               : (!exerciseSkipped ? { reps: Math.round(Number(values.reps)), weightKg: Number(values.weightKg.replace(',', '.')) } : {})),
           };
-        }).filter((exercise) => Boolean(exercise.routineExerciseId)),
+        }).filter((exercise): exercise is typeof exercise & { routineExerciseId: string } => Boolean(exercise.routineExerciseId)),
       }));
       return sets.length ? [{ routineBlockId: block._id, sets }] : [];
     });
@@ -292,15 +335,28 @@ export default function RoutinesScreen() {
       return;
     }
 
-    setSavingDay(true);
-    setLogMessage(null);
-    try {
-      const response = await api.post<{ session: WorkoutReward }>('/workouts', {
+    setPendingWorkout({
         routineId: routine._id,
         trainingDay: selectedDay,
         durationMinutes: Math.min(600, minutesSince(startedAt.current)),
         blocks: payloadBlocks,
       });
+    setPerceivedExertion(3);
+    setClientNotes('');
+    setLogMessage(null);
+  }
+
+  async function confirmWorkoutSession() {
+    if (!pendingWorkout) return;
+    setSavingDay(true);
+    setLogMessage(null);
+    try {
+      const response = await api.post<{ session: WorkoutReward }>('/workouts', {
+        ...pendingWorkout,
+        perceivedExertion,
+        ...(clientNotes.trim() ? { clientNotes: clientNotes.trim() } : {}),
+      });
+      setPendingWorkout(null);
       setInputs({});
       setSkipped({});
       setCompletedSets({});
@@ -397,6 +453,19 @@ export default function RoutinesScreen() {
               </View>
               <Text style={styles.selectedDayTitleDark}>{dayNames[selectedDay]}</Text>
 
+              {dayBlocks.length ? (
+                <View style={styles.smartOrderControls}>
+                  <Pressable accessibilityRole="switch" accessibilityState={{ checked: smartOrderEnabled }} onPress={() => setSmartOrderEnabled((enabled) => !enabled)} style={[styles.smartOrderToggle, smartOrderEnabled && styles.smartOrderToggleActive]}>
+                    <MaterialIcons name="alt-route" size={17} color={smartOrderEnabled ? '#081009' : '#91A098'} />
+                    <Text style={[styles.smartOrderText, smartOrderEnabled && styles.smartOrderTextActive]}>Orden inteligente (Anti-tráfico)</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel="Actualizar tráfico de equipos" onPress={() => { setIsLoading(true); setRetryNumber((value) => value + 1); }} style={styles.refreshTrafficButton}>
+                    <MaterialIcons name="refresh" size={19} color="#9BFF63" />
+                  </Pressable>
+                </View>
+              ) : null}
+              {hasTrafficOptimization ? <Text style={styles.optimizationBanner}>Ruta optimizada: empezamos por los aparatos más libres</Text> : null}
+
               {!dayBlocks.length ? (
                 <FloatingCard style={[styles.restCard, styles.darkBlockCard]}>
                   <IconBadge name="self-improvement" color={palette.cyan} size={56} />
@@ -405,10 +474,12 @@ export default function RoutinesScreen() {
                 </FloatingCard>
               ) : (
                 <>
-                  {dayBlocks.map((block, blockIndex) => {
+                  {displayDayBlocks.map((block, blockIndex) => {
                     const blockId = block._id ?? String(block.order);
                     const done = completedSets[blockId] ?? [];
                     const typeLabel = block.blockType === 'single' ? 'Individual' : block.blockType === 'superset' ? 'Superset' : 'Circuito';
+                    const blockTraffic = blockTrafficLevel(block, trafficById);
+                    const blockTrafficItem = block.exercises.map((exercise) => trafficForExercise(exercise, trafficById)).find((traffic) => traffic?.trafficLevel === blockTraffic) ?? null;
                     return (
                       <FloatingCard key={blockId} style={[styles.blockCard, styles.darkBlockCard]}>
                         <View style={styles.blockHeader}>
@@ -417,6 +488,7 @@ export default function RoutinesScreen() {
                             <Text style={styles.darkHeading}>Bloque {blockIndex + 1} · {typeLabel}</Text>
                             <Text style={styles.darkMuted}>{restTimer?.blockId === blockId ? `Descanso · ${restTimer.remaining}s` : `${block.sets} rondas · ${block.restSeconds}s descanso`}</Text>
                           </View>
+                          <TrafficPill level={blockTraffic} waitMinutes={blockTrafficItem?.estimatedWaitMinutes ?? 0} />
                           <View style={styles.progressPill}><Text style={styles.progressText}>{done.length}/{block.sets}</Text></View>
                         </View>
 
@@ -437,6 +509,7 @@ export default function RoutinesScreen() {
                                   ) : null}
                                 </View>
                                 <Text style={styles.darkMuted}>{exercise.muscleGroup} · {equipment}</Text>
+                                <TrafficPill level={trafficForExercise(exercise, trafficById)?.trafficLevel ?? 'free'} waitMinutes={trafficForExercise(exercise, trafficById)?.estimatedWaitMinutes ?? 0} />
                                 {isEquipmentOutOfService(exercise) ? <Text style={styles.maintenanceBadge}>En mantenimiento</Text> : null}
                                 {(lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) ? (
                                   <Pressable accessibilityRole="button" onPress={() => prefillLastPerformance(block, exercise, exerciseIndex, (lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) as LastPerformance)}>
@@ -540,6 +613,16 @@ export default function RoutinesScreen() {
           </View>
         </View>
       </Modal>
+      <WorkoutFeedbackModal
+        visible={Boolean(pendingWorkout)}
+        perceivedExertion={perceivedExertion}
+        clientNotes={clientNotes}
+        saving={savingDay}
+        onChangeExertion={setPerceivedExertion}
+        onChangeNotes={setClientNotes}
+        onCancel={() => { if (!savingDay) setPendingWorkout(null); }}
+        onConfirm={() => void confirmWorkoutSession()}
+      />
       <WorkoutRewardModal
         reward={workoutReward}
         onClose={() => {
@@ -549,6 +632,62 @@ export default function RoutinesScreen() {
       />
     </Page>
   );
+}
+
+function WorkoutFeedbackModal({
+  visible, perceivedExertion, clientNotes, saving, onChangeExertion, onChangeNotes, onCancel, onConfirm,
+}: {
+  visible: boolean;
+  perceivedExertion: number;
+  clientNotes: string;
+  saving: boolean;
+  onChangeExertion: (value: number) => void;
+  onChangeNotes: (value: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <View style={styles.modalBackdrop}>
+        <View style={styles.modalCard}>
+          <View style={styles.modalHeader}>
+            <View style={styles.flex}>
+              <Text style={styles.modalTitle}>¿Cómo te sentiste?</Text>
+              <Text style={styles.modalSubtitle}>Registra tu esfuerzo y una nota opcional.</Text>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel="Cancelar guardado" onPress={onCancel} disabled={saving}>
+              <MaterialIcons name="close" size={24} color={palette.ink} />
+            </Pressable>
+          </View>
+          <Text style={styles.modalLabel}>Esfuerzo percibido (1-5)</Text>
+          <View style={styles.exertionOptions}>
+            {[1, 2, 3, 4, 5].map((value) => (
+              <Pressable key={value} accessibilityRole="radio" accessibilityState={{ selected: perceivedExertion === value }} onPress={() => onChangeExertion(value)} style={[styles.exertionOption, perceivedExertion === value && styles.exertionOptionSelected]}>
+                <Text style={[styles.exertionOptionText, perceivedExertion === value && styles.exertionOptionTextSelected]}>{value}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <TextInput
+            multiline
+            value={clientNotes}
+            onChangeText={onChangeNotes}
+            placeholder="¿Cómo fue tu entrenamiento? (opcional)"
+            placeholderTextColor={palette.muted}
+            style={styles.feedbackNotesInput}
+            textAlignVertical="top"
+          />
+          <ActionButton onPress={onConfirm} disabled={saving}>
+            {saving ? <ActivityIndicator color={palette.white} /> : 'Guardar sesión'}
+          </ActionButton>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function TrafficPill({ level, waitMinutes }: { level: EquipmentTraffic['trafficLevel']; waitMinutes: number }) {
+  const traffic = { trafficLevel: level, estimatedWaitMinutes: waitMinutes } as EquipmentTraffic;
+  return <Text style={[styles.trafficPill, styles[`trafficPill_${level}`]]}>{trafficLabel(traffic)}</Text>;
 }
 
 function MetricInput({ label, keyboard, value, onChange, disabled }: { label: string; keyboard: 'number-pad' | 'decimal-pad'; value: string; onChange: (value: string) => void; disabled: boolean }) {
@@ -657,6 +796,18 @@ const styles = StyleSheet.create({
   darkHeading: { color: '#F4F8F5', fontSize: 16, fontWeight: '800' },
   darkBody: { color: '#91A098', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   darkAccent: { color: '#9BFF63', fontSize: 12, fontWeight: '700' },
+  smartOrderControls: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  smartOrderToggle: { flex: 1, minHeight: 42, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 13, borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 12 },
+  smartOrderToggleActive: { borderColor: '#9BFF63', backgroundColor: '#9BFF631C' },
+  smartOrderText: { color: '#91A098', fontSize: 12, fontWeight: '800' },
+  smartOrderTextActive: { color: '#9BFF63' },
+  refreshTrafficButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#27342E' },
+  optimizationBanner: { color: '#9BFF63', backgroundColor: '#9BFF631C', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, fontSize: 11, fontWeight: '800' },
+  trafficPill: { alignSelf: 'flex-start', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '800', overflow: 'hidden' },
+  trafficPill_free: { color: '#081009', backgroundColor: '#9BFF63' },
+  trafficPill_moderate: { color: '#3B2800', backgroundColor: '#F7C948' },
+  trafficPill_busy: { color: '#3B1200', backgroundColor: '#FF9868' },
+  trafficPill_out_of_service: { color: '#F4F8F5', backgroundColor: '#6B706C' },
   exerciseList: { gap: 9, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
   exerciseSummary: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   exerciseNumberDark: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#9BFF631C', color: '#9BFF63', fontSize: 12, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
@@ -714,6 +865,14 @@ const styles = StyleSheet.create({
   modalCard: { width: '100%', maxWidth: 420, borderRadius: 24, backgroundColor: palette.white, padding: 16, gap: 14, shadowColor: '#000000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.25, shadowRadius: 24, elevation: 12 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   modalTitle: { flex: 1, color: palette.ink, fontSize: 16, fontWeight: '800' },
+  modalSubtitle: { color: palette.muted, fontSize: 13, marginTop: 3 },
+  modalLabel: { color: palette.muted, fontSize: 12, fontWeight: '700' },
+  exertionOptions: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  exertionOption: { flex: 1, minHeight: 46, alignItems: 'center', justifyContent: 'center', borderRadius: 13, borderWidth: 1, borderColor: palette.line, backgroundColor: '#F2F4EE' },
+  exertionOptionSelected: { borderColor: palette.deepGreen, backgroundColor: palette.deepGreen },
+  exertionOptionText: { color: palette.ink, fontSize: 16, fontWeight: '800' },
+  exertionOptionTextSelected: { color: palette.white },
+  feedbackNotesInput: { minHeight: 100, borderRadius: 16, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.white, color: palette.ink, padding: 14, fontSize: 15, lineHeight: 21 },
   gifImage: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#F2F4EE' },
   rewardScreen: { flex: 1, backgroundColor: '#070B09', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 36, paddingBottom: 22 },
   rewardContent: { flex: 1, justifyContent: 'center', gap: 13 },

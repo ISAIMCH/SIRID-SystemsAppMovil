@@ -7,6 +7,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.get('/', asyncHandler(controller.listEquipment));
+router.get('/traffic', authorize('Cliente', 'Coach', 'Admin'), asyncHandler(controller.getEquipmentTraffic));
 router.post('/', authorize('Admin', 'Coach'), asyncHandler(controller.createEquipment));
 router.patch('/:id', authorize('Admin', 'Coach'), asyncHandler(controller.updateEquipment));
 

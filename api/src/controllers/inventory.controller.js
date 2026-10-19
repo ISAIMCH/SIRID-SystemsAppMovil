@@ -1,5 +1,7 @@
 const { z } = require('zod');
 const Equipment = require('../models/equipment.model');
+const Routine = require('../models/routine.model');
+const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
@@ -36,6 +38,103 @@ async function listEquipment(req, res) {
   res.json({ equipment: equipment.map(serializeEquipment) });
 }
 
+function currentTrainingTimeSlot(date) {
+  const hour = date.getHours();
+  if (hour < 12) return 'Mañana';
+  if (hour < 18) return 'Tarde';
+  return 'Noche';
+}
+
+function normalizedValue(value) {
+  return String(value ?? '').trim().toLocaleLowerCase();
+}
+
+function routineEquipmentReferences(routine, day) {
+  const blocks = routine.blocks?.length
+    ? routine.blocks.filter((block) => block.day === day)
+    : [{ exercises: (routine.exercises ?? []).filter((exercise) => (exercise.day ?? 0) === day) }];
+  return blocks.flatMap((block) => block.exercises ?? []).map((exercise) => ({
+    id: exercise.equipmentId?._id ?? exercise.equipmentId,
+    name: exercise.equipment ?? '',
+  }));
+}
+
+function equipmentMatches(reference, equipment) {
+  return (reference.id && String(reference.id) === String(equipment._id))
+    || (reference.name && normalizedValue(reference.name) === normalizedValue(equipment.name));
+}
+
+function sessionEquipmentReferences(session) {
+  return (session.blocks ?? []).flatMap((block) => block.sets ?? []).flatMap((set) => set.exercises ?? []).map((exercise) => ({
+    id: exercise.equipmentId,
+    name: '',
+  }));
+}
+
+async function getEquipmentTraffic(req, res) {
+  const now = new Date();
+  const today = now.getDay();
+  const slot = currentTrainingTimeSlot(now);
+  const ninetyMinutesAgo = new Date(now.getTime() - 90 * 60 * 1000);
+  const fortyFiveMinutesAgo = new Date(now.getTime() - 45 * 60 * 1000);
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [equipment, routines, sessions] = await Promise.all([
+    Equipment.find({}).sort({ zone: 1, name: 1 }).lean(),
+    Routine.find({ status: 'active', assignedTo: { $ne: null } })
+      .populate('assignedTo', 'role isActive currentlyInside preferredTrainingTime availableTrainingDays')
+      .lean(),
+    WorkoutSession.find({ completedAt: { $gte: new Date(Math.max(startOfToday.getTime(), ninetyMinutesAgo.getTime())) } })
+      .select('completedAt blocks')
+      .lean(),
+  ]);
+
+  const recentSessions = sessions.filter((session) => session.completedAt >= fortyFiveMinutesAgo);
+  return res.json({ traffic: equipment.map((rawEquipment) => {
+    const item = serializeEquipment(rawEquipment);
+    const usableUnits = Math.max(0, item.totalQuantity - item.maintenanceQuantity);
+    if (usableUnits === 0 || item.status === 'out_of_service') {
+      return {
+        equipmentId: String(item._id), name: item.name, zone: item.zone, usableUnits,
+        demandScore: 0, loadFactor: 99, trafficLevel: 'out_of_service', estimatedWaitMinutes: 0,
+      };
+    }
+
+    let demandScore = 0;
+    const insideClients = new Set();
+    const preferredClients = new Set();
+    for (const routine of routines) {
+      const client = routine.assignedTo;
+      if (!client || client.role !== 'Cliente' || client.isActive === false) continue;
+      const references = routineEquipmentReferences(routine, today);
+      if (!references.some((reference) => equipmentMatches(reference, item))) continue;
+      const clientKey = String(client._id);
+      if (client.currentlyInside && !insideClients.has(clientKey)) {
+        insideClients.add(clientKey);
+        demandScore += 2;
+      }
+      if (client.availableTrainingDays?.includes(today)
+        && client.preferredTrainingTime === slot && !preferredClients.has(clientKey)) {
+        preferredClients.add(clientKey);
+        demandScore += 1;
+      }
+    }
+
+    if (recentSessions.some((session) => sessionEquipmentReferences(session).some((reference) => equipmentMatches(reference, item)))) {
+      demandScore += 1.5;
+    }
+
+    const loadFactor = demandScore / usableUnits;
+    const trafficLevel = loadFactor < 0.8 ? 'free' : loadFactor < 1.6 ? 'moderate' : 'busy';
+    const estimatedWaitMinutes = trafficLevel === 'free' ? 0 : trafficLevel === 'moderate' ? 3 : Math.min(15, Math.round(loadFactor * 4));
+    return {
+      equipmentId: String(item._id), name: item.name, zone: item.zone, usableUnits,
+      demandScore, loadFactor, trafficLevel, estimatedWaitMinutes,
+    };
+  }) });
+}
+
 async function createEquipment(req, res) {
   const input = equipmentSchema.parse(req.body);
   if (input.maintenanceQuantity > input.totalQuantity) {
@@ -64,4 +163,4 @@ async function updateEquipment(req, res) {
   res.json({ equipment: serializeEquipment(equipment.toObject()) });
 }
 
-module.exports = { listEquipment, createEquipment, updateEquipment };
+module.exports = { listEquipment, getEquipmentTraffic, createEquipment, updateEquipment };

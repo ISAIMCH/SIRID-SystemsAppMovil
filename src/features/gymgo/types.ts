@@ -153,3 +153,35 @@ export type WorkoutSessionLog = {
     sets: { reps: number; weightKg: number; restSeconds: number }[];
   }[];
 };
+
+export type WorkoutSessionPayload = {
+  routineId: string;
+  trainingDay: number;
+  durationMinutes: number;
+  blocks: {
+    routineBlockId: string;
+    sets: {
+      setNumber: number;
+      exercises: {
+        routineExerciseId: string;
+        skipped: boolean;
+        reps?: number;
+        weightKg?: number;
+        durationMinutes?: number;
+        distanceKm?: number;
+        level?: number;
+      }[];
+    }[];
+  }[];
+  perceivedExertion?: number;
+  clientNotes?: string;
+};
+
+export type EquipmentTraffic = {
+  equipmentId: string;
+  name: string;
+  zone?: string;
+  usableUnits: number;
+  trafficLevel: 'free' | 'moderate' | 'busy' | 'out_of_service';
+  estimatedWaitMinutes: number;
+};

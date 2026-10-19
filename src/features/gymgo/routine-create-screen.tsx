@@ -1,16 +1,16 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { api, getApiErrorMessage } from './api';
+import { api, getApiErrorMessage, getEquipmentTraffic } from './api';
 import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
 import { ExerciseSearch } from './exercise-search';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { SelectField } from './select-field';
 import { palette } from './theme';
-import type { CuratedExercise, Exercise, Routine, RoutineBlock, RoutineTemplate } from './types';
+import type { CuratedExercise, EquipmentTraffic, Exercise, Routine, RoutineBlock, RoutineTemplate } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
 
 type Equipment = { _id: string; name: string; zone: string; type: 'strength' | 'cardio'; status: 'available' | 'busy' | 'out_of_service' };
@@ -68,6 +68,13 @@ function findInventoryEquipment(label: string, equipment: Equipment[]) {
     ?? `catalog:${label}`;
 }
 
+function equipmentTrafficHint(traffic?: EquipmentTraffic) {
+  if (!traffic || traffic.trafficLevel === 'free') return 'Libre';
+  if (traffic.trafficLevel === 'moderate') return 'Demanda media';
+  if (traffic.trafficLevel === 'busy') return `Alta demanda · ~${traffic.estimatedWaitMinutes} min`;
+  return 'En mantenimiento';
+}
+
 export default function RoutineCreateScreen() {
   const { n } = useLocalSearchParams<{ n?: string }>();
   return <RoutineForm key={n ?? 'default'} />;
@@ -82,6 +89,7 @@ function RoutineForm() {
 
   const [clients, setClients] = useState<DirectoryClient[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [equipmentTraffic, setEquipmentTraffic] = useState<EquipmentTraffic[]>([]);
   const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -94,6 +102,7 @@ function RoutineForm() {
   const [durationWeeks, setDurationWeeks] = useState('4');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [assignedTo, setAssignedTo] = useState(params.clientId ?? '');
+  const prefilledClientId = useRef<string | null>(null);
   const [isClientFileOpen, setIsClientFileOpen] = useState(false);
   const [clientObservations, setClientObservations] = useState('');
   const [isSavingObservations, setIsSavingObservations] = useState(false);
@@ -122,14 +131,16 @@ function RoutineForm() {
     let isCurrent = true;
     async function load() {
       try {
-        const [clientsResponse, equipmentResponse, groupsResponse] = await Promise.all([
+        const [clientsResponse, equipmentResponse, groupsResponse, traffic] = await Promise.all([
           api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: 'Cliente' } }),
           api.get<{ equipment: Equipment[] }>('/inventory'),
           api.get<{ groups: { name: string }[] }>('/muscle-groups'),
+          getEquipmentTraffic().catch(() => [] as EquipmentTraffic[]),
         ]);
         if (!isCurrent) return;
         setClients(clientsResponse.data.users);
         setEquipment(equipmentResponse.data.equipment);
+        setEquipmentTraffic(traffic);
         setMuscleGroups(groupsResponse.data.groups.map((group) => group.name));
 
         if (editingId) {
@@ -157,6 +168,21 @@ function RoutineForm() {
     void load();
     return () => { isCurrent = false; };
   }, [editingId, isTemplate]);
+
+  useEffect(() => {
+    if (!assignedTo) {
+      prefilledClientId.current = null;
+      return;
+    }
+    if (isTemplate || isEditing || prefilledClientId.current === assignedTo) return;
+    const client = clients.find((entry) => entry.id === assignedTo);
+    if (!client) return;
+    const availableDays = client.availableTrainingDays?.filter((day) => day >= 0 && day <= 6) ?? [];
+    prefilledClientId.current = assignedTo;
+    setGoal(client.goal ?? '');
+    setLevel(client.experienceLevel ?? 'principiante');
+    setSelectedDays(availableDays.length ? availableDays : [1, 2, 3]);
+  }, [assignedTo, clients, isEditing, isTemplate]);
 
   if (user?.role !== 'Coach') return <Redirect href="/(main)/routines" />;
 
@@ -490,7 +516,11 @@ function RoutineForm() {
         <SelectField label="Equipo" placeholder="Selecciona el equipo" options={[
           { value: BODYWEIGHT, label: 'Peso Corporal / Libre', hint: 'Fuerza sin máquina' },
           ...(equipmentChoice.startsWith('catalog:') && selectedCatalogExercise?.equipment ? [{ value: equipmentChoice, label: selectedCatalogExercise.equipment, hint: 'Equipo del catálogo' }] : []),
-          ...availableEquipment.map((item) => ({ value: item._id, label: item.name, hint: `${item.zone} · ${item.type === 'cardio' ? 'Cardio' : 'Fuerza'}` })),
+          ...availableEquipment.map((item) => ({
+            value: item._id,
+            label: item.name,
+            hint: `${item.zone} · ${item.type === 'cardio' ? 'Cardio' : 'Fuerza'} · ${equipmentTrafficHint(equipmentTraffic.find((traffic) => traffic.equipmentId === item._id))}`,
+          })),
         ]} value={equipmentChoice} onChange={setEquipmentChoice} />
         {metricType === 'cardio' ? (
           <>

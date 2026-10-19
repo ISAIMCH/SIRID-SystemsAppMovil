@@ -1,7 +1,7 @@
 import { create, isAxiosError } from 'axios';
 
 import { readAccessToken } from './token-storage';
-import type { Promotion } from './types';
+import type { EquipmentTraffic, Promotion } from './types';
 
 export const apiOrigin = (process.env.EXPO_PUBLIC_API_URL ?? 'https://sirid-systemsappmovil.onrender.com')
   .replace(/\/+$/, '');
@@ -29,4 +29,9 @@ export function getApiErrorMessage(error: unknown, fallback: string) {
     return `${fallback} (${error.code ?? 'sin respuesta'}: ${error.message}) — ${apiOrigin}`;
   }
   return error instanceof Error ? `${fallback} (${error.message})` : fallback;
+}
+
+export async function getEquipmentTraffic() {
+  const response = await api.get<{ traffic: EquipmentTraffic[] }>('/inventory/traffic');
+  return response.data.traffic;
 }

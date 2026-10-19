@@ -15,6 +15,8 @@ const workoutSchema = z.object({
   routineId: z.string().regex(/^[a-f\d]{24}$/i),
   trainingDay: z.number().int().min(0).max(6),
   durationMinutes: z.number().int().min(0).max(600),
+  perceivedExertion: z.number().int().min(1).max(5).optional(),
+  clientNotes: z.string().optional(),
   blocks: z.array(z.object({
     routineBlockId: z.string().regex(/^[a-f\d]{24}$/i),
     sets: z.array(z.object({
@@ -159,6 +161,8 @@ async function createWorkoutSession(req, res) {
     durationMinutes: input.durationMinutes,
     totalVolumeKg,
     caloriesBurned,
+    ...(input.perceivedExertion !== undefined ? { perceivedExertion: input.perceivedExertion } : {}),
+    ...(input.clientNotes !== undefined ? { clientNotes: input.clientNotes } : {}),
     blocks: sessionBlocks,
   }]);
 
