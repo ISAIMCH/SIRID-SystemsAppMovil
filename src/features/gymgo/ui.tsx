@@ -100,8 +100,8 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
     <View style={styles.fieldGroup}>
       <Text style={[styles.fieldLabel, dark && styles.darkPrimaryText]}>{label}</Text>
       <TextInput
-        placeholderTextColor={dark ? '#91A098' : palette.muted}
-        selectionColor={dark ? '#9BFF63' : palette.green}
+        placeholderTextColor={dark ? '#71717A' : palette.muted}
+        selectionColor={dark ? '#10FF85' : palette.green}
         style={[styles.input, dark && styles.darkInput, admin && styles.adminGlassInput]}
         {...props}
       />
@@ -176,8 +176,8 @@ const styles = StyleSheet.create({
   fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   input: { height: 52, borderRadius: 8, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, color: palette.ink, paddingHorizontal: 14, fontSize: 16 },
   action: { minHeight: 52, borderRadius: 8, backgroundColor: palette.green, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
-  darkAction: { backgroundColor: '#9BFF63' },
-  adminAction: { backgroundColor: '#9BFF63' },
+  darkAction: { backgroundColor: '#10FF85' },
+  adminAction: { backgroundColor: '#10FF85' },
   actionText: { color: palette.white, fontSize: 15, fontWeight: '700' },
   secondaryAction: { backgroundColor: palette.lime },
   secondaryText: { color: palette.ink },
@@ -190,13 +190,13 @@ const styles = StyleSheet.create({
   surface: { backgroundColor: palette.surface, borderRadius: 10, padding: 18, borderWidth: 1, borderColor: palette.line },
   darkPrimaryText: { color: '#F4F8F5' },
   darkSecondaryText: { color: '#91A098' },
-  darkAccentText: { color: '#9BFF63' },
-  darkControl: { borderColor: '#27342E', backgroundColor: '#111815' },
-  darkInput: { borderColor: '#27342E', backgroundColor: '#141A17', color: '#F4F8F5' },
+  darkAccentText: { color: '#10FF85' },
+  darkControl: { borderColor: '#27272A', backgroundColor: '#1E1E1E' },
+  darkInput: { borderColor: '#27272A', backgroundColor: '#18181B', color: '#FFFFFF' },
   adminGlassInput: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderColor: 'rgba(0, 0, 0, 0.05)', borderWidth: 1 },
   darkActionText: { color: '#081009' },
   adminActionText: { color: '#081009' },
-  darkSecondaryAction: { backgroundColor: '#18211D' },
+  darkSecondaryAction: { backgroundColor: '#27272A' },
   darkNotice: { backgroundColor: '#18211D' },
   darkErrorNotice: { backgroundColor: '#321B19' },
   darkNoticeText: { color: '#DCE8E0' },

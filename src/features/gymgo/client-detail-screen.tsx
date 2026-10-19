@@ -66,7 +66,7 @@ export default function ClientDetailScreen() {
           accessibilityLabel="Volver al directorio"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color={palette.ink} />
+          <IconBadge name="arrow-back" color="#FFFFFF" />
         </Pressable>
         <View style={styles.flex}>
           <Text style={styles.title}>{person ? [person.name, person.lastName].filter(Boolean).join(' ') : 'Perfil'}</Text>
@@ -94,15 +94,15 @@ export default function ClientDetailScreen() {
             <>
               <SectionTitle>Información</SectionTitle>
               <FloatingCard style={styles.details}>
-                <DetailRow icon="mail" color={palette.cyan} label="Correo" value={person.email} />
-                <DetailRow icon="person" color={palette.violet} label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
-                <DetailRow icon="phone" color={palette.neon} label="Teléfono" value={person.phone || 'No registrado'} />
+                <DetailRow icon="mail" color="#10FF85" label="Correo" value={person.email} />
+                <DetailRow icon="person" color="#10FF85" label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
+                <DetailRow icon="phone" color="#10FF85" label="Teléfono" value={person.phone || 'No registrado'} />
                 {isCoach ? (
-                  <DetailRow icon="place" color={palette.orange} label="Dirección" value={person.address || 'No registrada'} last />
+                  <DetailRow icon="place" color="#10FF85" label="Dirección" value={person.address || 'No registrada'} last />
                 ) : (
                   <>
-                    <DetailRow icon="flag" color={palette.orange} label="Objetivo" value={person.goal || 'No definido'} />
-                    <DetailRow icon="trending-up" color={palette.violet} label="Experiencia" value={person.experienceLevel ? experienceLabels[person.experienceLevel] : 'No definida'} last />
+                    <DetailRow icon="flag" color="#10FF85" label="Objetivo" value={person.goal || 'No definido'} />
+                    <DetailRow icon="trending-up" color="#10FF85" label="Experiencia" value={person.experienceLevel ? experienceLabels[person.experienceLevel] : 'No definida'} last />
                   </>
                 )}
               </FloatingCard>
@@ -111,16 +111,16 @@ export default function ClientDetailScreen() {
                 <>
                   <SectionTitle>Membresía</SectionTitle>
                   <FloatingCard style={styles.details}>
-                    <DetailRow icon="verified" color={palette.neon} label="Estado" value={person.membership ? membershipLabels[person.membership.status] : 'Pendiente'} />
-                    <DetailRow icon="event" color={palette.cyan} label="Inicio" value={formatDate(person.membership?.startsAt)} />
-                    <DetailRow icon="event-busy" color={palette.orange} label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
+                    <DetailRow icon="verified" color="#10FF85" label="Estado" value={person.membership ? membershipLabels[person.membership.status] : 'Pendiente'} />
+                    <DetailRow icon="event" color="#10FF85" label="Inicio" value={formatDate(person.membership?.startsAt)} />
+                    <DetailRow icon="event-busy" color="#10FF85" label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
                   </FloatingCard>
 
                   <SectionTitle>Coach asignado</SectionTitle>
                   <FloatingCard style={styles.coachCard}>
                     {person.assignedCoach ? (
                       <>
-                        <IconBadge name="sports" color={palette.cyan} />
+                        <IconBadge name="sports" color="#10FF85" />
                         <View style={styles.flex}>
                           <Text style={styles.coachName}>{person.assignedCoach.name}</Text>
                           <Text style={styles.coachEmail}>{person.assignedCoach.email}</Text>
@@ -223,13 +223,13 @@ const styles = StyleSheet.create({
   title: { color: '#F4F8F5', fontSize: 24, fontWeight: '800' },
   subtitle: { color: '#91A098', fontSize: 13 },
   loading: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
-  details: { paddingVertical: 6 },
+  details: { paddingVertical: 6, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
   detailRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  detailDivider: { borderBottomWidth: 1, borderBottomColor: palette.line },
-  detailLabel: { color: '#91A098', fontSize: 13 },
-  detailValue: { flex: 1, color: '#F4F8F5', fontSize: 13, fontWeight: '700', textAlign: 'right' },
-  coachCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  coachName: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
-  coachEmail: { color: '#91A098', fontSize: 13 },
-  form: { gap: 16, padding: 20 },
+  detailDivider: { borderBottomWidth: 1, borderBottomColor: '#27272A' },
+  detailLabel: { color: '#A1A1AA', fontSize: 13 },
+  detailValue: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  coachCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
+  coachName: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  coachEmail: { color: '#A1A1AA', fontSize: 13 },
+  form: { gap: 16, padding: 20, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
 });

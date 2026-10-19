@@ -12,13 +12,13 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 const dark = {
   background: '#070B09',
-  surface: '#111815',
-  elevated: '#18211D',
-  line: '#27342E',
-  muted: '#91A098',
-  white: '#F4F8F5',
-  green: '#9BFF63',
-  cyan: '#55D6D0',
+  surface: '#1E1E1E',
+  elevated: '#27272A',
+  line: '#27272A',
+  muted: '#A1A1AA',
+  white: '#FFFFFF',
+  green: '#10FF85',
+  cyan: '#10FF85',
 };
 
 function springScale(scale: Animated.Value, toValue: number) {
@@ -132,7 +132,7 @@ function MenuRow({ icon, title, onPress, warning = false }: { icon: keyof typeof
       onPressIn={() => springScale(scale, 0.97)}
       onPressOut={() => springScale(scale, 1)}
       style={[styles.menuRow, { transform: [{ scale }] }]}>
-      <MaterialIcons name={icon} size={22} color={warning ? '#FF8A80' : '#F4F8F5'} />
+      <MaterialIcons name={icon} size={22} color={warning ? '#A1A1AA' : '#10FF85'} />
       <Text style={[styles.menuTitle, warning && styles.warning]}>{title}</Text>
       {!warning ? <MaterialIcons name="chevron-right" size={22} color="#91A098" /> : null}
     </AnimatedPressable>
@@ -143,39 +143,39 @@ function ProfileInput({ label, ...props }: { label: string } & React.ComponentPr
   return (
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput {...props} placeholderTextColor="#91A098" style={styles.input} />
+      <TextInput {...props} placeholderTextColor="#71717A" style={styles.input} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#9BFF63', fontSize: 20, fontWeight: '900' },
+  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#18181B', borderWidth: 1, borderColor: '#10FF85', alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: '#10FF85', fontSize: 20, fontWeight: '900' },
   headerText: { flex: 1 },
-  title: { color: '#F4F8F5', fontSize: 22, fontWeight: '800' },
-  subtitle: { color: '#91A098', fontSize: 13, marginTop: 5 },
+  title: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
+  subtitle: { color: '#A1A1AA', fontSize: 13, marginTop: 5 },
   // competitionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#1E1E1E', borderColor: '#27342E', padding: 18 },
   competitionCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: dark.surface, borderColor: dark.line, padding: 18 },
   competitionInfo: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   cardTitle: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
   cardSubtitle: { color: '#91A098', fontSize: 12, marginTop: 4 },
-  viewButton: { minHeight: 44, minWidth: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#9BFF63', borderRadius: 8, paddingHorizontal: 15 },
+  viewButton: { minHeight: 44, minWidth: 52, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#10FF85', borderRadius: 8, paddingHorizontal: 15 },
   viewButtonText: { color: '#fffffe', fontWeight: '800' },
   // streakCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 20, borderColor: dark.line, backgroundColor: dark.surface, padding: 16 },
   // menuList: { backgroundColor: '#1E1E1E', borderRadius: 18, borderWidth: 1, borderColor: '#27342E', overflow: 'hidden' },
-  menuList: { backgroundColor: dark.surface, borderRadius: 18, borderWidth: 1, borderColor: dark.line, overflow: 'hidden' },
-  menuRow: { minHeight: 62, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#27342E' },
-  menuTitle: { flex: 1, color: '#F4F8F5', fontSize: 14, fontWeight: '700' },
-  warning: { color: '#FF8A80' },
+  menuList: { gap: 10 },
+  menuRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#1E1E1E' },
+  menuTitle: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  warning: { color: '#A1A1AA' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#000000B8' },
   modalCard: { gap: 16, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#1E1E1E', padding: 22 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   modalTitle: { color: '#F4F8F5', fontSize: 20, fontWeight: '800' },
   inputGroup: { gap: 6 },
   inputLabel: { color: '#F4F8F5', fontSize: 13, fontWeight: '700' },
-  input: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#121212', color: '#F4F8F5', paddingHorizontal: 14, fontSize: 16 },
-  submitButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 12, backgroundColor: '#9BFF63' },
+  input: { height: 48, borderRadius: 10, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#18181B', color: '#FFFFFF', paddingHorizontal: 14, fontSize: 16 },
+  submitButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#10FF85' },
   submitText: { color: '#121212', fontSize: 14, fontWeight: '800' },
-  modalHint: { color: '#91A098', fontSize: 12 },
+  modalHint: { color: '#A1A1AA', fontSize: 12 },
 });

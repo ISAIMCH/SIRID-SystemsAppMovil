@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -142,7 +143,7 @@ function ClientMembership() {
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}
           style={styles.clientBackButton}>
-          <IconBadge name="arrow-back" color="#F4F8F5" />
+          <IconBadge name="arrow-back" color="#FFFFFF" />
         </Pressable>
         <View style={styles.clientHeaderText}>
           <Text style={styles.clientHeaderTitle}>Pago y membresía</Text>
@@ -167,7 +168,7 @@ function ClientMembership() {
             <IconBadge name="workspace-premium" color={palette.neon} size={48} />
             <View style={styles.planTitleRow}>
               <Text style={styles.planName}>{membership.planName ?? 'Plan por asignar'}</Text>
-              <Text style={[styles.membershipStatus, membership.status === 'active' && styles.paidStatus]}>
+              <Text style={[styles.membershipStatus, membership.status === 'active' ? styles.membershipActive : membership.status === 'pending' ? styles.membershipPending : styles.membershipInactive]}>
                 {membershipStatusLabels[membership.status]}
               </Text>
             </View>
@@ -198,7 +199,12 @@ function ClientMembership() {
           ) : (
             <View style={styles.paymentAction}>
               {success ? <Notice>{success}</Notice> : null}
-              <Notice>El pago en línea aún no está conectado. Puedes solicitar una referencia y pagar en recepción.</Notice>
+              <View style={styles.paymentNotice}>
+                <View style={styles.paymentNoticeIcon}>
+                  <MaterialIcons name="info-outline" size={20} color="#10FF85" />
+                </View>
+                <Text style={styles.paymentNoticeText}>El pago en línea aún no está conectado. Solicita una referencia y paga en recepción.</Text>
+              </View>
               <ActionButton onPress={() => void requestPayment()} disabled={isRequesting || !membership.planName || typeof membership.price !== 'number'}>
                 {isRequesting ? <ActivityIndicator color={palette.white} /> : 'Solicitar pago en recepción'}
               </ActionButton>
@@ -218,7 +224,7 @@ function ClientMembership() {
               </View>
               <View style={styles.historyAmount}>
                 <Text style={styles.clientPaymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
-                <Text style={[styles.historyStatus, payment.status === 'paid' && styles.historyPaid]}>
+                <Text style={[styles.historyStatus, payment.status === 'paid' ? styles.historyPaid : payment.status === 'pending' ? styles.historyPending : styles.historyCancelled]}>
                   {paymentStatusLabels[payment.status]}
                 </Text>
               </View>
@@ -231,46 +237,53 @@ function ClientMembership() {
 }
 
 const styles = StyleSheet.create({
-  clientHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27342E' },
+  clientHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27272A' },
   clientBackButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   clientHeaderText: { flex: 1, gap: 4 },
-  clientHeaderTitle: { color: '#F4F8F5', fontSize: 22, fontWeight: '800' },
-  clientHeaderDetail: { color: '#91A098', fontSize: 13 },
+  clientHeaderTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
+  clientHeaderDetail: { color: '#A1A1AA', fontSize: 13 },
   loading: { minHeight: 120, alignItems: 'center', justifyContent: 'center' },
   feedback: { gap: 10 },
-  retry: { color: '#9BFF63', fontSize: 14, fontWeight: '800', paddingVertical: 6 },
-  planCard: { gap: 12, backgroundColor: '#0F2A24', borderColor: '#0F2A24', borderRadius: 24, padding: 22, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 5 },
-  planEyebrow: { color: palette.neon, fontSize: 10, fontWeight: '800' },
-  planTitleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  planName: { flex: 1, color: palette.white, fontSize: 21, fontWeight: '800' },
-  membershipStatus: { color: palette.neon, fontSize: 12, fontWeight: '800', backgroundColor: '#19D98B26', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden' },
-  paidStatus: { color: palette.neon },
-  planPrice: { color: palette.white, fontSize: 15, fontWeight: '700' },
-  dateRow: { flexDirection: 'row', gap: 24, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#2F4A42' },
+  retry: { color: '#10FF85', fontSize: 14, fontWeight: '800', paddingVertical: 6 },
+  planCard: { gap: 14, backgroundColor: '#18181B', borderColor: '#27272A', borderRadius: 16, padding: 22, shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.24, shadowRadius: 18, elevation: 5 },
+  planEyebrow: { color: '#10FF85', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
+  planTitleRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  planName: { flex: 1, minWidth: 160, color: '#FFFFFF', fontSize: 22, lineHeight: 27, fontWeight: '900' },
+  membershipStatus: { fontSize: 11, fontWeight: '900', borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, overflow: 'hidden' },
+  membershipActive: { color: '#081009', backgroundColor: '#10FF85', borderColor: '#10FF85' },
+  membershipPending: { color: '#F7C948', backgroundColor: '#F7C94818', borderColor: '#F7C948' },
+  membershipInactive: { color: '#A1A1AA', backgroundColor: '#27272A', borderColor: '#3F3F46' },
+  planPrice: { color: '#FFFFFF', fontSize: 16, lineHeight: 22, fontWeight: '800' },
+  dateRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 24, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#27272A' },
   dateItem: { gap: 4 },
-  dateLabel: { color: '#C4D2C6', fontSize: 11 },
-  dateValue: { color: palette.white, fontSize: 13, fontWeight: '700' },
-  pendingCard: { gap: 8, borderWidth: 1, borderColor: '#27342E', borderRadius: 24, backgroundColor: '#111815', padding: 20 },
+  dateLabel: { color: '#A1A1AA', fontSize: 11, fontWeight: '700' },
+  dateValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+  pendingCard: { gap: 8, borderWidth: 1, borderColor: '#27272A', borderRadius: 16, backgroundColor: '#1E1E1E', padding: 20 },
   pendingTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' },
   pendingBody: { color: palette.muted, fontSize: 13 },
   reference: { color: palette.green, fontSize: 22, fontWeight: '900' },
   pin: { color: palette.orange, fontSize: 44, fontWeight: '900', letterSpacing: 10 },
   referenceSmall: { color: palette.green, fontSize: 12, fontWeight: '800' },
   paymentAmount: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  clientPendingTitle: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
-  clientPendingBody: { color: '#91A098', fontSize: 13 },
-  clientPaymentAmount: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
-  clientHistoryName: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
-  clientHistoryMeta: { color: '#91A098', fontSize: 11 },
+  clientPendingTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+  clientPendingBody: { color: '#A1A1AA', fontSize: 13 },
+  clientPaymentAmount: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  clientHistoryName: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  clientHistoryMeta: { color: '#A1A1AA', fontSize: 11 },
   paymentAction: { gap: 10 },
-  helper: { color: '#91A098', fontSize: 12, lineHeight: 17 },
-  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 16, borderRadius: 24, borderWidth: 0, shadowColor: '#1C2A25', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.07, shadowRadius: 14, elevation: 3 },
+  paymentNotice: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#27272A', borderRadius: 12, backgroundColor: '#1E1E1E', padding: 14 },
+  paymentNoticeIcon: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: '#10FF8512' },
+  paymentNoticeText: { flex: 1, color: '#A1A1AA', fontSize: 13, lineHeight: 19 },
+  helper: { color: '#A1A1AA', fontSize: 12, lineHeight: 17 },
+  historyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#1E1E1E' },
   historyInfo: { flex: 1, gap: 4 },
   historyName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
   historyMeta: { color: palette.muted, fontSize: 11 },
   historyAmount: { alignItems: 'flex-end', gap: 4 },
-  historyStatus: { color: palette.coral, fontSize: 11, fontWeight: '700' },
-  historyPaid: { color: palette.green },
+  historyStatus: { fontSize: 10, fontWeight: '900', borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, overflow: 'hidden' },
+  historyPaid: { color: '#081009', backgroundColor: '#10FF85', borderColor: '#10FF85' },
+  historyPending: { color: '#F7C948', backgroundColor: '#F7C94818', borderColor: '#F7C948' },
+  historyCancelled: { color: '#FF8A80', backgroundColor: '#FF8A8018', borderColor: '#FF8A80' },
   adminPayment: { gap: 10 },
   adminPaymentDetails: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },

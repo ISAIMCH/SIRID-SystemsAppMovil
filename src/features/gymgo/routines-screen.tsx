@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
@@ -372,7 +373,7 @@ export default function RoutinesScreen() {
   }
 
   const floatingRestTimer = restTime !== null ? (
-    <View style={styles.floatingRestTimer} accessibilityLiveRegion="polite">
+    <BlurView intensity={32} tint="dark" style={styles.floatingRestTimer} accessibilityLiveRegion="polite">
       <View style={styles.restTimerCopy}>
         <Text style={styles.restTimerLabel}>DESCANSO</Text>
         <Text style={styles.restTimerValue}>{`${Math.floor(restTime / 60).toString().padStart(2, '0')}:${(restTime % 60).toString().padStart(2, '0')}`}</Text>
@@ -394,7 +395,7 @@ export default function RoutinesScreen() {
         style={styles.restTimerSkipButton}>
         <Text style={styles.restTimerSkipText}>Saltar</Text>
       </Pressable>
-    </View>
+    </BlurView>
   ) : null;
 
   return (
@@ -484,12 +485,16 @@ export default function RoutinesScreen() {
                       <FloatingCard key={blockId} style={[styles.blockCard, styles.darkBlockCard]}>
                         <View style={styles.blockHeader}>
                           <IconBadge name={block.blockType === 'single' ? 'fitness-center' : block.blockType === 'superset' ? 'sync-alt' : 'autorenew'} color={block.blockType === 'single' ? palette.neon : palette.violet} />
-                          <View style={styles.flex}>
-                            <Text style={styles.darkHeading}>Bloque {blockIndex + 1} · {typeLabel}</Text>
-                            <Text style={styles.darkMuted}>{restTimer?.blockId === blockId ? `Descanso · ${restTimer.remaining}s` : `${block.sets} rondas · ${block.restSeconds}s descanso`}</Text>
+                          <View style={styles.blockHeaderContent}>
+                            <View style={styles.blockHeaderTitleRow}>
+                              <View style={styles.blockHeaderTitleColumn}>
+                                <Text style={styles.darkHeading}>Bloque {blockIndex + 1} · {typeLabel}</Text>
+                                <Text style={styles.darkMuted}>{restTimer?.blockId === blockId ? `Descanso · ${restTimer.remaining}s` : `${block.sets} rondas · ${block.restSeconds}s descanso`}</Text>
+                              </View>
+                              <View style={styles.progressPill}><Text style={styles.progressText}>{done.length}/{block.sets}</Text></View>
+                            </View>
+                            <TrafficPill level={blockTraffic} waitMinutes={blockTrafficItem?.estimatedWaitMinutes ?? 0} />
                           </View>
-                          <TrafficPill level={blockTraffic} waitMinutes={blockTrafficItem?.estimatedWaitMinutes ?? 0} />
-                          <View style={styles.progressPill}><Text style={styles.progressText}>{done.length}/{block.sets}</Text></View>
                         </View>
 
                         <View style={styles.exerciseList}>
@@ -497,7 +502,7 @@ export default function RoutinesScreen() {
                           const cardio = isCardio(exercise);
                           const equipment = exercise.equipment ?? (typeof exercise.equipmentId === 'object' && exercise.equipmentId !== null ? exercise.equipmentId.name : exercise.bodyweight ? 'Peso corporal / libre' : 'Equipo');
                           return (
-                            <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.exerciseSummary}>
+                            <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.exerciseCard}>
                               <Text style={styles.exerciseNumberDark}>{String.fromCharCode(65 + exerciseIndex)}</Text>
                               <View style={styles.flex}>
                                 <View style={styles.exerciseNameRow}>
@@ -509,11 +514,16 @@ export default function RoutinesScreen() {
                                   ) : null}
                                 </View>
                                 <Text style={styles.darkMuted}>{exercise.muscleGroup} · {equipment}</Text>
-                                <TrafficPill level={trafficForExercise(exercise, trafficById)?.trafficLevel ?? 'free'} waitMinutes={trafficForExercise(exercise, trafficById)?.estimatedWaitMinutes ?? 0} />
-                                {isEquipmentOutOfService(exercise) ? <Text style={styles.maintenanceBadge}>En mantenimiento</Text> : null}
+                                <View style={styles.exerciseTrafficRow}>
+                                  <TrafficPill level={trafficForExercise(exercise, trafficById)?.trafficLevel ?? 'free'} waitMinutes={trafficForExercise(exercise, trafficById)?.estimatedWaitMinutes ?? 0} />
+                                  {isEquipmentOutOfService(exercise) ? <Text style={styles.maintenanceBadge}>En mantenimiento</Text> : null}
+                                </View>
                                 {(lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) ? (
                                   <Pressable accessibilityRole="button" onPress={() => prefillLastPerformance(block, exercise, exerciseIndex, (lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) as LastPerformance)}>
-                                    <Text style={styles.lastPerformance}>Última vez: {formatLastPerformance((lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) as LastPerformance)}</Text>
+                                    <View style={styles.lastPerformancePill}>
+                                      <MaterialIcons name="history" size={13} color="#91A098" />
+                                      <Text style={styles.lastPerformance}>Última vez · {formatLastPerformance((lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) as LastPerformance)}</Text>
+                                    </View>
                                   </Pressable>
                                 ) : null}
                                 <Text style={styles.darkAccent}>{cardio ? [exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ') || 'Cardio' : `${exercise.reps ?? ''}${exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}`}</Text>
@@ -558,7 +568,8 @@ export default function RoutinesScreen() {
                                         </>
                                       )}
                                       <Pressable accessibilityRole="button" accessibilityLabel={exerciseSkipped ? `Registrar ${exercise.name}` : `Saltar ${exercise.name}`} disabled={disabled} onPress={() => toggleSkipped(block, setNumber, exercise, exerciseIndex)} style={[styles.skipButton, isEquipmentOutOfService(exercise) && styles.skipButtonMaintenance]}>
-                                        <Text style={styles.skipButtonText}>{exerciseSkipped ? 'Registrar' : 'Aparato ocupado / Saltar'}</Text>
+                                        <MaterialIcons name={exerciseSkipped ? 'replay' : 'skip-next'} size={15} color={exerciseSkipped ? '#9BFF63' : '#DCE8E0'} />
+                                        <Text style={styles.skipButtonText}>{exerciseSkipped ? 'Registrar' : 'Saltar'}</Text>
                                       </Pressable>
                                     </View>
                                   );
@@ -579,9 +590,13 @@ export default function RoutinesScreen() {
                       </FloatingCard>
                     );
                   })}
-                  <ActionButton onPress={() => void saveSession()} disabled={savingDay || !Object.values(completedSets).some((sets) => sets.length > 0)}>
-                    {savingDay ? <ActivityIndicator color={palette.white} /> : 'Guardar entrenamiento del día'}
-                  </ActionButton>
+                  <Pressable
+                    accessibilityRole="button"
+                    disabled={savingDay || !Object.values(completedSets).some((sets) => sets.length > 0)}
+                    onPress={() => void saveSession()}
+                    style={({ pressed }) => [styles.saveWorkoutButton, (savingDay || !Object.values(completedSets).some((sets) => sets.length > 0)) && styles.saveWorkoutButtonDisabled, pressed && styles.saveWorkoutButtonPressed]}>
+                    {savingDay ? <ActivityIndicator color="#081009" /> : <><Text style={styles.saveWorkoutText}>Guardar entrenamiento</Text><MaterialIcons name="arrow-forward" size={20} color="#081009" /></>}
+                  </Pressable>
                 </>
               )}
             </>
@@ -687,7 +702,12 @@ function WorkoutFeedbackModal({
 
 function TrafficPill({ level, waitMinutes }: { level: EquipmentTraffic['trafficLevel']; waitMinutes: number }) {
   const traffic = { trafficLevel: level, estimatedWaitMinutes: waitMinutes } as EquipmentTraffic;
-  return <Text style={[styles.trafficPill, styles[`trafficPill_${level}`]]}>{trafficLabel(traffic)}</Text>;
+  return (
+    <View style={[styles.trafficPill, styles[`trafficPill_${level}`]]}>
+      <View style={[styles.trafficDot, styles[`trafficDot_${level}`]]} />
+      <Text style={styles.trafficPillText}>{trafficLabel(traffic)}</Text>
+    </View>
+  );
 }
 
 function MetricInput({ label, keyboard, value, onChange, disabled }: { label: string; keyboard: 'number-pad' | 'decimal-pad'; value: string; onChange: (value: string) => void; disabled: boolean }) {
@@ -792,7 +812,7 @@ const styles = StyleSheet.create({
   restCard: { alignItems: 'center', gap: 10, paddingVertical: 30 },
   restTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
   restCopy: { color: palette.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-  darkBlockCard: { backgroundColor: '#111815', borderColor: '#27342E' },
+  darkBlockCard: { backgroundColor: '#161B1E', borderColor: '#2B2B2B', shadowColor: '#000000', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.24, shadowRadius: 14, elevation: 5 },
   darkHeading: { color: '#F4F8F5', fontSize: 16, fontWeight: '800' },
   darkBody: { color: '#91A098', fontSize: 13, lineHeight: 19, textAlign: 'center' },
   darkAccent: { color: '#9BFF63', fontSize: 12, fontWeight: '700' },
@@ -803,35 +823,44 @@ const styles = StyleSheet.create({
   smartOrderTextActive: { color: '#9BFF63' },
   refreshTrafficButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 13, borderWidth: 1, borderColor: '#27342E' },
   optimizationBanner: { color: '#9BFF63', backgroundColor: '#9BFF631C', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, fontSize: 11, fontWeight: '800' },
-  trafficPill: { alignSelf: 'flex-start', borderRadius: 9, paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '800', overflow: 'hidden' },
-  trafficPill_free: { color: '#081009', backgroundColor: '#9BFF63' },
-  trafficPill_moderate: { color: '#3B2800', backgroundColor: '#F7C948' },
-  trafficPill_busy: { color: '#3B1200', backgroundColor: '#FF9868' },
-  trafficPill_out_of_service: { color: '#F4F8F5', backgroundColor: '#6B706C' },
+  trafficPill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4 },
+  trafficPill_free: { borderColor: '#10FF85', backgroundColor: '#10FF8512' },
+  trafficPill_moderate: { borderColor: '#F7C948', backgroundColor: '#F7C94812' },
+  trafficPill_busy: { borderColor: '#FF9868', backgroundColor: '#FF986812' },
+  trafficPill_out_of_service: { borderColor: '#71717A', backgroundColor: '#71717A18' },
+  trafficPillText: { color: '#DCE8E0', fontSize: 10, fontWeight: '800' },
+  trafficDot: { width: 6, height: 6, borderRadius: 3 },
+  trafficDot_free: { backgroundColor: '#10FF85' },
+  trafficDot_moderate: { backgroundColor: '#F7C948' },
+  trafficDot_busy: { backgroundColor: '#FF9868' },
+  trafficDot_out_of_service: { backgroundColor: '#A1A1AA' },
   exerciseList: { gap: 9, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
   exerciseSummary: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  exerciseNumberDark: { width: 25, height: 25, borderRadius: 13, backgroundColor: '#9BFF631C', color: '#9BFF63', fontSize: 12, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
-  exerciseNameDark: { flex: 1, color: '#F4F8F5', fontSize: 13, fontWeight: '800' },
-  compactSetRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 9, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 7 },
+  exerciseNumberDark: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#10FF8512', borderWidth: 1, borderColor: '#10FF85', color: '#10FF85', fontSize: 12, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
+  exerciseCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, borderWidth: 1, borderColor: '#2B2B2B', borderRadius: 14, backgroundColor: '#1E1E1E', padding: 11 },
+  exerciseNameDark: { flex: 1, color: '#FFFFFF', fontSize: 18, lineHeight: 22, fontWeight: '800' },
+  exerciseTrafficRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginTop: 7 },
+  lastPerformancePill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 999, backgroundColor: '#262626', paddingHorizontal: 7, paddingVertical: 4, marginTop: 7 },
+  compactSetRow: { minHeight: 48, flexDirection: 'row', alignItems: 'flex-start', gap: 9, borderTopWidth: 1, borderTopColor: '#2B2B2B', paddingTop: 9 },
   setNumberBadge: { width: 27, height: 27, borderRadius: 14, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#3A4A41', alignItems: 'center', justifyContent: 'center' },
   setNumberBadgeDone: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
   setNumberText: { color: '#DCE8E0', fontSize: 12, fontWeight: '900' },
   setNumberTextDone: { color: '#081009' },
-  compactSetMetrics: { flex: 1, gap: 5 },
-  compactExerciseMetrics: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  compactSetMetrics: { flex: 1, gap: 7 },
+  compactExerciseMetrics: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   skippedExercise: { opacity: 0.58 },
   skippedPill: { color: '#081009', backgroundColor: '#F7C948', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 3, fontSize: 9, fontWeight: '900' },
-  skipButton: { minHeight: 28, justifyContent: 'center', paddingHorizontal: 6, borderRadius: 8, backgroundColor: '#27342E' },
-  skipButtonMaintenance: { backgroundColor: '#6A4B1D' },
+  skipButton: { minHeight: 30, flexDirection: 'row', alignItems: 'center', gap: 3, justifyContent: 'center', paddingHorizontal: 7, borderRadius: 8, borderWidth: 1, borderColor: '#52635A', backgroundColor: 'transparent' },
+  skipButtonMaintenance: { borderColor: '#F7C948' },
   skipButtonText: { color: '#DCE8E0', fontSize: 9, fontWeight: '800' },
   maintenanceBadge: { alignSelf: 'flex-start', color: '#F7C948', fontSize: 10, fontWeight: '900', marginTop: 3 },
-  lastPerformance: { color: '#55D6D0', fontSize: 11, fontWeight: '700', marginTop: 3 },
+  lastPerformance: { color: '#A1A1AA', fontSize: 10, fontWeight: '700' },
   compactExerciseTag: { width: 14, color: '#91A098', fontSize: 10, fontWeight: '800' },
   roundCheck: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#60716A', alignItems: 'center', justifyContent: 'center' },
   roundCheckDone: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
   roundCheckDisabled: { opacity: 0.45 },
   restCountdown: { color: '#9BFF63', fontSize: 10, fontWeight: '900' },
-  floatingRestTimer: { position: 'absolute', bottom: 100, left: 20, right: 20, zIndex: 9999, elevation: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#9BFF63', borderRadius: 18, backgroundColor: '#111815F2', padding: 12, shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16 },
+  floatingRestTimer: { position: 'absolute', bottom: 100, left: 20, right: 20, zIndex: 9999, elevation: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#10FF85', borderRadius: 18, backgroundColor: '#1C1C1EF2', padding: 12, shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16, overflow: 'hidden' },
   restTimerCopy: { flex: 1 },
   restTimerLabel: { color: '#91A098', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
   restTimerValue: { color: '#9BFF63', fontSize: 26, fontWeight: '900', marginTop: 2 },
@@ -840,10 +869,17 @@ const styles = StyleSheet.create({
   restTimerSkipButton: { minWidth: 58, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 11, borderWidth: 1, borderColor: '#52635A' },
   restTimerSkipText: { color: '#DCE8E0', fontSize: 12, fontWeight: '800' },
   blockCard: { gap: 12, padding: 16 },
-  blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  blockHeader: { width: '100%', flexDirection: 'column', alignItems: 'flex-start', gap: 10 },
+  blockHeaderContent: { width: '100%', gap: 8 },
+  blockHeaderTitleRow: { width: '100%', flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  blockHeaderTitleColumn: { flex: 1, gap: 4 },
   blockTitle: { color: palette.ink, fontSize: 16, fontWeight: '800', textTransform: 'capitalize' },
   progressPill: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#19D98B26' },
-  progressText: { color: palette.green, fontSize: 12, fontWeight: '800' },
+  progressText: { color: '#10FF85', fontSize: 12, fontWeight: '800' },
+  saveWorkoutButton: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9, borderRadius: 12, backgroundColor: '#10FF85', paddingHorizontal: 18, marginTop: 4, marginBottom: 22, shadowColor: '#10FF85', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.22, shadowRadius: 12, elevation: 4 },
+  saveWorkoutButtonDisabled: { opacity: 0.42, shadowOpacity: 0 },
+  saveWorkoutButtonPressed: { transform: [{ scale: 0.98 }] },
+  saveWorkoutText: { color: '#081009', fontSize: 15, fontWeight: '900' },
   exercisePanel: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 11 },
   exerciseHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   exerciseNameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
@@ -853,8 +889,8 @@ const styles = StyleSheet.create({
   targetText: { color: palette.green, fontSize: 12, fontWeight: '700' },
   setRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 38 },
   setLabel: { width: 48, color: palette.muted, fontSize: 11, fontWeight: '700' },
-  metricGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  metricInput: { width: 40, height: 30, borderBottomWidth: 1, borderBottomColor: '#52635A', backgroundColor: 'transparent', color: '#F4F8F5', textAlign: 'center', fontSize: 12, fontWeight: '700', paddingHorizontal: 1, paddingVertical: 2 },
+  metricGroup: { flexDirection: 'column', alignItems: 'center', gap: 2 },
+  metricInput: { width: 46, height: 32, borderWidth: 1, borderColor: '#3A3A3A', borderRadius: 7, backgroundColor: '#262626', color: '#FFFFFF', textAlign: 'center', fontSize: 13, fontWeight: '800', paddingHorizontal: 1, paddingVertical: 2 },
   inputDone: { borderBottomColor: '#9BFF63', color: '#9BFF63' },
   metricUnit: { color: '#91A098', fontSize: 9, fontWeight: '700' },
   completeSetButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, minHeight: 42, borderRadius: 15, backgroundColor: palette.neon },

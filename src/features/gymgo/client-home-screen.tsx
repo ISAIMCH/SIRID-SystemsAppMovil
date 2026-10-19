@@ -31,13 +31,13 @@ const periods: { value: Period; short: string; label: string; title: string }[] 
 const dayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const dark = {
   background: '#070B09',
-  surface: '#111815',
-  elevated: '#18211D',
-  line: '#27342E',
-  muted: '#91A098',
-  white: '#F4F8F5',
-  green: '#9BFF63',
-  cyan: '#55D6D0',
+  surface: '#18181B',
+  elevated: '#27272A',
+  line: '#27272A',
+  muted: '#A1A1AA',
+  white: '#FFFFFF',
+  green: '#10FF85',
+  cyan: '#10FF85',
 };
 
 function localDateAndTimezone() {
@@ -222,7 +222,7 @@ export default function ClientHomeScreen() {
                 xAxisLabelTextStyle={styles.axisText}
                 xAxisColor={dark.line}
                 yAxisColor={dark.line}
-                rulesColor={dark.line}
+                rulesColor={dark.surface}
                 rulesThickness={1}
                 hideOrigin
                 isAnimated
@@ -246,14 +246,14 @@ export default function ClientHomeScreen() {
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
             <View style={styles.summaryTitleRow}>
-              <View style={[styles.summaryIcon, { backgroundColor: '#55D6D01F' }]}><MaterialIcons name="schedule" size={17} color={dark.cyan} /></View>
+              <View style={[styles.summaryIcon, { backgroundColor: '#10FF8512' }]}><MaterialIcons name="schedule" size={17} color={dark.cyan} /></View>
               <Text style={styles.summaryLabel}>TIEMPO ACTIVO</Text>
             </View>
             <Text style={styles.summaryValue}>{selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.durationMinutes) : '—'}<Text style={styles.summaryUnit}> min</Text></Text>
           </View>
           <View style={styles.summaryCard}>
             <View style={styles.summaryTitleRow}>
-              <View style={[styles.summaryIcon, { backgroundColor: '#9BFF631F' }]}><MaterialIcons name="fitness-center" size={17} color={dark.green} /></View>
+              <View style={[styles.summaryIcon, { backgroundColor: '#10FF8512' }]}><MaterialIcons name="fitness-center" size={17} color={dark.green} /></View>
               <Text style={styles.summaryLabel}>VOLUMEN</Text>
             </View>
             <Text style={styles.summaryValue}>{selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.totalVolumeKg) : '—'}<Text style={styles.summaryUnit}> kg</Text></Text>
@@ -317,20 +317,20 @@ const styles = StyleSheet.create({
   segmentLetterSelected: { color: dark.green },
   segmentLabel: { color: dark.muted, fontSize: 12, fontWeight: '700' },
   segmentLabelSelected: { color: dark.white },
-  streakCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 20, borderColor: dark.line, backgroundColor: dark.surface, padding: 16 },
+  streakCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, shadowColor: '#000000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 4 },
   streakText: { flex: 1, gap: 3 },
   streakLabel: { color: dark.muted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-  streakValue: { color: dark.white, fontSize: 18, fontWeight: '800' },
+  streakValue: { color: dark.white, fontSize: 19, fontWeight: '900' },
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, backgroundColor: '#17221C', padding: 12 },
   errorText: { flex: 1, color: dark.white, fontSize: 12 },
-  calorieCard: { borderRadius: 24, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, overflow: 'hidden' },
+  calorieCard: { borderRadius: 16, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, overflow: 'hidden', shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 4 },
   calorieHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metricLabel: { color: dark.muted, fontSize: 10, fontWeight: '900' },
   periodCaption: { color: dark.white, fontSize: 14, fontWeight: '700', marginTop: 4 },
-  flameIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: '#9BFF631A' },
+  flameIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF70431A' },
   calorieValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 12 },
   calorieValue: { color: dark.white, fontSize: 48, lineHeight: 55, fontWeight: '900' },
-  calorieUnit: { color: dark.green, fontSize: 14, fontWeight: '800' },
+  calorieUnit: { color: dark.muted, fontSize: 14, fontWeight: '800' },
   loadingIndicator: { alignSelf: 'flex-start', marginVertical: 4 },
   chartArea: { minHeight: 182, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginHorizontal: -8 },
   axisText: { color: dark.muted, fontSize: 9 },
@@ -339,13 +339,13 @@ const styles = StyleSheet.create({
   chartFooter: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: dark.line, paddingTop: 10 },
   chartCaption: { color: dark.muted, fontSize: 9, fontWeight: '800' },
   summaryRow: { flexDirection: 'row', gap: 12 },
-  summaryCard: { flex: 1, minHeight: 104, justifyContent: 'space-between', borderRadius: 20, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 14 },
+  summaryCard: { flex: 1, minHeight: 112, justifyContent: 'space-between', borderRadius: 14, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 15, shadowColor: '#000000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.16, shadowRadius: 12, elevation: 3 },
   summaryTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  summaryIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  summaryIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#10FF8512' },
   summaryLabel: { color: dark.muted, fontSize: 9, fontWeight: '900' },
   summaryValue: { color: dark.white, fontSize: 25, fontWeight: '900' },
   summaryUnit: { color: dark.muted, fontSize: 12, fontWeight: '700' },
-  secondaryCard: { gap: 14, borderRadius: 20, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 16 },
+  secondaryCard: { gap: 14, borderRadius: 14, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 16, shadowColor: '#000000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.16, shadowRadius: 12, elevation: 3 },
   bestLiftRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bestLiftText: { flex: 1, gap: 4 },
   bestLiftName: { color: dark.white, fontSize: 15, fontWeight: '800' },

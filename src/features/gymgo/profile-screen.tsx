@@ -121,35 +121,35 @@ export default function ProfileScreen() {
           <IconBadge name="person" color={palette.neon} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Nombre</Text>
-            <TextInput autoCapitalize="words" value={name} onChangeText={(value) => { setName(value); setSaved(false); }} placeholder="Nombre" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput autoCapitalize="words" value={name} onChangeText={(value) => { setName(value); setSaved(false); }} placeholder="Nombre" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         <View style={styles.inputRow}>
           <IconBadge name="badge" color={palette.cyan} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Apellido</Text>
-            <TextInput autoCapitalize="words" value={lastName} onChangeText={(value) => { setLastName(value); setSaved(false); }} placeholder="Apellido" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput autoCapitalize="words" value={lastName} onChangeText={(value) => { setLastName(value); setSaved(false); }} placeholder="Apellido" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         <View style={styles.inputRow}>
           <IconBadge name="email" color={palette.violet} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Correo</Text>
-            <TextInput keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={(value) => { setEmail(value); setSaved(false); }} placeholder="correo@ejemplo.com" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput keyboardType="email-address" autoCapitalize="none" value={email} onChangeText={(value) => { setEmail(value); setSaved(false); }} placeholder="correo@ejemplo.com" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         <View style={styles.inputRow}>
           <IconBadge name="phone" color={palette.cyan} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Teléfono</Text>
-            <TextInput keyboardType="phone-pad" value={phone} onChangeText={(value) => { setPhone(value); setSaved(false); }} placeholder="10 dígitos" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput keyboardType="phone-pad" value={phone} onChangeText={(value) => { setPhone(value); setSaved(false); }} placeholder="10 dígitos" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         <View style={styles.inputRow}>
           <IconBadge name="flag" color={palette.orange} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Objetivo</Text>
-            <TextInput value={goal} onChangeText={(value) => { setGoal(value); setSaved(false); }} placeholder="Ej. ganar masa muscular" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput value={goal} onChangeText={(value) => { setGoal(value); setSaved(false); }} placeholder="Ej. ganar masa muscular" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         <Text style={styles.inputLabel}>Experiencia</Text>
@@ -165,14 +165,14 @@ export default function ProfileScreen() {
           <IconBadge name="fitness-center" color={palette.violet} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Peso (kg)</Text>
-            <TextInput keyboardType="decimal-pad" value={weight} onChangeText={(value) => { setWeight(value); setSaved(false); }} placeholder="70" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput keyboardType="decimal-pad" value={weight} onChangeText={(value) => { setWeight(value); setSaved(false); }} placeholder="70" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         <View style={styles.inputRow}>
           <IconBadge name="height" color={palette.cyan} />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Altura (cm)</Text>
-            <TextInput keyboardType="decimal-pad" value={height} onChangeText={(value) => { setHeight(value); setSaved(false); }} placeholder="170" placeholderTextColor={palette.muted} style={styles.input} />
+            <TextInput keyboardType="decimal-pad" value={height} onChangeText={(value) => { setHeight(value); setSaved(false); }} placeholder="170" placeholderTextColor="#71717A" style={styles.input} />
           </View>
         </View>
         {error ? <Notice error>{error}</Notice> : null}
@@ -218,17 +218,17 @@ const styles = StyleSheet.create({
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   inputGroup: { flex: 1, gap: 6 },
   inputLabel: { color: '#F4F8F5', fontSize: 13, fontWeight: '700' },
-  input: { height: 50, borderRadius: 16, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#141A17', color: '#F4F8F5', paddingHorizontal: 16, fontSize: 18, fontWeight: '700' },
+  input: { height: 50, borderRadius: 10, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#18181B', color: '#FFFFFF', paddingHorizontal: 16, fontSize: 18, fontWeight: '700' },
   experienceOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  experienceChip: { borderRadius: 18, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 14, paddingVertical: 10 },
-  experienceChipSelected: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
-  experienceText: { color: '#D8E5DD', fontSize: 12, fontWeight: '700' },
+  experienceChip: { borderRadius: 10, backgroundColor: '#27272A', borderWidth: 1, borderColor: '#3F3F46', paddingHorizontal: 14, paddingVertical: 10 },
+  experienceChipSelected: { backgroundColor: '#10FF85', borderColor: '#10FF85' },
+  experienceText: { color: '#D4D4D8', fontSize: 12, fontWeight: '700' },
   experienceTextSelected: { color: '#081009' },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, borderBottomWidth: 1, borderBottomColor: '#27342E', paddingVertical: 8 },
   infoLabel: { color: '#91A098', fontSize: 13 },
   infoValue: { flex: 1, color: '#F4F8F5', fontSize: 13, fontWeight: '800', textAlign: 'right' },
-  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 52, borderRadius: 18, backgroundColor: palette.neon },
-  saveText: { color: palette.deepGreen, fontSize: 15, fontWeight: '800' },
+  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 56, borderRadius: 10, backgroundColor: '#10FF85' },
+  saveText: { color: '#081009', fontSize: 15, fontWeight: '900' },
   disabled: { opacity: 0.5 },
   helper: { color: '#91A098', fontSize: 12 },
 });
