@@ -147,9 +147,6 @@ export default function ClientHomeScreen() {
             <Text style={styles.greeting}>Hola, {user?.name?.split(' ')[0] ?? 'deportista'}</Text>
             <Text style={styles.subtitle}>{periodName} · {selectedAnalytics?.date ?? localDateAndTimezone().date}</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Cerrar sesión" onPress={() => void signOut()} style={styles.iconButton}>
-            <MaterialIcons name="logout" size={20} color={dark.muted} />
-          </Pressable>
         </View>
 
         <FloatingCard style={styles.streakCard}>

@@ -3,16 +3,16 @@ import * as Haptics from 'expo-haptics';
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    FlatList,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    useWindowDimensions,
-    View,
-    type ListRenderItemInfo,
+  ActivityIndicator,
+  Animated,
+  FlatList,
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type ListRenderItemInfo,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -21,11 +21,12 @@ import type { Routine, WorkoutSessionLog } from '@/features/gymgo/types';
 
 const dark = {
   background: '#121212',
-  surface: '#1E1E1E',
-  border: '#27342E',
-  text: '#F4F8F5',
-  muted: '#91A098',
-  neon: '#9BFF63',
+  surface: '#18181B',
+  elevated: '#1E1E1E',
+  border: '#27272A',
+  text: '#FFFFFF',
+  muted: '#A1A1AA',
+  neon: '#10FF85',
   orange: '#FF7043',
 };
 
@@ -182,10 +183,10 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo }: { slide: Sli
         {matchingSessions.length ? (
           <>
             <View style={styles.metricsGrid}>
-              <Metric label="TIEMPO ACTIVO" value={`${duration} min`} />
-              <Metric label="VOLUMEN TOTAL" value={`${Math.round(volume)} kg`} />
-              <Metric label="SERIES COMPLETADAS" value={`${sets}/${targetSets}`} />
-              <Metric label="RPE" value="—" />
+              <Metric icon="schedule" label="TIEMPO ACTIVO" value={`${duration} min`} />
+              <Metric icon="fitness-center" label="VOLUMEN TOTAL" value={`${Math.round(volume)} kg`} />
+              <Metric icon="check-circle" label="SERIES COMPLETADAS" value={`${sets}/${targetSets}`} />
+              <Metric icon="insights" label="RPE" value="—" />
             </View>
             <Text style={styles.sectionLabel}>EJERCICIOS</Text>
             <View style={styles.exerciseList}>
@@ -209,10 +210,13 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo }: { slide: Sli
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
   return (
     <View style={styles.metricChip}>
-      <Text style={styles.metricLabel}>{label}</Text>
+      <View style={styles.metricHeader}>
+        <MaterialIcons name={icon} size={16} color={dark.neon} />
+        <Text style={styles.metricLabel}>{label}</Text>
+      </View>
       <Text style={styles.metricValue}>{value}</Text>
     </View>
   );
@@ -319,42 +323,43 @@ const styles = StyleSheet.create({
   backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
   headerSpacer: { width: 42 },
   title: { flex: 1, color: dark.text, fontSize: 19, fontWeight: '800', textAlign: 'center' },
-  segmented: { flexDirection: 'row', margin: 16, padding: 4, borderRadius: 14, backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border },
-  segment: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
-  segmentSelected: { backgroundColor: '#27342E' },
+  segmented: { flexDirection: 'row', margin: 16, padding: 4, borderRadius: 999, backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border, shadowColor: '#000000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
+  segment: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
+  segmentSelected: { backgroundColor: dark.neon },
   segmentText: { color: dark.muted, fontSize: 13, fontWeight: '700' },
-  segmentTextSelected: { color: dark.text },
+  segmentTextSelected: { color: '#081009', fontWeight: '900' },
   loader: { marginVertical: 12 },
   error: { color: '#FF8A80', paddingHorizontal: 20, paddingBottom: 12, textAlign: 'center' },
   slide: { paddingHorizontal: 16, paddingBottom: 28 },
   periodLabel: { color: dark.muted, fontSize: 14, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
-  detailCard: { backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border, borderRadius: 22, padding: 18 },
+  detailCard: { backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border, borderRadius: 16, padding: 18, shadowColor: '#000000', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 4 },
   cardEyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardEyebrow: { color: dark.muted, fontSize: 10, fontWeight: '900' },
   kcalRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 6, marginBottom: 20 },
   kcalValue: { color: dark.neon, fontSize: 48, fontWeight: '900' },
-  kcalUnit: { color: dark.neon, fontSize: 15, fontWeight: '800' },
+  kcalUnit: { color: dark.muted, fontSize: 15, fontWeight: '800' },
   hourlyChart: { height: 76, flexDirection: 'row', alignItems: 'flex-end', gap: 3, borderBottomWidth: 1, borderBottomColor: dark.border, marginBottom: 20, paddingHorizontal: 2 },
   hourColumn: { flex: 1, height: 68, alignItems: 'center', justifyContent: 'flex-end' },
   hourBar: { width: '100%', maxWidth: 10, minHeight: 3, borderRadius: 4, backgroundColor: dark.neon },
   hourLabel: { color: dark.muted, fontSize: 8, marginTop: 3 },
   hourLabelSpacer: { height: 13 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 22 },
-  metricChip: { width: '48%', minHeight: 68, justifyContent: 'space-between', backgroundColor: dark.background, borderRadius: 12, borderWidth: 1, borderColor: dark.border, padding: 11 },
+  metricChip: { width: '47%', minHeight: 78, justifyContent: 'space-between', backgroundColor: dark.elevated, borderRadius: 14, borderWidth: 1, borderColor: dark.border, padding: 12 },
+  metricHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metricLabel: { color: dark.muted, fontSize: 9, fontWeight: '900' },
   metricValue: { color: dark.text, fontSize: 15, fontWeight: '800' },
   sectionLabel: { color: dark.muted, fontSize: 10, fontWeight: '900', marginBottom: 10 },
   exerciseList: { gap: 9 },
-  exerciseRow: { borderTopWidth: 1, borderTopColor: dark.border, paddingTop: 10, gap: 4 },
+  exerciseRow: { borderTopWidth: 1, borderTopColor: dark.border, paddingTop: 12, gap: 5 },
   exerciseName: { color: dark.text, fontSize: 14, fontWeight: '800' },
   exerciseTarget: { color: dark.muted, fontSize: 11 },
   exerciseLogged: { color: dark.neon, fontSize: 11, fontWeight: '700' },
   emptyState: { alignItems: 'center', gap: 10, paddingVertical: 42 },
   emptyText: { color: dark.muted, fontSize: 13, textAlign: 'center' },
-  modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#000000B8', padding: 22 },
-  modalCard: { width: '100%', maxWidth: 420, gap: 14, borderRadius: 18, borderWidth: 1, borderColor: dark.border, backgroundColor: dark.surface, padding: 20 },
+  modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', backgroundColor: '#000000C7', padding: 16 },
+  modalCard: { width: '100%', maxWidth: 420, gap: 14, borderRadius: 24, borderWidth: 1, borderColor: dark.border, backgroundColor: dark.surface, padding: 20, paddingBottom: 24 },
   modalTitle: { color: dark.text, fontSize: 18, fontWeight: '800' },
   modalBody: { color: dark.muted, fontSize: 14, lineHeight: 21 },
-  modalClose: { alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 6 },
-  modalCloseText: { color: dark.neon, fontSize: 14, fontWeight: '800' },
+  modalClose: { alignItems: 'center', justifyContent: 'center', minHeight: 50, borderRadius: 10, backgroundColor: dark.neon },
+  modalCloseText: { color: '#081009', fontSize: 14, fontWeight: '900' },
 });
