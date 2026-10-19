@@ -224,7 +224,7 @@ export default function ClientWorkoutDetailScreen() {
   const listRef = useRef<FlatList<Slide>>(null);
   const [mode, setMode] = useState<Mode>('day');
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
-  const [targetMap, setTargetMap] = useState<Map<string, string>>(new Map());
+  const [targetMap, setTargetMap] = useState<Map<string, TargetData>>(new Map());
   const [showCalorieInfo, setShowCalorieInfo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');

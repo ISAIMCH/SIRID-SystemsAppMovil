@@ -2,23 +2,15 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { api, getApiErrorMessage } from './api';
 import { connectSocket } from '../../services/socket';
+import { api, getApiErrorMessage } from './api';
 import { palette } from './theme';
+import type { Order } from './types';
 
 type OrderItem = {
   productId: { _id: string; name: string; imageUrl?: string } | string;
   quantity: number;
   price: number;
-};
-
-type Order = {
-  _id: string;
-  items: OrderItem[];
-  totalAmount: number;
-  status: 'pending' | 'paid' | 'cancelled';
-  pickupPin?: string;
-  createdAt: string;
 };
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });

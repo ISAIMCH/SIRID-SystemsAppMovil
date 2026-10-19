@@ -1,22 +1,30 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { connectSocket } from '../../services/socket';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import CoachTemplates from './coach-templates';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
-import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
-import type { Exercise, Routine, RoutineBlock } from './types';
+import type { Exercise, Routine, RoutineBlock, WorkoutSessionLog } from './types';
 import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 
 type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
 type RestTimer = { blockId: string; remaining: number };
 type WorkoutReward = { caloriesBurned: number; durationMinutes: number; totalVolumeKg: number };
+type LastPerformance = {
+  metricType: 'strength' | 'cardio';
+  reps?: number;
+  weightKg?: number;
+  durationMinutes?: number;
+  distanceKm?: number;
+  level?: number;
+};
 const initialDeviceDay = new Date().getDay();
 const dayTabs = [
   { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mié' },
@@ -24,6 +32,7 @@ const dayTabs = [
 ];
 const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const levelNames = { principiante: 'Principiante', intermedio: 'Intermedio', avanzado: 'Avanzado' };
+const KG_PER_LB = 2.20462;
 const emptyInput = (): MetricValues => ({ reps: '', weightKg: '', durationMinutes: '', distanceKm: '', level: '' });
 
 function minutesSince(start: number | null) {
@@ -52,8 +61,49 @@ function isCardio(exercise: Exercise) {
     || (typeof exercise.equipmentId === 'object' && exercise.equipmentId !== null && exercise.equipmentId.type === 'cardio');
 }
 
-function isSetComplete(block: RoutineBlock, setNumber: number, inputs: Record<string, MetricValues>) {
+function performanceKey(value: string) {
+  return value.trim().toLocaleLowerCase().replace(/\s+/g, ' ');
+}
+
+function buildLastPerformanceMap(sessions: WorkoutSessionLog[]) {
+  const result = new Map<string, LastPerformance>();
+  for (const session of sessions) {
+    for (const block of session.blocks ?? []) {
+      for (const set of block.sets) {
+        for (const exercise of set.exercises) {
+          if (exercise.skipped) continue;
+          const performance: LastPerformance = {
+            metricType: exercise.metricType,
+            reps: exercise.reps,
+            weightKg: exercise.weightKg,
+            durationMinutes: exercise.durationMinutes,
+            distanceKm: exercise.distanceKm,
+            level: exercise.level,
+          };
+          if (!result.has(exercise.routineExerciseId)) result.set(exercise.routineExerciseId, performance);
+          const nameKey = performanceKey(exercise.exerciseName);
+          if (!result.has(nameKey)) result.set(nameKey, performance);
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function formatLastPerformance(performance: LastPerformance) {
+  if (performance.metricType === 'cardio') {
+    return [performance.durationMinutes ? `${performance.durationMinutes} min` : '', performance.distanceKm !== undefined ? `${performance.distanceKm} km` : '', performance.level !== undefined ? `Nivel ${performance.level}` : ''].filter(Boolean).join(' · ');
+  }
+  return `${performance.weightKg ?? 0} kg × ${performance.reps ?? 0} reps`;
+}
+
+function isEquipmentOutOfService(exercise: Exercise) {
+  return typeof exercise.equipmentId === 'object' && exercise.equipmentId?.status === 'out_of_service';
+}
+
+function isSetComplete(block: RoutineBlock, setNumber: number, inputs: Record<string, MetricValues>, skipped: Record<string, boolean>) {
   return block.exercises.every((exercise, index) => {
+    if (skipped[inputKey(block, setNumber, exercise, index)]) return true;
     const values = inputs[inputKey(block, setNumber, exercise, index)];
     if (!values) return false;
     if (isCardio(exercise)) {
@@ -82,8 +132,12 @@ export default function RoutinesScreen() {
   const [retryNumber, setRetryNumber] = useState(0);
   const [selectedDay, setSelectedDay] = useState(initialDeviceDay);
   const [inputs, setInputs] = useState<Record<string, MetricValues>>({});
+  const [skipped, setSkipped] = useState<Record<string, boolean>>({});
+  const [lastPerformance, setLastPerformance] = useState<Map<string, LastPerformance>>(new Map());
   const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
   const [restTimer, setRestTimer] = useState<RestTimer | null>(null);
+  const [restTime, setRestTime] = useState<number | null>(null);
+  const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [activeGif, setActiveGif] = useState<{ name: string; url: string } | null>(null);
   const [workoutReward, setWorkoutReward] = useState<WorkoutReward | null>(null);
   const [savingDay, setSavingDay] = useState(false);
@@ -93,12 +147,19 @@ export default function RoutinesScreen() {
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
     if (retryNumber > 0) setError('');
-    api.get<{ routines: Routine[] }>('/routines')
-      .then((response) => { if (isCurrent) setRoutines(response.data.routines); })
+    Promise.all([
+      api.get<{ routines: Routine[] }>('/routines'),
+      isClient ? api.get<{ sessions: WorkoutSessionLog[] }>('/workouts/me') : Promise.resolve({ data: { sessions: [] as WorkoutSessionLog[] } }),
+    ])
+      .then(([routineResponse, historyResponse]) => {
+        if (!isCurrent) return;
+        setRoutines(routineResponse.data.routines);
+        setLastPerformance(buildLastPerformanceMap(historyResponse.data.sessions));
+      })
       .catch((requestError: unknown) => { if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas.')); })
       .finally(() => { if (isCurrent) setIsLoading(false); });
     return () => { isCurrent = false; };
-  }, [retryNumber]));
+  }, [isClient, retryNumber]));
 
   useEffect(() => {
     const realtime = connectSocket();
@@ -122,6 +183,19 @@ export default function RoutinesScreen() {
   }, [restTimer]);
 
   useEffect(() => {
+    if (restTime === 0) {
+      Vibration.vibrate([0, 500, 200, 500]);
+      setRestTime(null);
+      return undefined;
+    }
+    if (restTime === null || restTime < 1) return undefined;
+    const interval = setInterval(() => {
+      setRestTime((current) => (current === null || current <= 1 ? 0 : current - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [restTime]);
+
+  useEffect(() => {
     if (Object.keys(inputs).length > 0 && !startedAt.current) startedAt.current = Date.now();
   }, [inputs]);
 
@@ -133,6 +207,30 @@ export default function RoutinesScreen() {
     const cleaned = value.replace(/[^0-9.,]/g, '').slice(0, 8);
     const key = inputKey(block, setNumber, exercise, index);
     setInputs((current) => ({ ...current, [key]: { ...(current[key] ?? emptyInput()), [field]: cleaned } }));
+  }
+
+  function toggleSkipped(block: RoutineBlock, setNumber: number, exercise: Exercise, index: number) {
+    const key = inputKey(block, setNumber, exercise, index);
+    setSkipped((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function prefillLastPerformance(block: RoutineBlock, exercise: Exercise, index: number, performance: LastPerformance) {
+    const done = completedSets[block._id ?? String(block.order)] ?? [];
+    setInputs((current) => {
+      const next = { ...current };
+      for (let setNumber = 1; setNumber <= block.sets; setNumber += 1) {
+        if (done.includes(setNumber)) continue;
+        next[inputKey(block, setNumber, exercise, index)] = {
+          ...emptyInput(),
+          reps: performance.reps === undefined ? '' : String(performance.reps),
+          weightKg: performance.weightKg === undefined ? '' : String(performance.weightKg),
+          durationMinutes: performance.durationMinutes === undefined ? '' : String(performance.durationMinutes),
+          distanceKm: performance.distanceKm === undefined ? '' : String(performance.distanceKm),
+          level: performance.level === undefined ? '' : String(performance.level),
+        };
+      }
+      return next;
+    });
   }
 
   function finishBlockSet(block: RoutineBlock, setNumber: number) {
@@ -147,7 +245,7 @@ export default function RoutinesScreen() {
       setLogMessage({ text: 'Completa las rondas de este bloque en orden.', error: true });
       return;
     }
-    if (!isSetComplete(block, setNumber, inputs)) {
+    if (!isSetComplete(block, setNumber, inputs, skipped)) {
       setLogMessage({ text: 'Completa cada ejercicio de este bloque antes de terminar la serie.', error: true });
       return;
     }
@@ -156,7 +254,12 @@ export default function RoutinesScreen() {
       return { ...current, [blockId]: previous.includes(setNumber) ? previous : [...previous, setNumber].sort((a, b) => a - b) };
     });
     setLogMessage(null);
-    if (block.restSeconds > 0 && setNumber < block.sets) setRestTimer({ blockId, remaining: block.restSeconds });
+    const activeExercise = block.exercises.find((exercise, index) => !skipped[inputKey(block, setNumber, exercise, index)]);
+    if (activeExercise) {
+      const timeToRest = activeExercise.restSeconds || block.restSeconds || 60;
+      setRestTime(timeToRest);
+      if (setNumber < block.sets) setRestTimer({ blockId, remaining: timeToRest });
+    }
   }
 
   async function saveSession() {
@@ -168,15 +271,17 @@ export default function RoutinesScreen() {
         setNumber,
         exercises: block.exercises.map((exercise, index) => {
           const values = inputs[inputKey(block, setNumber, exercise, index)] ?? emptyInput();
+          const exerciseSkipped = skipped[inputKey(block, setNumber, exercise, index)] === true;
           return {
             routineExerciseId: exercise._id,
+            skipped: exerciseSkipped,
             ...(isCardio(exercise)
               ? {
-                  ...(values.durationMinutes ? { durationMinutes: Number(values.durationMinutes) } : {}),
-                  ...(values.distanceKm ? { distanceKm: Number(values.distanceKm.replace(',', '.')) } : {}),
-                  ...(values.level ? { level: Number(values.level) } : {}),
+                  ...(!exerciseSkipped && values.durationMinutes ? { durationMinutes: Number(values.durationMinutes) } : {}),
+                  ...(!exerciseSkipped && values.distanceKm ? { distanceKm: Number(values.distanceKm.replace(',', '.')) } : {}),
+                  ...(!exerciseSkipped && values.level ? { level: Number(values.level) } : {}),
                 }
-              : { reps: Math.round(Number(values.reps)), weightKg: Number(values.weightKg.replace(',', '.')) }),
+              : (!exerciseSkipped ? { reps: Math.round(Number(values.reps)), weightKg: Number(values.weightKg.replace(',', '.')) } : {})),
           };
         }).filter((exercise) => Boolean(exercise.routineExerciseId)),
       }));
@@ -197,8 +302,10 @@ export default function RoutinesScreen() {
         blocks: payloadBlocks,
       });
       setInputs({});
+      setSkipped({});
       setCompletedSets({});
       setRestTimer(null);
+      setRestTime(null);
       startedAt.current = null;
       setWorkoutReward(response.data.session);
     } catch (requestError) {
@@ -208,8 +315,34 @@ export default function RoutinesScreen() {
     }
   }
 
+  const floatingRestTimer = restTime !== null ? (
+    <View style={styles.floatingRestTimer} accessibilityLiveRegion="polite">
+      <View style={styles.restTimerCopy}>
+        <Text style={styles.restTimerLabel}>DESCANSO</Text>
+        <Text style={styles.restTimerValue}>{`${Math.floor(restTime / 60).toString().padStart(2, '0')}:${(restTime % 60).toString().padStart(2, '0')}`}</Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Añadir 15 segundos al descanso"
+        onPress={() => {
+          setRestTime((previous) => (previous || 0) + 15);
+          setRestTimer((current) => (current ? { ...current, remaining: current.remaining + 15 } : current));
+        }}
+        style={styles.restTimerButton}>
+        <Text style={styles.restTimerButtonText}>+15s</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Saltar descanso"
+        onPress={() => { setRestTime(null); setRestTimer(null); }}
+        style={styles.restTimerSkipButton}>
+        <Text style={styles.restTimerSkipText}>Saltar</Text>
+      </Pressable>
+    </View>
+  ) : null;
+
   return (
-    <Page dark={isClient || user?.role === 'Coach'}>
+    <Page dark={isClient || user?.role === 'Coach'} overlay={floatingRestTimer}>
       <AppHeader showSignOut={false} title="Rutinas" detail={isClient ? 'Elige el día y registra cada ronda de tu entrenamiento.' : 'Rutinas asignadas a tus clientes.'} />
 
       {!isClient ? (
@@ -240,6 +373,11 @@ export default function RoutinesScreen() {
                   <Text style={[styles.routineTitle, isClient && styles.darkPrimary]}>{routine.title}</Text>
                   <Text style={[styles.meta, isClient && styles.darkMuted]}>{levelNames[routine.level]} · {routine.daysPerWeek} días/semana · {routine.durationWeeks} semanas</Text>
               </View>
+              {isClient ? (
+                <Pressable accessibilityRole="switch" accessibilityLabel="Cambiar unidad de peso" accessibilityState={{ checked: weightUnit === 'lbs' }} onPress={() => setWeightUnit((unit) => unit === 'kg' ? 'lbs' : 'kg')} style={styles.unitToggle}>
+                  <Text style={styles.unitToggleText}>{weightUnit.toUpperCase()}</Text>
+                </Pressable>
+              ) : null}
             </View>
           </FloatingCard>
 
@@ -250,7 +388,7 @@ export default function RoutinesScreen() {
                   const selected = selectedDay === day.value;
                   const count = allBlocks.filter((block) => block.day === day.value).length;
                   return (
-                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setSelectedDay(day.value); setRestTimer(null); setLogMessage(null); }} style={[styles.dayTab, styles.dayTabDark, selected && styles.dayTabSelectedDark]}>
+                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setSelectedDay(day.value); setRestTimer(null); setRestTime(null); setLogMessage(null); }} style={[styles.dayTab, styles.dayTabDark, selected && styles.dayTabSelectedDark]}>
                       <Text style={[styles.dayTabText, styles.dayTabTextDark, selected && styles.dayTabTextSelectedDark]}>{day.label}</Text>
                       <View style={[styles.dayDot, count > 0 && (selected ? styles.dayDotSelected : styles.dayDotActive)]} />
                     </Pressable>
@@ -299,6 +437,12 @@ export default function RoutinesScreen() {
                                   ) : null}
                                 </View>
                                 <Text style={styles.darkMuted}>{exercise.muscleGroup} · {equipment}</Text>
+                                {isEquipmentOutOfService(exercise) ? <Text style={styles.maintenanceBadge}>En mantenimiento</Text> : null}
+                                {(lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) ? (
+                                  <Pressable accessibilityRole="button" onPress={() => prefillLastPerformance(block, exercise, exerciseIndex, (lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) as LastPerformance)}>
+                                    <Text style={styles.lastPerformance}>Última vez: {formatLastPerformance((lastPerformance.get(exercise._id ?? '') ?? lastPerformance.get(performanceKey(exercise.name))) as LastPerformance)}</Text>
+                                  </Pressable>
+                                ) : null}
                                 <Text style={styles.darkAccent}>{cardio ? [exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ') || 'Cardio' : `${exercise.reps ?? ''}${exercise.suggestedWeight !== undefined ? ` · ${exercise.suggestedWeight} kg` : ''}`}</Text>
                               </View>
                             </View>
@@ -308,7 +452,7 @@ export default function RoutinesScreen() {
 
                         {Array.from({ length: block.sets }, (_, index) => index + 1).map((setNumber) => {
                           const isDone = done.includes(setNumber);
-                          const canComplete = isSetComplete(block, setNumber, inputs);
+                          const canComplete = isSetComplete(block, setNumber, inputs, skipped);
                           const timerActive = restTimer?.blockId === blockId;
                           const nextSetNumber = Array.from({ length: block.sets }, (_, setIndex) => setIndex + 1).find((number) => !done.includes(number));
                           const waitingOnRest = timerActive && setNumber === nextSetNumber;
@@ -322,21 +466,27 @@ export default function RoutinesScreen() {
                                   const cardio = isCardio(exercise);
                                   const values = inputs[inputKey(block, setNumber, exercise, exerciseIndex)] ?? emptyInput();
                                   const disabled = isDone || savingDay;
+                                  const exerciseKey = inputKey(block, setNumber, exercise, exerciseIndex);
+                                  const exerciseSkipped = skipped[exerciseKey] === true;
                                   return (
-                                    <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.compactExerciseMetrics}>
+                                    <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={[styles.compactExerciseMetrics, exerciseSkipped && styles.skippedExercise]}>
                                       {block.exercises.length > 1 ? <Text style={styles.compactExerciseTag}>{String.fromCharCode(65 + exerciseIndex)}</Text> : null}
+                                      {exerciseSkipped ? <Text style={styles.skippedPill}>Saltado</Text> : null}
                                       {cardio ? (
                                         <>
-                                          <MetricInput label="min" keyboard="number-pad" value={values.durationMinutes} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'durationMinutes', value)} disabled={disabled} />
-                                          <MetricInput label="km" keyboard="decimal-pad" value={values.distanceKm} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'distanceKm', value)} disabled={disabled} />
-                                          <MetricInput label="lvl" keyboard="number-pad" value={values.level} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'level', value)} disabled={disabled} />
+                                          <MetricInput label="min" keyboard="number-pad" value={values.durationMinutes} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'durationMinutes', value)} disabled={disabled || exerciseSkipped} />
+                                          <MetricInput label="km" keyboard="decimal-pad" value={values.distanceKm} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'distanceKm', value)} disabled={disabled || exerciseSkipped} />
+                                          <MetricInput label="lvl" keyboard="number-pad" value={values.level} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'level', value)} disabled={disabled || exerciseSkipped} />
                                         </>
                                       ) : (
                                         <>
-                                          <MetricInput label="reps" keyboard="number-pad" value={values.reps} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'reps', value)} disabled={disabled} />
-                                          <MetricInput label="kg" keyboard="decimal-pad" value={values.weightKg} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'weightKg', value)} disabled={disabled} />
+                                          <MetricInput label="reps" keyboard="number-pad" value={values.reps} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'reps', value)} disabled={disabled || exerciseSkipped} />
+                                          <WeightInput unit={weightUnit} value={values.weightKg} onChange={(value) => updateMetric(block, setNumber, exercise, exerciseIndex, 'weightKg', value)} onToggle={() => setWeightUnit((unit) => unit === 'kg' ? 'lbs' : 'kg')} disabled={disabled || exerciseSkipped} />
                                         </>
                                       )}
+                                      <Pressable accessibilityRole="button" accessibilityLabel={exerciseSkipped ? `Registrar ${exercise.name}` : `Saltar ${exercise.name}`} disabled={disabled} onPress={() => toggleSkipped(block, setNumber, exercise, exerciseIndex)} style={[styles.skipButton, isEquipmentOutOfService(exercise) && styles.skipButtonMaintenance]}>
+                                        <Text style={styles.skipButtonText}>{exerciseSkipped ? 'Registrar' : 'Aparato ocupado / Saltar'}</Text>
+                                      </Pressable>
                                     </View>
                                   );
                                 })}
@@ -405,6 +555,33 @@ function MetricInput({ label, keyboard, value, onChange, disabled }: { label: st
   return <View style={styles.metricGroup}><TextInput editable={!disabled} keyboardType={keyboard} value={value} onChangeText={onChange} placeholder="—" placeholderTextColor={palette.muted} style={[styles.metricInput, disabled && styles.inputDone]} /><Text style={styles.metricUnit}>{label}</Text></View>;
 }
 
+function WeightInput({ unit, value, onChange, onToggle, disabled }: { unit: 'kg' | 'lbs'; value: string; onChange: (value: string) => void; onToggle: () => void; disabled: boolean }) {
+  const currentWeightKg = Number(value.replace(',', '.'));
+  const displayValue = value !== '' && Number.isFinite(currentWeightKg)
+    ? unit === 'lbs' ? (currentWeightKg * KG_PER_LB).toFixed(1) : currentWeightKg.toFixed(1)
+    : '';
+  return (
+    <View style={styles.metricGroup}>
+      <TextInput
+        editable={!disabled}
+        keyboardType="decimal-pad"
+        value={displayValue}
+        onChangeText={(text) => {
+          const numVal = Number.parseFloat(text.replace(',', '.'));
+          const finalKg = unit === 'lbs' ? numVal / KG_PER_LB : numVal;
+          onChange(Number.isNaN(finalKg) ? '' : finalKg.toFixed(1));
+        }}
+        placeholder="—"
+        placeholderTextColor={palette.muted}
+        style={[styles.metricInput, disabled && styles.inputDone]}
+      />
+      <Pressable accessibilityRole="button" accessibilityLabel={`Cambiar unidad de peso, actual ${unit}`} disabled={disabled} onPress={onToggle} hitSlop={6}>
+        <Text style={styles.metricUnit}>{unit}</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function WorkoutRewardModal({ reward, onClose }: { reward: WorkoutReward | null; onClose: () => void }) {
   const number = (value: number) => new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(Math.round(value));
   return (
@@ -452,6 +629,8 @@ const styles = StyleSheet.create({
   coachActions: { gap: 10 },
   routineSummary: { gap: 12 },
   summaryTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  unitToggle: { minWidth: 48, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#9BFF63', backgroundColor: '#9BFF631C' },
+  unitToggleText: { color: '#9BFF63', fontSize: 11, fontWeight: '900' },
   routineTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
   darkPrimary: { color: '#F4F8F5' },
   darkMuted: { color: '#91A098' },
@@ -489,11 +668,26 @@ const styles = StyleSheet.create({
   setNumberTextDone: { color: '#081009' },
   compactSetMetrics: { flex: 1, gap: 5 },
   compactExerciseMetrics: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  skippedExercise: { opacity: 0.58 },
+  skippedPill: { color: '#081009', backgroundColor: '#F7C948', borderRadius: 8, paddingHorizontal: 5, paddingVertical: 3, fontSize: 9, fontWeight: '900' },
+  skipButton: { minHeight: 28, justifyContent: 'center', paddingHorizontal: 6, borderRadius: 8, backgroundColor: '#27342E' },
+  skipButtonMaintenance: { backgroundColor: '#6A4B1D' },
+  skipButtonText: { color: '#DCE8E0', fontSize: 9, fontWeight: '800' },
+  maintenanceBadge: { alignSelf: 'flex-start', color: '#F7C948', fontSize: 10, fontWeight: '900', marginTop: 3 },
+  lastPerformance: { color: '#55D6D0', fontSize: 11, fontWeight: '700', marginTop: 3 },
   compactExerciseTag: { width: 14, color: '#91A098', fontSize: 10, fontWeight: '800' },
   roundCheck: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#60716A', alignItems: 'center', justifyContent: 'center' },
   roundCheckDone: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },
   roundCheckDisabled: { opacity: 0.45 },
   restCountdown: { color: '#9BFF63', fontSize: 10, fontWeight: '900' },
+  floatingRestTimer: { position: 'absolute', bottom: 100, left: 20, right: 20, zIndex: 9999, elevation: 10, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#9BFF63', borderRadius: 18, backgroundColor: '#111815F2', padding: 12, shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 16 },
+  restTimerCopy: { flex: 1 },
+  restTimerLabel: { color: '#91A098', fontSize: 9, fontWeight: '900', letterSpacing: 1 },
+  restTimerValue: { color: '#9BFF63', fontSize: 26, fontWeight: '900', marginTop: 2 },
+  restTimerButton: { minWidth: 58, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#9BFF63' },
+  restTimerButtonText: { color: '#081009', fontSize: 13, fontWeight: '900' },
+  restTimerSkipButton: { minWidth: 58, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 11, borderWidth: 1, borderColor: '#52635A' },
+  restTimerSkipText: { color: '#DCE8E0', fontSize: 12, fontWeight: '800' },
   blockCard: { gap: 12, padding: 16 },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   blockTitle: { color: palette.ink, fontSize: 16, fontWeight: '800', textTransform: 'capitalize' },

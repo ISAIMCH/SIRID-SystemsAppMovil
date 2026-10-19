@@ -1,6 +1,6 @@
 import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import AdminBillingScreen from './admin-billing-screen';
 import { api, getApiErrorMessage } from './api';
@@ -33,6 +33,8 @@ type Membership = {
   price?: number;
   currency?: string;
   durationDays?: number;
+  planType?: 'standard' | 'promotional';
+  autoRenew?: boolean;
 };
 
 const paymentStatusLabels: Record<PaymentStatus, string> = {
@@ -65,6 +67,7 @@ export default function BillingScreen() {
 }
 
 function ClientMembership() {
+  const { user } = useAuth();
   const [membership, setMembership] = useState<Membership | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -92,7 +95,7 @@ function ClientMembership() {
 
   const pendingPayment = payments.find((payment) => payment.status === 'pending');
 
-  async function requestPayment() {
+  async function createPaymentRequest() {
     setError('');
     setSuccess('');
     setIsRequesting(true);
@@ -105,6 +108,29 @@ function ClientMembership() {
     } finally {
       setIsRequesting(false);
     }
+  }
+
+  function requestPayment() {
+    const userMembershipExpiresAt = user?.membership?.expiresAt ? new Date(user.membership.expiresAt).getTime() : 0;
+    const membershipExpiresAt = membership?.expiresAt ? new Date(membership.expiresAt).getTime() : 0;
+    const hasActiveMembership = user?.membership?.status === 'active'
+      || membership?.status === 'active'
+      || userMembershipExpiresAt > Date.now()
+      || membershipExpiresAt > Date.now();
+
+    if (!hasActiveMembership) {
+      void createPaymentRequest();
+      return;
+    }
+
+    Alert.alert(
+      'Membresía Activa',
+      'Ya tienes una membresía activa. ¿Estás seguro de que deseas adelantar el pago del siguiente mes?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Sí, adelantar pago', onPress: () => { void createPaymentRequest(); } },
+      ],
+    );
   }
 
   return (

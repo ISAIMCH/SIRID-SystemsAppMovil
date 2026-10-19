@@ -12,7 +12,9 @@ export type CartProduct = Omit<CartItem, 'quantity'>;
 
 interface CartStore {
   items: CartItem[];
+  promotionId: string | null;
   addItem: (product: CartProduct) => void;
+  setPromotionId: (promotionId: string | null) => void;
   removeItem: (productId: string) => void;
   clearCart: () => void;
   getTotalPrice: () => number;
@@ -21,6 +23,7 @@ interface CartStore {
 
 export const useCartStore = create<CartStore>((set, get) => ({
   items: [],
+  promotionId: null,
 
   addItem: (product) => set((state) => {
     const existingItem = state.items.find((item) => item.id === product.id);
@@ -38,6 +41,8 @@ export const useCartStore = create<CartStore>((set, get) => ({
     return { items: [...state.items, { ...product, quantity: 1 }] };
   }),
 
+  setPromotionId: (promotionId) => set({ promotionId }),
+
   removeItem: (productId) => set((state) => {
     const existingItem = state.items.find((item) => item.id === productId);
     if (!existingItem) return state;
@@ -53,7 +58,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
     };
   }),
 
-  clearCart: () => set({ items: [] }),
+  clearCart: () => set({ items: [], promotionId: null }),
 
   getTotalPrice: () => get().items.reduce(
     (total, item) => total + item.price * item.quantity,

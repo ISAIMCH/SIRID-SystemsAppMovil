@@ -66,7 +66,42 @@ export type MembershipPlan = {
   price: number;
   durationInDays: number;
   specifications: string[];
+  planType?: 'standard' | 'promotional';
+  autoRenew?: boolean;
   isActive: boolean;
+};
+
+export type Promotion = {
+  _id: string;
+  title: string;
+  description?: string;
+  discountPercentage?: number;
+  applicableProducts?: string[];
+  validUntil?: string;
+  isActive?: boolean;
+  active?: boolean;
+  imageUrl?: string;
+};
+
+export type Order = {
+  _id: string;
+  items: {
+    productId: { _id: string; name: string; imageUrl?: string } | string;
+    quantity: number;
+    price: number;
+  }[];
+  totalAmount: number;
+  promotionId?: string;
+  discountApplied?: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  pickupPin?: string;
+  createdAt: string;
+};
+
+export type Sale = {
+  _id?: string;
+  promotionId?: string;
+  discountApplied?: number;
 };
 
 export type RoutineTemplate = {
@@ -103,6 +138,7 @@ export type WorkoutSessionLog = {
         muscleGroup: string;
         gifUrl?: string;
         metricType: 'strength' | 'cardio';
+        skipped?: boolean;
         reps?: number;
         weightKg?: number;
         durationMinutes?: number;

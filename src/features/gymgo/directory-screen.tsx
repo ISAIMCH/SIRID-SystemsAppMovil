@@ -51,7 +51,7 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
 
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filtered = people.filter((person) => (
-    `${person.name} ${person.email} ${person.phone ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
+    `${person.name} ${person.lastName ?? ''} ${person.email} ${person.phone ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
   ));
   const noun = segment === 'Cliente' ? 'clientes' : 'coaches';
 
@@ -94,7 +94,7 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
         <Pressable
           key={person.id}
           accessibilityRole="button"
-          accessibilityLabel={`Ver perfil de ${person.name}`}
+          accessibilityLabel={`Ver perfil de ${[person.name, person.lastName].filter(Boolean).join(' ')}`}
           onPress={() => router.push({ pathname: '/(main)/directory/[clientId]', params: { clientId: person.id } })}
           style={({ pressed }) => pressed && styles.pressed}>
           <FloatingCard style={styles.row}>
@@ -102,7 +102,7 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
               <Text style={styles.avatarText}>{person.name.trim().slice(0, 1).toUpperCase()}</Text>
             </View>
             <View style={styles.info}>
-              <Text style={styles.name}>{person.name}</Text>
+              <Text style={styles.name}>{[person.name, person.lastName].filter(Boolean).join(' ')}</Text>
               <Text style={styles.email}>{person.email}</Text>
               {person.role === 'Cliente' ? (
                 <Text style={styles.coach}>{person.assignedCoach ? `Coach · ${person.assignedCoach.name}` : 'Sin Coach asignado'}</Text>

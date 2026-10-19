@@ -31,7 +31,9 @@ export default function ProfileScreen() {
   const { user, updateUser } = useAuth();
   const [weight, setWeight] = useState(user?.weightKg?.toString() ?? '');
   const [height, setHeight] = useState(user?.heightCm?.toString() ?? '');
+  const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
+  const [lastName, setLastName] = useState(user?.lastName ?? '');
   const [phone, setPhone] = useState(user?.phone ?? '');
   const [goal, setGoal] = useState(user?.goal ?? '');
   const [experienceLevel, setExperienceLevel] = useState<GymGoUser['experienceLevel']>(user?.experienceLevel);
@@ -42,7 +44,7 @@ export default function ProfileScreen() {
   const weightKg = parseNumber(weight);
   const heightCm = parseNumber(height);
   const phoneDigits = phone.replace(/\D/g, '');
-  const isValid = email.includes('@') && (!phoneDigits || phoneDigits.length === 10)
+  const isValid = name.trim().length >= 2 && email.includes('@') && (!phoneDigits || phoneDigits.length === 10)
     && weightKg !== null && heightCm !== null && weightKg >= 20 && weightKg <= 400 && heightCm >= 80 && heightCm <= 260;
   const bmi = isValid ? weightKg / ((heightCm / 100) ** 2) : null;
   const info = bmi ? bmiInfo(bmi) : null;
@@ -55,7 +57,9 @@ export default function ProfileScreen() {
     setIsSaving(true);
     try {
       const response = await api.patch<{ user: GymGoUser }>('/auth/me/physical', {
+        name: name.trim(),
         email: email.trim(),
+        lastName: lastName.trim(),
         phone: phoneDigits,
         goal: goal.trim(),
         experienceLevel,
@@ -63,7 +67,9 @@ export default function ProfileScreen() {
         heightCm,
       });
       updateUser(response.data.user);
+      setName(response.data.user.name);
       setEmail(response.data.user.email);
+      setLastName(response.data.user.lastName ?? '');
       setPhone(response.data.user.phone ?? '');
       setGoal(response.data.user.goal ?? '');
       setExperienceLevel(response.data.user.experienceLevel);
@@ -87,7 +93,7 @@ export default function ProfileScreen() {
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.title}>Datos personales y físicos</Text>
-          <Text style={styles.subtitle}>{user?.name}</Text>
+          <Text style={styles.subtitle}>{user?.name} {user?.lastName || ''}</Text>
         </View>
       </View>
 
@@ -111,6 +117,20 @@ export default function ProfileScreen() {
 
       <FloatingCard style={styles.form}>
         <Text style={styles.sectionTitle}>Datos personales</Text>
+        <View style={styles.inputRow}>
+          <IconBadge name="person" color={palette.neon} />
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Nombre</Text>
+            <TextInput autoCapitalize="words" value={name} onChangeText={(value) => { setName(value); setSaved(false); }} placeholder="Nombre" placeholderTextColor={palette.muted} style={styles.input} />
+          </View>
+        </View>
+        <View style={styles.inputRow}>
+          <IconBadge name="badge" color={palette.cyan} />
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Apellido</Text>
+            <TextInput autoCapitalize="words" value={lastName} onChangeText={(value) => { setLastName(value); setSaved(false); }} placeholder="Apellido" placeholderTextColor={palette.muted} style={styles.input} />
+          </View>
+        </View>
         <View style={styles.inputRow}>
           <IconBadge name="email" color={palette.violet} />
           <View style={styles.inputGroup}>

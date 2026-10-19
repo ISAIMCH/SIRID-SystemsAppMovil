@@ -9,11 +9,13 @@ export type GymGoCoach = { id?: string; name?: string; email?: string };
 export type GymGoUser = {
   id: string;
   name: string;
+  lastName?: string;
   email: string;
   phone?: string;
   address?: string;
+  documents?: string[];
   role: GymGoRole;
-  isActive: boolean;
+  isActive?: boolean;
   goal?: string;
   experienceLevel?: 'principiante' | 'intermedio' | 'avanzado';
   availableTrainingDays?: number[];
@@ -31,6 +33,7 @@ export type GymGoUser = {
     currency?: string;
     durationDays?: number;
     autoRenew?: boolean;
+    planType?: 'standard' | 'promotional';
   };
   assignedCoach?: string | GymGoCoach | null;
 };
@@ -46,6 +49,7 @@ type AuthContextValue = {
 
 export type ClientRegistration = {
   name: string;
+  lastName?: string;
   email: string;
   password: string;
   goal?: string;

@@ -1,22 +1,57 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useCartStore } from '../../store/cartStore';
-import { api, getApiErrorMessage } from './api';
+import { api, getApiErrorMessage, getPromotions } from './api';
 import { palette } from './theme';
+import type { Promotion } from './types';
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
 export default function CartModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const items = useCartStore((state) => state.items);
+  const promotionId = useCartStore((state) => state.promotionId);
   const addItem = useCartStore((state) => state.addItem);
   const removeItem = useCartStore((state) => state.removeItem);
   const clearCart = useCartStore((state) => state.clearCart);
-  const totalPrice = useCartStore((state) => state.getTotalPrice());
+  const [promotion, setPromotion] = useState<Promotion | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!visible || !promotionId) return;
+
+    let isCurrent = true;
+    getPromotions()
+      .then((promotions) => {
+        if (!isCurrent) return;
+        const activePromotion = promotions.find((entry) => (
+          entry._id === promotionId && (!entry.validUntil || new Date(entry.validUntil) > new Date())
+        ));
+        setPromotion(activePromotion ?? null);
+      })
+      .catch(() => {
+        if (isCurrent) setPromotion(null);
+      });
+    return () => { isCurrent = false; };
+  }, [promotionId, visible]);
+
+  const activePromotion = visible && promotion?._id === promotionId ? promotion : null;
+  const baseTotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
+  const applicableProducts = new Set(activePromotion?.applicableProducts ?? []);
+  const discountableSubtotal = activePromotion && applicableProducts.size > 0
+    ? items.reduce((total, item) => (
+      applicableProducts.has(item.id) ? total + item.price * item.quantity : total
+    ), 0)
+    : activePromotion
+      ? baseTotal
+      : 0;
+  const discount = activePromotion
+    ? Math.round((discountableSubtotal * (activePromotion.discountPercentage ?? 0) / 100) * 100) / 100
+    : 0;
+  const finalTotal = Math.round((baseTotal - discount) * 100) / 100;
 
   async function createOrder() {
     if (!items.length || isSubmitting) return;
@@ -25,6 +60,7 @@ export default function CartModal({ visible, onClose }: { visible: boolean; onCl
     try {
       await api.post('/store/orders', {
         items: items.map(({ id, quantity, price }) => ({ productId: id, quantity, price })),
+        ...(promotionId ? { promotionId } : {}),
       });
       clearCart();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -74,8 +110,14 @@ export default function CartModal({ visible, onClose }: { visible: boolean; onCl
 
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.total}>{currency.format(totalPrice)}</Text>
+            <View style={styles.totalLabels}>
+              <Text style={styles.totalLabel}>Total</Text>
+              {discount > 0 ? <Text style={styles.discount}>Descuento: -{currency.format(discount)}</Text> : null}
+            </View>
+            <View style={styles.totalValues}>
+              {discount > 0 ? <Text style={styles.baseTotal}>{currency.format(baseTotal)}</Text> : null}
+              <Text style={styles.total}>{currency.format(finalTotal)}</Text>
+            </View>
           </View>
           <Pressable accessibilityRole="button" disabled={isSubmitting || !items.length} onPress={() => void createOrder()} style={({ pressed }) => [styles.checkoutButton, (isSubmitting || !items.length) && styles.disabledButton, pressed && styles.pressed]}>
             {isSubmitting ? <ActivityIndicator color="#081009" /> : <Text style={styles.checkoutText}>Generar Pedido</Text>}
@@ -105,7 +147,11 @@ const styles = StyleSheet.create({
   quantity: { minWidth: 18, color: '#F4F8F5', fontSize: 14, fontWeight: '800', textAlign: 'center' },
   error: { color: '#FF9A88', fontSize: 13, lineHeight: 18 },
   totalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 14 },
+  totalLabels: { gap: 4 },
   totalLabel: { color: '#91A098', fontSize: 14, fontWeight: '700' },
+  discount: { color: palette.neon, fontSize: 12, fontWeight: '800' },
+  totalValues: { alignItems: 'flex-end', gap: 2 },
+  baseTotal: { color: '#91A098', fontSize: 13, textDecorationLine: 'line-through' },
   total: { color: '#F4F8F5', fontSize: 22, fontWeight: '800' },
   checkoutButton: { alignItems: 'center', justifyContent: 'center', minHeight: 52, borderRadius: 16, backgroundColor: palette.neon },
   checkoutText: { color: '#081009', fontSize: 15, fontWeight: '900' },

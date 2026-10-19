@@ -69,7 +69,7 @@ export default function ClientDetailScreen() {
           <IconBadge name="arrow-back" color={palette.ink} />
         </Pressable>
         <View style={styles.flex}>
-          <Text style={styles.title}>{person?.name ?? 'Perfil'}</Text>
+          <Text style={styles.title}>{person ? [person.name, person.lastName].filter(Boolean).join(' ') : 'Perfil'}</Text>
           <Text style={styles.subtitle}>{person ? (isCoach ? 'Perfil del coach' : 'Perfil del cliente') : ' '}</Text>
         </View>
       </View>
@@ -95,6 +95,7 @@ export default function ClientDetailScreen() {
               <SectionTitle>Información</SectionTitle>
               <FloatingCard style={styles.details}>
                 <DetailRow icon="mail" color={palette.cyan} label="Correo" value={person.email} />
+                <DetailRow icon="person" color={palette.violet} label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
                 <DetailRow icon="phone" color={palette.neon} label="Teléfono" value={person.phone || 'No registrado'} />
                 {isCoach ? (
                   <DetailRow icon="place" color={palette.orange} label="Dirección" value={person.address || 'No registrada'} last />
@@ -150,6 +151,7 @@ function EditProfileForm({ person, onCancel, onSaved }: {
 }) {
   const isCoach = person.role === 'Coach';
   const [email, setEmail] = useState(person.email);
+  const [lastName, setLastName] = useState(person.lastName ?? '');
   const [phone, setPhone] = useState(person.phone ?? '');
   const [address, setAddress] = useState(person.address ?? '');
   const [coachId, setCoachId] = useState(person.assignedCoach?.id ?? '');
@@ -166,6 +168,7 @@ function EditProfileForm({ person, onCancel, onSaved }: {
     try {
       const response = await api.put<{ user: DirectoryClient }>(`/auth/users/${person.id}`, {
         email: email.trim().toLowerCase(),
+        lastName: lastName.trim(),
         phone: digits,
         ...(isCoach ? { address: address.trim() } : { assignedCoach: coachId || null }),
       });
@@ -180,6 +183,7 @@ function EditProfileForm({ person, onCancel, onSaved }: {
   return (
     <FloatingCard style={styles.form}>
       <SectionTitle>Editar perfil</SectionTitle>
+      <Field label="Apellido" autoCapitalize="words" value={lastName} onChangeText={setLastName} />
       <Field label="Correo electrónico" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
       <Field label="Teléfono (10 dígitos)" keyboardType="phone-pad" maxLength={14} value={phone} onChangeText={setPhone} />
       {isCoach ? (

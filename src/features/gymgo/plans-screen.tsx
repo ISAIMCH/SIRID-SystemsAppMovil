@@ -22,6 +22,8 @@ export default function PlansScreen() {
   const [price, setPrice] = useState('');
   const [duration, setDuration] = useState('30');
   const [specs, setSpecs] = useState('');
+  const [planType, setPlanType] = useState<NonNullable<MembershipPlan['planType']>>('standard');
+  const [autoRenew, setAutoRenew] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
@@ -49,6 +51,8 @@ export default function PlansScreen() {
     setPrice('');
     setDuration('30');
     setSpecs('');
+    setPlanType('standard');
+    setAutoRenew(true);
     setIsActive(true);
     setError('');
   }
@@ -59,6 +63,8 @@ export default function PlansScreen() {
     setPrice(String(plan.price));
     setDuration(String(plan.durationInDays));
     setSpecs(plan.specifications.join('\n'));
+    setPlanType(plan.planType ?? 'standard');
+    setAutoRenew(plan.autoRenew ?? true);
     setIsActive(plan.isActive);
     setError('');
   }
@@ -77,6 +83,8 @@ export default function PlansScreen() {
       price: priceValue,
       durationInDays: durationValue,
       specifications: specs.split('\n').map((line) => line.trim()).filter(Boolean),
+      planType,
+      autoRenew,
       isActive,
     };
     try {
@@ -153,6 +161,10 @@ export default function PlansScreen() {
         <View style={styles.switchRow}>
           <Text style={styles.label}>Plan activo</Text>
           <Switch value={isActive} onValueChange={setIsActive} trackColor={{ true: palette.neon }} />
+        </View>
+        <View style={styles.switchRow}>
+          <Text style={styles.label}>Renovación automática</Text>
+          <Switch value={autoRenew} onValueChange={setAutoRenew} trackColor={{ true: palette.neon }} />
         </View>
         {error ? <Notice error>{error}</Notice> : null}
         <ActionButton onPress={() => void save()} disabled={isSaving}>

@@ -13,7 +13,7 @@ import type { MembershipPlan } from './types';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
 type ManagedRole = 'Coach' | 'Cliente';
-type CreatedUser = { id: string; name: string; email: string; role: ManagedRole };
+type CreatedUser = { id: string; name: string; lastName?: string; email: string; role: ManagedRole };
 
 const OTHER_GOAL = 'Otro';
 const clientGoals = ['ganar masa muscular', 'perder grasa', 'definición', 'fuerza', 'acondicionamiento', OTHER_GOAL];
@@ -31,6 +31,7 @@ export default function StaffScreen({ initialRole = 'Coach', hideRoleSelector = 
   const { user } = useAuth();
   const [role, setRole] = useState<ManagedRole>(initialRole);
   const [name, setName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [phone, setPhone] = useState('');
@@ -90,6 +91,7 @@ export default function StaffScreen({ initialRole = 'Coach', hideRoleSelector = 
     try {
       const response = await api.post<{ user: CreatedUser }>('/auth/users', {
         name: name.trim(),
+        lastName: lastName.trim(),
         email: email.trim().toLowerCase(),
         password,
         role,
@@ -109,6 +111,7 @@ export default function StaffScreen({ initialRole = 'Coach', hideRoleSelector = 
 
       setCreatedUser(response.data.user);
       setName('');
+      setLastName('');
       setEmail('');
       setPassword('');
       setPhone('');
@@ -149,6 +152,7 @@ export default function StaffScreen({ initialRole = 'Coach', hideRoleSelector = 
 
       <FloatingCard style={styles.form}>
         <Field label="Nombre completo" autoCapitalize="words" autoComplete="name" value={name} onChangeText={setName} />
+        <Field label="Apellido" autoCapitalize="words" value={lastName} onChangeText={setLastName} />
         <Field label="Correo electrónico" autoCapitalize="none" autoComplete="email" keyboardType="email-address" value={email} onChangeText={setEmail} />
         <Field label="Contraseña inicial" autoCapitalize="none" autoComplete="new-password" secureTextEntry value={password} onChangeText={setPassword} />
         <Field label="Teléfono (10 dígitos)" keyboardType="phone-pad" maxLength={14} value={phone} onChangeText={setPhone} />

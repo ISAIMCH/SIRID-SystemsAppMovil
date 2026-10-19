@@ -7,6 +7,7 @@ const exerciseLogSchema = new mongoose.Schema({
   gifUrl: { type: String, trim: true, maxlength: 500 },
   equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', default: null },
   metricType: { type: String, enum: ['strength', 'cardio'], default: 'strength' },
+  skipped: { type: Boolean, default: false },
   reps: { type: Number, min: 0, max: 300 },
   weightKg: { type: Number, min: 0, max: 1000 },
   durationMinutes: { type: Number, min: 1, max: 600 },

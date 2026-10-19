@@ -448,6 +448,8 @@ async function getCurrentUser(req, res) {
 
 async function updatePhysicalProfile(req, res) {
   const input = z.object({
+    name: z.string().trim().min(2).max(100).optional(),
+    lastName: z.string().trim().max(50).optional(),
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     phone: z.union([phoneSchema, z.literal('')]).optional(),
     goal: z.string().trim().max(120).optional(),
@@ -463,6 +465,7 @@ async function updatePhysicalProfile(req, res) {
   const user = await User.findByIdAndUpdate(req.user.id, {
     $set: {
       ...input,
+      ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
       ...(input.phone !== undefined ? { phone: input.phone || undefined } : {}),
     },
   }, { new: true, runValidators: true });

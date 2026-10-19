@@ -41,7 +41,7 @@ export default function ClientProfileHub() {
       <View style={styles.header}>
         <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{user?.name ?? 'Usuario GymGo'}</Text>
+          <Text style={styles.title}>{[user?.name, user?.lastName].filter(Boolean).join(' ') || 'Usuario GymGo'}</Text>
           <Text style={styles.subtitle}>Cliente | {user?.heightCm ?? '—'}cm | Edad pendiente</Text>
         </View>
       </View>

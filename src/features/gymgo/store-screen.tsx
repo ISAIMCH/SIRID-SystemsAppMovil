@@ -1,19 +1,20 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
+import { connectSocket } from '../../services/socket';
 import { useCartStore } from '../../store/cartStore';
-import { api, getApiErrorMessage } from './api';
+import { api, getApiErrorMessage, getPromotions } from './api';
 import CartModal from './cart-modal';
 import { FloatingCard } from './fit-ui';
 import OrdersModal from './orders-modal';
-import { connectSocket } from '../../services/socket';
 import { palette } from './theme';
+import type { Promotion } from './types';
 import { Notice, Page } from './ui';
 
 type Product = { _id: string; name: string; category: string; price: number; image: string; imageUrl?: string; stock: number };
-type Promotion = { _id: string; title: string; image: string };
 
 const categoryStyle: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
   Suplementos: { icon: 'local-drink', color: palette.neon },
@@ -34,6 +35,7 @@ export default function StoreScreen() {
   const [isOrdersVisible, setIsOrdersVisible] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const addItem = useCartStore((state) => state.addItem);
+  const setPromotionId = useCartStore((state) => state.setPromotionId);
   const cartItems = useCartStore((state) => state.items);
   const totalItems = useCartStore((state) => state.getTotalItems());
   const [cartAnimation] = useState(() => new Animated.Value(0));
@@ -42,12 +44,12 @@ export default function StoreScreen() {
     let isCurrent = true;
     Promise.all([
       api.get<{ products: Product[] }>('/store/products'),
-      api.get<{ promotions: Promotion[] }>('/store/promotions'),
+      getPromotions(),
     ])
       .then(([productsResponse, promotionsResponse]) => {
         if (!isCurrent) return;
         setProducts(productsResponse.data.products);
-        setPromotions(promotionsResponse.data.promotions);
+        setPromotions(promotionsResponse);
       })
       .catch((requestError: unknown) => {
         if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudo cargar la tienda.'));
@@ -85,6 +87,24 @@ export default function StoreScreen() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }
 
+  function handlePromotion(promotion: Promotion) {
+    const applicableProducts = promotion.applicableProducts ?? [];
+    if (applicableProducts.length === 0) {
+      router.push('/(main)/billing');
+      return;
+    }
+
+    const productsToAdd = products.filter((product) => applicableProducts.includes(product._id) && product.stock > 0);
+    if (productsToAdd.length === 0) {
+      setError('Los productos de esta promoción no están disponibles.');
+      return;
+    }
+
+    setPromotionId(promotion._id);
+    productsToAdd.forEach(addProductToCart);
+    setIsCartVisible(true);
+  }
+
   return (
     <Page dark>
       <View style={styles.header}>
@@ -107,8 +127,16 @@ export default function StoreScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} snapToInterval={bannerWidth + 12} decelerationRate="fast" contentContainerStyle={styles.banners}>
           {promotions.map((promotion) => (
             <View key={promotion._id} style={[styles.banner, { width: bannerWidth }]}>
-              <Image source={{ uri: promotion.image }} style={styles.bannerImage} resizeMode="cover" />
-              <View style={styles.bannerLabel}><Text style={styles.bannerText}>{promotion.title}</Text></View>
+              {promotion.imageUrl ? <Image source={{ uri: promotion.imageUrl }} style={styles.bannerImage} resizeMode="cover" /> : null}
+              <View style={styles.bannerOverlay} />
+              <View style={styles.bannerContent}>
+                <Text style={styles.bannerText}>{promotion.title}</Text>
+                {promotion.description ? <Text numberOfLines={2} style={styles.bannerDescription}>{promotion.description}</Text> : null}
+                {typeof promotion.discountPercentage === 'number' ? <Text style={styles.bannerDiscount}>{promotion.discountPercentage}% de descuento</Text> : null}
+                <Pressable accessibilityRole="button" onPress={() => handlePromotion(promotion)} style={styles.bannerButton}>
+                  <Text style={styles.bannerButtonText}>{promotion.applicableProducts?.length ? 'Aprovechar' : 'Ver Membresías'}</Text>
+                </Pressable>
+              </View>
             </View>
           ))}
         </ScrollView>
@@ -192,10 +220,15 @@ const styles = StyleSheet.create({
   ordersButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, borderRadius: 14, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#18211D', paddingHorizontal: 10 },
   ordersButtonText: { color: palette.neon, fontSize: 12, fontWeight: '800' },
   banners: { gap: 12 },
-  banner: { aspectRatio: 16 / 9, borderRadius: 24, overflow: 'hidden', backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
+  banner: { aspectRatio: 16 / 9, minHeight: 220, borderRadius: 24, overflow: 'hidden', backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
   bannerImage: { width: '100%', height: '100%' },
-  bannerLabel: { position: 'absolute', left: 12, bottom: 12, backgroundColor: '#0F2A24CC', borderRadius: 14, paddingHorizontal: 12, paddingVertical: 6 },
+  bannerOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#07100ACC' },
+  bannerContent: { flex: 1, justifyContent: 'flex-end', gap: 6, padding: 18, paddingBottom: 24 },
   bannerText: { color: palette.white, fontSize: 13, fontWeight: '800' },
+  bannerDescription: { color: '#DCE8E0', fontSize: 12, lineHeight: 16 },
+  bannerDiscount: { color: palette.neon, fontSize: 18, fontWeight: '900' },
+  bannerButton: { alignSelf: 'flex-start', minHeight: 38, justifyContent: 'center', borderRadius: 14, backgroundColor: palette.neon, paddingHorizontal: 14 },
+  bannerButtonText: { color: '#081009', fontSize: 12, fontWeight: '900' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E' },
   chipSelected: { backgroundColor: '#9BFF63', borderColor: '#9BFF63' },

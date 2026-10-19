@@ -2,13 +2,13 @@ import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { createContext, useContext, type PropsWithChildren, type ReactNode } from 'react';
 import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  type TextInputProps,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+    type TextInputProps,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -34,13 +34,14 @@ export function useDarkUi() {
   return useContext(DarkUiContext);
 }
 
-export function Page({ children, dark = false, admin = false }: PropsWithChildren<{ dark?: boolean; admin?: boolean }>) {
+export function Page({ children, dark = false, admin = false, overlay }: PropsWithChildren<{ dark?: boolean; admin?: boolean; overlay?: ReactNode }>) {
   return (
     <DarkUiContext.Provider value={dark}>
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, admin && styles.adminSafeArea, dark && styles.darkSafeArea]}>
         <ScrollView contentContainerStyle={[styles.pageContent, admin && styles.adminPageContent]} keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
+        {overlay}
       </SafeAreaView>
     </DarkUiContext.Provider>
   );

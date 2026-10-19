@@ -21,6 +21,7 @@ const workoutSchema = z.object({
       setNumber: z.number().int().min(1).max(50),
       exercises: z.array(z.object({
         routineExerciseId: z.string().regex(/^[a-f\d]{24}$/i),
+        skipped: z.boolean().default(false),
         reps: z.number().int().min(0).max(300).optional(),
         weightKg: z.number().min(0).max(1000).optional(),
         durationMinutes: z.number().int().min(1).max(600).optional(),
@@ -73,6 +74,7 @@ async function createWorkoutSession(req, res) {
   const routineBlocks = normalizeBlocks(routine.toObject()).filter((block) => block.day === input.trainingDay);
   const blocksById = new Map(routineBlocks.map((block) => [String(block._id), block]));
   const usedBlockIds = new Set();
+  let completedExerciseCount = 0;
   const sessionBlocks = input.blocks.map((entry) => {
     const block = blocksById.get(entry.routineBlockId);
     if (!block || usedBlockIds.has(entry.routineBlockId)) throw new HttpError(400, 'La sesión contiene un bloque inválido o repetido.');
@@ -95,7 +97,10 @@ async function createWorkoutSession(req, res) {
         }
         usedExerciseIds.add(entryExercise.routineExerciseId);
         const isCardio = exercise.metricType === 'cardio';
-        if (isCardio) {
+        if (!entryExercise.skipped) completedExerciseCount += 1;
+        if (entryExercise.skipped) {
+          // Skipped exercises remain in the record but bypass metric validation.
+        } else if (isCardio) {
           if (!entryExercise.durationMinutes && entryExercise.distanceKm === undefined && entryExercise.level === undefined) {
             throw new HttpError(400, 'Registra duración, distancia o nivel para el ejercicio de cardio.');
           }
@@ -112,11 +117,12 @@ async function createWorkoutSession(req, res) {
           gifUrl: exercise.gifUrl,
           equipmentId: exercise.equipmentId ?? null,
           metricType: isCardio ? 'cardio' : 'strength',
-          reps: entryExercise.reps,
-          weightKg: entryExercise.weightKg,
-          durationMinutes: entryExercise.durationMinutes,
-          distanceKm: entryExercise.distanceKm,
-          level: entryExercise.level,
+          skipped: entryExercise.skipped,
+          reps: entryExercise.skipped ? (isCardio ? null : 0) : entryExercise.reps,
+          weightKg: entryExercise.skipped ? (isCardio ? null : 0) : entryExercise.weightKg,
+          durationMinutes: entryExercise.skipped ? null : entryExercise.durationMinutes,
+          distanceKm: entryExercise.skipped ? null : entryExercise.distanceKm,
+          level: entryExercise.skipped ? null : entryExercise.level,
         };
       });
       if (usedExerciseIds.size !== exercisesById.size) throw new HttpError(400, 'Completa todos los ejercicios del bloque.');
@@ -129,6 +135,7 @@ async function createWorkoutSession(req, res) {
       sets: rounds,
     };
   });
+  if (completedExerciseCount === 0) throw new HttpError(400, 'Completa al menos un ejercicio no saltado antes de guardar.');
 
   const totalVolumeKg = sessionBlocks.reduce((blockTotal, block) => (
     blockTotal + block.sets.reduce((setTotal, round) => (
