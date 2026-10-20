@@ -94,15 +94,15 @@ export default function ClientDetailScreen() {
             <>
               <SectionTitle>Información</SectionTitle>
               <FloatingCard style={styles.details}>
-                <DetailRow icon="mail" color="#10FF85" label="Correo" value={person.email} />
-                <DetailRow icon="person" color="#10FF85" label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
-                <DetailRow icon="phone" color="#10FF85" label="Teléfono" value={person.phone || 'No registrado'} />
+                <DetailRow label="Correo" value={person.email} />
+                <DetailRow label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
+                <DetailRow label="Teléfono" value={person.phone || 'No registrado'} />
                 {isCoach ? (
-                  <DetailRow icon="place" color="#10FF85" label="Dirección" value={person.address || 'No registrada'} last />
+                  <DetailRow label="Dirección" value={person.address || 'No registrada'} last />
                 ) : (
                   <>
-                    <DetailRow icon="flag" color="#10FF85" label="Objetivo" value={person.goal || 'No definido'} />
-                    <DetailRow icon="trending-up" color="#10FF85" label="Experiencia" value={person.experienceLevel ? experienceLabels[person.experienceLevel] : 'No definida'} last />
+                    <DetailRow label="Objetivo" value={person.goal || 'No definido'} />
+                    <DetailRow label="Experiencia" value={person.experienceLevel ? experienceLabels[person.experienceLevel] : 'No definida'} last />
                   </>
                 )}
               </FloatingCard>
@@ -111,16 +111,15 @@ export default function ClientDetailScreen() {
                 <>
                   <SectionTitle>Membresía</SectionTitle>
                   <FloatingCard style={styles.details}>
-                    <DetailRow icon="verified" color="#10FF85" label="Estado" value={person.membership ? membershipLabels[person.membership.status] : 'Pendiente'} />
-                    <DetailRow icon="event" color="#10FF85" label="Inicio" value={formatDate(person.membership?.startsAt)} />
-                    <DetailRow icon="event-busy" color="#10FF85" label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
+                    <DetailRow label="Estado" value={person.membership ? membershipLabels[person.membership.status] : 'Pendiente'} accent={person.membership?.status === 'active'} />
+                    <DetailRow label="Inicio" value={formatDate(person.membership?.startsAt)} />
+                    <DetailRow label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
                   </FloatingCard>
 
                   <SectionTitle>Coach asignado</SectionTitle>
                   <FloatingCard style={styles.coachCard}>
                     {person.assignedCoach ? (
                       <>
-                        <IconBadge name="sports" color="#10FF85" />
                         <View style={styles.flex}>
                           <Text style={styles.coachName}>{person.assignedCoach.name}</Text>
                           <Text style={styles.coachEmail}>{person.assignedCoach.email}</Text>
@@ -200,18 +199,16 @@ function EditProfileForm({ person, onCancel, onSaved }: {
   );
 }
 
-function DetailRow({ icon, color, label, value, last = false }: {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  color: string;
+function DetailRow({ label, value, last = false, accent = false }: {
   label: string;
   value: string;
   last?: boolean;
+  accent?: boolean;
 }) {
   return (
     <View style={[styles.detailRow, !last && styles.detailDivider]}>
-      <IconBadge name={icon} color={color} size={36} />
       <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value}</Text>
+      <Text style={[styles.detailValue, accent && styles.detailValueAccent]}>{value}</Text>
     </View>
   );
 }
@@ -224,11 +221,12 @@ const styles = StyleSheet.create({
   subtitle: { color: '#91A098', fontSize: 13 },
   loading: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
   details: { paddingVertical: 6, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
-  detailRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  detailRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 12 },
   detailDivider: { borderBottomWidth: 1, borderBottomColor: '#27272A' },
   detailLabel: { color: '#A1A1AA', fontSize: 13 },
-  detailValue: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '700', textAlign: 'right' },
-  coachCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
+  detailValue: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '500', textAlign: 'right' },
+  detailValueAccent: { color: '#10FF85' },
+  coachCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A' },
   coachName: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   coachEmail: { color: '#A1A1AA', fontSize: 13 },
   form: { gap: 16, padding: 20, backgroundColor: '#1E1E1E', borderColor: '#27272A' },

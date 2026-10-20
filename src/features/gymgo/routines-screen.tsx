@@ -405,8 +405,18 @@ export default function RoutinesScreen() {
       {!isClient ? (
         <>
           <View style={styles.coachActions}>
-            <ActionButton onPress={() => router.push(routineEditorHref())}>Nueva rutina para cliente</ActionButton>
-            <ActionButton secondary onPress={() => router.push(routineEditorHref({ mode: 'template' }))}>Nueva plantilla base</ActionButton>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(routineEditorHref())}
+              style={({ pressed }) => [styles.primaryCoachAction, pressed && styles.coachActionPressed]}>
+              <Text style={styles.primaryCoachActionText}>Nueva rutina para cliente</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(routineEditorHref({ mode: 'template' }))}
+              style={({ pressed }) => [styles.secondaryCoachAction, pressed && styles.coachActionPressed]}>
+              <Text style={styles.secondaryCoachActionText}>Nueva plantilla base</Text>
+            </Pressable>
           </View>
           <CoachTemplates onAssigned={() => setRetryNumber((current) => current + 1)} />
         </>
@@ -786,6 +796,11 @@ const styles = StyleSheet.create({
   feedback: { gap: 8 },
   retry: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
   coachActions: { gap: 10 },
+  primaryCoachAction: { minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#10FF85', paddingHorizontal: 18 },
+  primaryCoachActionText: { color: '#081009', fontSize: 15, fontWeight: '800' },
+  secondaryCoachAction: { minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#27272A', backgroundColor: 'transparent', paddingHorizontal: 18 },
+  secondaryCoachActionText: { color: '#F4F8F5', fontSize: 15, fontWeight: '700' },
+  coachActionPressed: { opacity: 0.78 },
   routineSummary: { gap: 12 },
   summaryTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   unitToggle: { minWidth: 48, minHeight: 32, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#9BFF63', backgroundColor: '#9BFF631C' },

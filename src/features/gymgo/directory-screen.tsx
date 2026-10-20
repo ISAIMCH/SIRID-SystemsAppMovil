@@ -97,17 +97,17 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
           accessibilityLabel={`Ver perfil de ${[person.name, person.lastName].filter(Boolean).join(' ')}`}
           onPress={() => router.push({ pathname: '/(main)/directory/[clientId]', params: { clientId: person.id } })}
           style={({ pressed }) => pressed && styles.pressed}>
-          <FloatingCard style={styles.row}>
+          <FloatingCard style={[styles.row, user?.role === 'Coach' && styles.darkRow]}>
             <View style={[styles.avatar, person.role === 'Coach' && styles.coachAvatar]}>
               <Text style={styles.avatarText}>{person.name.trim().slice(0, 1).toUpperCase()}</Text>
             </View>
             <View style={styles.info}>
-              <Text style={styles.name}>{[person.name, person.lastName].filter(Boolean).join(' ')}</Text>
-              <Text style={styles.email}>{person.email}</Text>
+              <Text style={[styles.name, user?.role === 'Coach' && styles.darkName]}>{[person.name, person.lastName].filter(Boolean).join(' ')}</Text>
+              <Text style={[styles.email, user?.role === 'Coach' && styles.darkSecondary]}>{person.email}</Text>
               {person.role === 'Cliente' ? (
-                <Text style={styles.coach}>{person.assignedCoach ? `Coach · ${person.assignedCoach.name}` : 'Sin Coach asignado'}</Text>
+                <Text style={[styles.coach, user?.role === 'Coach' && styles.darkSecondary]}>{person.assignedCoach ? `Coach · ${person.assignedCoach.name}` : 'Sin Coach asignado'}</Text>
               ) : (
-                <Text style={styles.coach}>{person.phone || 'Sin teléfono'}</Text>
+                <Text style={[styles.coach, user?.role === 'Coach' && styles.darkSecondary]}>{person.phone || 'Sin teléfono'}</Text>
               )}
             </View>
             {person.role === 'Cliente' ? (
@@ -129,12 +129,15 @@ const styles = StyleSheet.create({
   loading: { minHeight: 120, justifyContent: 'center', alignItems: 'center' },
   feedback: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  darkRow: { backgroundColor: '#1E1E1E', borderColor: '#27272A' },
   avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#19D98B26', alignItems: 'center', justifyContent: 'center' },
   coachAvatar: { backgroundColor: '#18B7E826' },
   avatarText: { color: palette.deepGreen, fontSize: 18, fontWeight: '800' },
   info: { flex: 1, gap: 3 },
   name: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  darkName: { color: '#FFFFFF' },
   email: { color: palette.muted, fontSize: 12 },
+  darkSecondary: { color: '#A1A1AA' },
   coach: { color: palette.green, fontSize: 11, fontWeight: '700' },
   chip: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: '#FF8A3D26' },
   chipActive: { backgroundColor: '#19D98B26' },

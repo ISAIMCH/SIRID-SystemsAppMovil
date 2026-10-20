@@ -93,10 +93,18 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
       {error ? <Notice error>{error}</Notice> : null}
       {success ? <Notice>{success}</Notice> : null}
       {!isLoading && !error && templates.length === 0 ? (
-        <Notice>Aún no tienes plantillas. Crea una base y asígnala a tus clientes como copia independiente.</Notice>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No hay plantillas</Text>
+          <Text style={styles.emptyStateDetail}>Crea una base para reutilizarla con tus clientes.</Text>
+        </View>
       ) : null}
 
-      {!isLoading && !error && visibleTemplates.length === 0 ? <Notice>No hay plantillas que coincidan.</Notice> : null}
+      {!isLoading && !error && templates.length > 0 && visibleTemplates.length === 0 ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No hay coincidencias</Text>
+          <Text style={styles.emptyStateDetail}>Prueba con otro nombre de plantilla.</Text>
+        </View>
+      ) : null}
       {visibleTemplates.map((template) => (
         <FloatingCard key={template._id} style={styles.card}>
           <View style={styles.top}>
@@ -154,6 +162,9 @@ const styles = StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   actionText: { fontSize: 13, fontWeight: '800' },
   assign: { gap: 12, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
-  searchBox: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, borderWidth: 1, borderColor: '#27342E', backgroundColor: '#141A17', paddingHorizontal: 12 },
-  searchInput: { flex: 1, color: '#F4F8F5', fontSize: 14 },
+  searchBox: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#18181B', paddingHorizontal: 12 },
+  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
+  emptyState: { alignItems: 'center', gap: 4, paddingVertical: 18 },
+  emptyStateText: { color: '#A1A1AA', fontSize: 14, fontWeight: '700' },
+  emptyStateDetail: { color: '#71717A', fontSize: 12, textAlign: 'center' },
 });

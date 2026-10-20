@@ -479,10 +479,9 @@ function RoutineForm() {
         <SectionTitle>Nuevo bloque</SectionTitle>
         <View style={styles.group}>
           <Text style={styles.label}>Estructura</Text>
-          <View style={styles.chips}>{blockTypes.map((item) => (
-            <Pressable key={item.value} accessibilityRole="button" accessibilityState={{ selected: blockType === item.value }} onPress={() => { setBlockType(item.value); if (item.value === 'single') setDraftExercises((current) => current.slice(0, 1)); }} style={[styles.typeChip, blockType === item.value && styles.typeChipActive]}>
-              <MaterialIcons name={item.icon} size={16} color={blockType === item.value ? palette.white : palette.ink} />
-              <Text style={[styles.typeText, blockType === item.value && styles.typeTextActive]}>{item.label}</Text>
+          <View style={styles.segmentedControl}>{blockTypes.map((item) => (
+            <Pressable key={item.value} accessibilityRole="button" accessibilityState={{ selected: blockType === item.value }} onPress={() => { setBlockType(item.value); if (item.value === 'single') setDraftExercises((current) => current.slice(0, 1)); }} style={[styles.segment, blockType === item.value && styles.segmentActive]}>
+              <Text style={[styles.segmentText, blockType === item.value && styles.segmentTextActive]}>{item.label}</Text>
             </Pressable>
           ))}</View>
         </View>
@@ -537,7 +536,13 @@ function RoutineForm() {
             <View style={styles.flex}><Field label="Peso sugerido (kg)" keyboardType="decimal-pad" value={suggestedWeight} onChangeText={setSuggestedWeight} placeholder="Opcional" /></View>
           </View>
         )}
-        <ActionButton onPress={addExerciseToBlock} disabled={isLoading || draftExercises.length >= maxBlockExercises}>Añadir ejercicio al bloque</ActionButton>
+        <Pressable
+          accessibilityRole="button"
+          disabled={isLoading || draftExercises.length >= maxBlockExercises}
+          onPress={addExerciseToBlock}
+          style={({ pressed }) => [styles.addExerciseButton, (isLoading || draftExercises.length >= maxBlockExercises) && styles.disabledButton, pressed && styles.buttonPressed]}>
+          <Text style={styles.addExerciseButtonText}>Añadir ejercicio al bloque</Text>
+        </Pressable>
 
         {draftExercises.map((exercise, index) => (
           <View key={exercise._id ?? `${exercise.name}-${index}`} style={styles.draftRow}>
@@ -550,7 +555,13 @@ function RoutineForm() {
           </View>
         ))}
         {error ? <Notice error>{error}</Notice> : null}
-        <ActionButton secondary onPress={addBlock} disabled={!draftExercises.length}>Guardar bloque</ActionButton>
+        <Pressable
+          accessibilityRole="button"
+          disabled={!draftExercises.length}
+          onPress={addBlock}
+          style={({ pressed }) => [styles.saveBlockButton, !draftExercises.length && styles.disabledButton, pressed && styles.buttonPressed]}>
+          <Text style={styles.saveBlockButtonText}>Guardar bloque</Text>
+        </Pressable>
       </FloatingCard>
 
       {blocks.length ? (
@@ -575,8 +586,8 @@ function RoutineForm() {
                   </View>
                   {exercise.metricType !== 'cardio' ? (
                     <View style={styles.weightControls}>
-                      <Pressable accessibilityRole="button" accessibilityLabel="Bajar peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, -2.5)} style={styles.step}><MaterialIcons name="remove" size={17} color={palette.ink} /></Pressable>
-                      <Pressable accessibilityRole="button" accessibilityLabel="Subir peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, 2.5)} style={styles.step}><MaterialIcons name="add" size={17} color={palette.ink} /></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Bajar peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, -2.5)} style={styles.step}><MaterialIcons name="remove" size={17} color="#E4E4E7" /></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Subir peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, 2.5)} style={styles.step}><MaterialIcons name="add" size={17} color="#E4E4E7" /></Pressable>
                     </View>
                   ) : null}
                 </View>
@@ -614,10 +625,11 @@ const styles = StyleSheet.create({
   label: { color: '#F2F4EE', fontSize: 13, fontWeight: '700' },
   helper: { color: '#91A098', fontSize: 12, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  typeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 13, paddingVertical: 9 },
-  typeChipActive: { backgroundColor: '#18211D', borderColor: '#9BFF63' },
-  typeText: { color: '#DCE8E0', fontSize: 12, fontWeight: '700' },
-  typeTextActive: { color: palette.white },
+  segmentedControl: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: '#333333', backgroundColor: '#18181B', padding: 3 },
+  segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 7, paddingHorizontal: 8 },
+  segmentActive: { borderWidth: 1, borderColor: '#10FF85', backgroundColor: '#10FF8512' },
+  segmentText: { color: '#71717A', fontSize: 12, fontWeight: '700' },
+  segmentTextActive: { color: '#10FF85' },
   choice: { borderRadius: 20, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 14, paddingVertical: 9 },
   choiceSelected: { backgroundColor: '#18211D', borderColor: '#9BFF63' },
   choiceText: { color: '#DCE8E0', fontSize: 12, fontWeight: '700' },
@@ -630,8 +642,14 @@ const styles = StyleSheet.create({
   blockExercise: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
   exerciseName: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
   exerciseMeta: { color: '#91A098', fontSize: 12, lineHeight: 17 },
+  addExerciseButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#10FF85', backgroundColor: 'transparent', paddingHorizontal: 16, marginBottom: 8 },
+  addExerciseButtonText: { color: '#10FF85', fontSize: 14, fontWeight: '800' },
+  saveBlockButton: { minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#10FF85', paddingHorizontal: 18, marginTop: 8, marginBottom: 16 },
+  saveBlockButtonText: { color: '#081009', fontSize: 15, fontWeight: '800' },
+  disabledButton: { opacity: 0.45 },
+  buttonPressed: { opacity: 0.78 },
   weightControls: { flexDirection: 'row', gap: 6 },
-  step: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', alignItems: 'center', justifyContent: 'center' },
+  step: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#333333', alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.58)' },
   modalCard: { gap: 14, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#F2F4EE', padding: 20, paddingBottom: 28 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },

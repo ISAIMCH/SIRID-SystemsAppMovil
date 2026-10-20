@@ -1,13 +1,13 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
 import type { Exercise, Routine, RoutineBlock, WorkoutSessionLog } from './types';
-import { ActionButton, Notice, SectionTitle } from './ui';
+import { Notice, SectionTitle } from './ui';
 
 const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 type ActualLog = { completedAt: string; reps?: number; weightKg?: number; durationMinutes?: number; distanceKm?: number; level?: number };
@@ -114,7 +114,12 @@ export default function ClientProgress({ clientId }: { clientId: string }) {
                 {routine.sourceTemplate ? <Text style={styles.meta}>Copia independiente de una plantilla</Text> : null}
               </View>
             </View>
-            <ActionButton onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}>Editar rutina del cliente</ActionButton>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}
+              style={({ pressed }) => [styles.editRoutineButton, pressed && styles.editRoutineButtonPressed]}>
+              <Text style={styles.editRoutineButtonText}>Editar rutina del cliente</Text>
+            </Pressable>
           </FloatingCard>
 
           {blocks.map((block, index) => (
@@ -164,6 +169,9 @@ const styles = StyleSheet.create({
   wrapper: { gap: 14 },
   flex: { flex: 1 },
   routineCard: { gap: 14 },
+  editRoutineButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#10FF85', borderRadius: 10, backgroundColor: 'transparent', paddingHorizontal: 16 },
+  editRoutineButtonText: { color: '#10FF85', fontSize: 14, fontWeight: '800' },
+  editRoutineButtonPressed: { opacity: 0.78 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   routineTitle: { color: palette.ink, fontSize: 17, fontWeight: '800' },
   blockCard: { gap: 12 },

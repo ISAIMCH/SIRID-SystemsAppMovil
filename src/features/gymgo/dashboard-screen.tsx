@@ -97,7 +97,7 @@ function StaffDashboard() {
         <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero]}>
           <Eyebrow>{isClient ? 'PLAN PERSONAL' : `${user?.role?.toUpperCase()} · GYMGO`}</Eyebrow>
           <Text style={styles.heroTitle}>{roleHeading}</Text>
-          <Text style={styles.heroDetail}>
+          <Text style={[styles.heroDetail, user?.role === 'Coach' && styles.darkHeroDetail]}>
             {isClient
               ? user?.goal ? `Objetivo: ${user.goal}` : 'Tus rutinas y tu acceso están a un toque.'
               : 'Una vista clara de la actividad y el equipo del gimnasio.'}
@@ -125,17 +125,17 @@ function StaffDashboard() {
 
         {isClient ? (
           <View style={styles.metricRow}>
-            <Surface style={styles.metric}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
               <Text style={styles.metricLabel}>Rutinas activas</Text>
               <Text style={styles.metricValue}>{isLoading ? '—' : activeRoutineCount}</Text>
             </Surface>
-            <Surface style={styles.metric}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
               <Text style={styles.metricLabel}>Membresía</Text>
               <Text style={[styles.metricStatus, user?.membership?.status === 'active' && styles.active]}>
                 {user?.membership?.status ?? 'pendiente'}
               </Text>
             </Surface>
-            <Surface style={styles.metric}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
               <Text style={styles.metricLabel}>Racha actual</Text>
               <Text style={styles.metricValue}>{isLoadingSummary ? '—' : workoutStats?.currentStreak ?? 0}</Text>
               <Text style={styles.metricHint}>días programados</Text>
@@ -143,15 +143,15 @@ function StaffDashboard() {
           </View>
         ) : (
           <View style={styles.metricRow}>
-            <Surface style={styles.metric}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
               <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Entradas hoy</Text>
               <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.today.checkIns ?? 0}</Text>
-              <Text style={styles.metricHint}>check-in registrados</Text>
+              <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>check-in registrados</Text>
             </Surface>
-            <Surface style={styles.metric}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
               <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Dentro ahora</Text>
               <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.currentOccupancy ?? 0}</Text>
-              <Text style={styles.metricHint}>clientes presentes</Text>
+              <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>clientes presentes</Text>
             </Surface>
           </View>
         )}
@@ -176,28 +176,32 @@ function StaffDashboard() {
                 <View style={styles.demandDot} />
                 <Text style={[styles.demandTitle, user?.role === 'Coach' && styles.darkMetricValue]}>Demanda horaria · 7 días</Text>
               </View>
-              <Text style={styles.metricHint}>{operations.today.checkOuts} salidas hoy</Text>
+              <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>{operations.today.checkOuts} salidas hoy</Text>
             </View>
             {operations.peakHour ? (
               <Text style={styles.peakLabel}>Hora pico · {String(operations.peakHour.hour).padStart(2, '0')}:00 ({operations.peakHour.checkIns} entradas)</Text>
             ) : <Text style={styles.demandBody}>Aún no hay suficientes entradas para calcular una hora pico.</Text>}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chart}>
-              {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).map((entry) => {
-                const maximum = Math.max(1, ...operations.hourlyDemand.map((value) => value.checkIns));
-                return (
-                  <View key={entry.hour} style={styles.chartColumn}>
-                    <Text style={styles.chartCount}>{entry.checkIns || ''}</Text>
-                    <View style={[styles.chartBar, { height: Math.max(4, Math.round((entry.checkIns / maximum) * 66)) }]} />
-                    <Text style={styles.chartHour}>{String(entry.hour).padStart(2, '0')}</Text>
-                  </View>
-                );
-              })}
-            </ScrollView>
+            {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).length ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chart}>
+                {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).map((entry) => {
+                  const maximum = Math.max(1, ...operations.hourlyDemand.map((value) => value.checkIns));
+                  return (
+                    <View key={entry.hour} style={styles.chartColumn}>
+                      <Text style={styles.chartCount}>{entry.checkIns || ''}</Text>
+                      <View style={[styles.chartBar, { height: Math.max(4, Math.round((entry.checkIns / maximum) * 66)) }]} />
+                      <Text style={[styles.chartHour, user?.role === 'Coach' && styles.darkChartHour]}>{String(entry.hour).padStart(2, '0')}</Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <Text style={styles.emptyDemand}>No hay datos suficientes de demanda horaria.</Text>
+            )}
             <View style={styles.zoneList}>
               {operations.equipmentByZone.map((zone) => (
                 <View key={zone.zone} style={styles.zoneRow}>
-                  <Text style={styles.zoneName}>{zone.zone}</Text>
-                  <Text style={styles.zoneValue}>{zone.available}/{zone.total} disp. · {zone.busy} ocup.</Text>
+                  <Text style={[styles.zoneName, user?.role === 'Coach' && styles.darkZoneText]}>{zone.zone}</Text>
+                  <Text style={[styles.zoneValue, user?.role === 'Coach' && styles.darkZoneText]}>{zone.available}/{zone.total} disp. · {zone.busy} ocup.</Text>
                 </View>
               ))}
               {!operations.equipmentByZone.length ? <Text style={styles.demandBody}>No hay equipos por zona registrados.</Text> : null}
@@ -256,6 +260,7 @@ const styles = StyleSheet.create({
   darkHero: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E', borderRadius: 24 },
   heroTitle: { color: palette.white, fontSize: 30, lineHeight: 36, fontWeight: '800', maxWidth: 420 },
   heroDetail: { color: '#DFE8DF', fontSize: 14, lineHeight: 21 },
+  darkHeroDetail: { color: '#A1A1AA' },
   scannerCta: { minHeight: 50, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: palette.lime, paddingHorizontal: 15 },
   scannerCtaText: { color: palette.deepGreen, fontSize: 14, fontWeight: '800', flexShrink: 1 },
   scannerCtaArrow: { color: palette.deepGreen, fontSize: 20, fontWeight: '800' },
@@ -264,11 +269,13 @@ const styles = StyleSheet.create({
   arrow: { color: palette.lime, fontSize: 20, fontWeight: '700' },
   metricRow: { flexDirection: 'row', gap: 12 },
   metric: { flex: 1, minHeight: 118, justifyContent: 'space-between', gap: 12 },
+  darkMetricCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A', borderRadius: 12, borderTopWidth: 2, borderTopColor: '#10FF85' },
   metricLabel: { color: palette.muted, fontSize: 13, fontWeight: '700' },
   metricValue: { color: palette.ink, fontSize: 29, lineHeight: 32, fontWeight: '800' },
   darkMetricValue: { color: '#F4F8F5' },
-  darkMetricLabel: { color: '#91A098' },
+  darkMetricLabel: { color: '#A1A1AA' },
   metricHint: { color: palette.muted, fontSize: 12 },
+  darkMetricHint: { color: '#A1A1AA' },
   metricStatus: { color: palette.coral, fontSize: 15, fontWeight: '800', textTransform: 'capitalize' },
   active: { color: palette.green },
   section: { gap: 14 },
@@ -289,10 +296,13 @@ const styles = StyleSheet.create({
   chartCount: { height: 12, color: palette.muted, fontSize: 9 },
   chartBar: { width: 12, borderTopLeftRadius: 4, borderTopRightRadius: 4, backgroundColor: palette.green },
   chartHour: { color: palette.muted, fontSize: 9 },
+  darkChartHour: { color: '#A1A1AA' },
+  emptyDemand: { color: '#9CA3AF', fontSize: 12, textAlign: 'center', paddingVertical: 26 },
   zoneList: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
   zoneRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   zoneName: { color: palette.ink, flex: 1, fontSize: 12, fontWeight: '700' },
   zoneValue: { color: palette.muted, fontSize: 11 },
+  darkZoneText: { color: '#D4D4D8' },
   footerLine: { borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
   footerText: { color: palette.muted, fontSize: 10, fontWeight: '800' },
 });
