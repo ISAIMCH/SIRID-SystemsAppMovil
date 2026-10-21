@@ -3,21 +3,27 @@ import { BlurView } from 'expo-blur';
 import type { PropsWithChildren } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { useAdminEmbedded, useDarkUi } from './ui';
+import { useAdminEmbedded, useAdminLight, useDarkUi } from './ui';
 
 type IconName = keyof typeof MaterialIcons.glyphMap;
 
 export function FloatingCard({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
   const dark = useDarkUi();
-  const admin = useAdminEmbedded();
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
   if (admin) return <BlurView tint="light" intensity={40} style={[styles.card, styles.adminGlassCard, style]}>{children}</BlurView>;
   return <View style={[styles.card, dark && styles.darkCard, style]}>{children}</View>;
 }
 
 export function IconBadge({ name, color, size = 44 }: { name: IconName; color: string; size?: number }) {
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
+  const iconColor = admin && color !== '#B0443C' ? '#18181B' : color;
   return (
-    <View style={[styles.badge, { width: size, height: size, borderRadius: size / 2, backgroundColor: `${color}26` }]}>
-      <MaterialIcons name={name} size={size * 0.5} color={color} />
+    <View style={[styles.badge, { width: size, height: size, borderRadius: size / 2, backgroundColor: admin ? '#F4F4F5' : `${color}26` }]}>
+      <MaterialIcons name={name} size={size * 0.5} color={iconColor} />
     </View>
   );
 }
@@ -52,7 +58,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   darkCard: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
-  adminGlassCard: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
+  adminGlassCard: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E4E4E7', shadowColor: '#18181B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
   badge: { alignItems: 'center', justifyContent: 'center' },
   metric: { flex: 1, gap: 6, minWidth: 140 },
   metricValue: { fontSize: 28, lineHeight: 32, fontWeight: '800', marginTop: 6 },

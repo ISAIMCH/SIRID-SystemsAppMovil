@@ -66,6 +66,13 @@ function formatWholeNumber(value: number) {
   return new Intl.NumberFormat('es-MX', { maximumFractionDigits: 0 }).format(Math.round(value));
 }
 
+function formatDisplayDate(value: string) {
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  const formatted = date.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' });
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1).replace(' de ', ', ');
+}
+
 export default function ClientHomeScreen() {
   const { width } = useWindowDimensions();
   const { user, signOut } = useAuth();
@@ -137,6 +144,8 @@ export default function ClientHomeScreen() {
   }));
   const chartWidth = Math.min(Math.max(width - 84, 250), 580);
   const periodName = periods.find((item) => item.value === period)?.title ?? 'Hoy';
+  const displayDate = formatDisplayDate(selectedAnalytics?.date ?? localDateAndTimezone().date);
+  const hasCalories = Boolean(selectedAnalytics?.totals.caloriesBurned);
 
   return (
     <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
@@ -145,7 +154,7 @@ export default function ClientHomeScreen() {
           <View style={styles.headerText}>
             <Text style={styles.eyebrow}>GYMGO · CLIENTE</Text>
             <Text style={styles.greeting}>Hola, {user?.name?.split(' ')[0] ?? 'deportista'}</Text>
-            <Text style={styles.subtitle}>{periodName} · {selectedAnalytics?.date ?? localDateAndTimezone().date}</Text>
+            <Text style={styles.subtitle}>{periodName} · {displayDate}</Text>
           </View>
         </View>
 
@@ -181,10 +190,7 @@ export default function ClientHomeScreen() {
           </Pressable>
         ) : null}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Abrir detalle de actividad"
-          onPress={() => router.push('/(main)/client-workout-detail' as Href)}>
+        <View>
           <View style={styles.calorieCard}>
           <View style={styles.calorieHead}>
             <View>
@@ -199,7 +205,7 @@ export default function ClientHomeScreen() {
           </View>
           {isLoading ? <ActivityIndicator color={dark.green} style={styles.loadingIndicator} /> : null}
           <View style={styles.chartArea}>
-            {selectedAnalytics?.chartData.length ? (
+            {hasCalories && selectedAnalytics?.chartData.length ? (
               <BarChart
                 key={`${period}-${selectedAnalytics.range.start}`}
                 data={chartData}
@@ -228,17 +234,25 @@ export default function ClientHomeScreen() {
               />
             ) : !isLoading ? (
               <View style={styles.emptyChart}>
-                <MaterialIcons name="show-chart" size={26} color={dark.muted} />
+                <Text style={styles.emptyChartValue}>0 <Text style={styles.emptyChartUnit}>kcal</Text></Text>
                 <Text style={styles.emptyChartText}>Aún no hay actividad en este periodo</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => router.push('/(main)/routines')}
+                  style={({ pressed }) => [styles.startWorkoutButton, pressed && styles.startWorkoutButtonPressed]}>
+                  <Text style={styles.startWorkoutButtonText}>¡Iniciar entrenamiento hoy!</Text>
+                </Pressable>
               </View>
             ) : null}
           </View>
-          <View style={styles.chartFooter}>
-            <Text style={styles.chartCaption}>{period === 'day' ? 'HORA DEL DÍA' : 'DÍA DEL PERIODO'}</Text>
-            <Text style={styles.chartCaption}>TOTAL {period === 'day' ? 'POR HORA' : 'POR DÍA'}</Text>
+          {hasCalories && selectedAnalytics?.chartData.length ? (
+            <View style={styles.chartFooter}>
+              <Text style={styles.chartCaption}>{period === 'day' ? 'HORA DEL DÍA' : 'DÍA DEL PERIODO'}</Text>
+              <Text style={styles.chartCaption}>TOTAL {period === 'day' ? 'POR HORA' : 'POR DÍA'}</Text>
+            </View>
+          ) : null}
           </View>
-          </View>
-        </Pressable>
+        </View>
 
         <View style={styles.summaryRow}>
           <View style={styles.summaryCard}>
@@ -332,7 +346,12 @@ const styles = StyleSheet.create({
   chartArea: { minHeight: 182, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginHorizontal: -8 },
   axisText: { color: dark.muted, fontSize: 9 },
   emptyChart: { minHeight: 160, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  emptyChartValue: { color: dark.white, fontSize: 34, fontWeight: '900' },
+  emptyChartUnit: { color: dark.muted, fontSize: 13, fontWeight: '800' },
   emptyChartText: { color: dark.muted, fontSize: 12 },
+  startWorkoutButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: dark.green, borderRadius: 10, backgroundColor: 'transparent', paddingHorizontal: 16, marginTop: 4 },
+  startWorkoutButtonText: { color: dark.green, fontSize: 13, fontWeight: '800' },
+  startWorkoutButtonPressed: { opacity: 0.78 },
   chartFooter: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: dark.line, paddingTop: 10 },
   chartCaption: { color: dark.muted, fontSize: 9, fontWeight: '800' },
   summaryRow: { flexDirection: 'row', gap: 12 },

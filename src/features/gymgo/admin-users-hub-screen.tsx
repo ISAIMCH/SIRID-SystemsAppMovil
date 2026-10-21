@@ -10,8 +10,8 @@ type View = 'clients' | 'coaches' | 'new-client' | 'new-coach';
 const categories = [
   { value: 'clients', label: 'Lista de Clientes', icon: 'groups' },
   { value: 'coaches', label: 'Lista de Coaches', icon: 'sports' },
-  { value: 'new-client', label: 'Nuevo Cliente', icon: 'person-add' },
-  { value: 'new-coach', label: 'Nuevo Coach', icon: 'person-add' },
+  { value: 'new-client', label: 'Crear Cliente', icon: 'person-add' },
+  { value: 'new-coach', label: 'Crear Coach', icon: 'person-add' },
 ] as const;
 
 export default function AdminUsersHubScreen() {

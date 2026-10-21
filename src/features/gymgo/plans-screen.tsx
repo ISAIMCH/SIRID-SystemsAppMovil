@@ -125,7 +125,7 @@ export default function PlansScreen() {
   }
 
   return (
-    <Page>
+    <Page admin>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
@@ -218,7 +218,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', gap: 12 },
   group: { gap: 8 },
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  specsInput: { minHeight: 90, borderRadius: 16, backgroundColor: '#F2F4EE', color: palette.ink, paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, textAlignVertical: 'top' },
+  specsInput: { minHeight: 90, borderRadius: 12, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', color: '#18181B', paddingHorizontal: 16, paddingVertical: 12, fontSize: 15, textAlignVertical: 'top' },
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   card: { gap: 10 },
   inactive: { opacity: 0.7 },

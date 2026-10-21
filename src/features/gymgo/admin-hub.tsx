@@ -50,7 +50,7 @@ export function AdminCategoryRail<T extends string>({ value, options, onChange }
         const selected = item.value === value;
         return (
           <Pressable accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { void Haptics.selectionAsync(); onChange(item.value); }} style={({ pressed }) => [styles.categoryChip, selected && styles.categoryChipActive, pressed && styles.pressed]}>
-            <MaterialIcons name={item.icon} size={18} color={selected ? palette.white : palette.green} />
+            <MaterialIcons name={item.icon} size={18} color={selected ? '#10FF85' : '#52525B'} />
             <Text style={[styles.categoryText, selected && styles.categoryTextActive]}>{item.label}</Text>
           </Pressable>
         );
@@ -74,15 +74,15 @@ export function AdminHub({ children, toggle, title, detail }: PropsWithChildren<
 }
 
 const styles = StyleSheet.create({
-  pillTrack: { flexDirection: 'row', gap: 4, borderRadius: 20, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', padding: 4, marginBottom: -16 },
+  pillTrack: { flexDirection: 'row', gap: 4, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E4E7', padding: 4, marginBottom: -16 },
   pillIndicator: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 16, backgroundColor: palette.deepGreen, borderWidth: 1, borderColor: palette.deepGreen },
-  pill: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 16, paddingHorizontal: 12, paddingVertical: 14, zIndex: 1 },
+  pill: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 12, zIndex: 1 },
   pressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
-  pillText: { color: palette.ink, fontSize: 14, fontWeight: '800' },
+  pillText: { color: '#52525B', fontSize: 14, fontWeight: '800' },
   pillTextActive: { color: palette.white },
   categoryRail: { gap: 8, paddingRight: 22 },
-  categoryChip: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 44, borderRadius: 22, paddingHorizontal: 14, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
+  categoryChip: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 44, borderRadius: 12, paddingHorizontal: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E4E7' },
   categoryChipActive: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
-  categoryText: { color: palette.green, fontSize: 13, fontWeight: '800' },
+  categoryText: { color: '#52525B', fontSize: 13, fontWeight: '800' },
   categoryTextActive: { color: palette.white },
 });

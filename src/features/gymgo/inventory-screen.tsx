@@ -134,7 +134,7 @@ export default function InventoryScreen() {
         const operational = isOperational(item);
         const available = item.totalQuantity - item.maintenanceQuantity;
         const typeInfo = typeOptions.find((option) => option.value === item.type) ?? typeOptions[0];
-        const color = operational ? palette.neon : palette.danger;
+        const color = operational ? '#10FF85' : palette.danger;
         return (
           <FloatingCard key={item._id} style={styles.card}>
             <View style={styles.cardHeader}>
@@ -372,18 +372,18 @@ const styles = StyleSheet.create({
   loading: { minHeight: 100, justifyContent: 'center', alignItems: 'center' },
   card: { gap: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  equipmentThumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#F2F4EE' },
+  equipmentThumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: '#F4F4F5' },
   cardTitle: { flex: 1, gap: 3 },
   name: { color: palette.ink, fontSize: 16, fontWeight: '800' },
   sub: { color: palette.muted, fontSize: 12 },
   statusChip: { borderRadius: 14, paddingHorizontal: 10, paddingVertical: 5 },
   statusText: { fontSize: 11, fontWeight: '800' },
   availability: { color: palette.muted, fontSize: 13, fontWeight: '600' },
-  stepperRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
+  stepperRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 14, borderTopWidth: 1, borderTopColor: '#E4E4E7', paddingTop: 12 },
   stepper: { gap: 6 },
   stepperLabel: { color: palette.ink, fontSize: 12, fontWeight: '700' },
   stepperControls: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F2F4EE', alignItems: 'center', justifyContent: 'center' },
+  stepButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#D4D4D8', alignItems: 'center', justifyContent: 'center' },
   stepDisabled: { opacity: 0.4 },
   stepValue: { minWidth: 28, textAlign: 'center', color: palette.ink, fontSize: 17, fontWeight: '800' },
   editButton: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' },
@@ -391,23 +391,23 @@ const styles = StyleSheet.create({
   form: { gap: 14 },
   group: { gap: 8 },
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  select: { height: 52, borderRadius: 8, borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.7)', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  select: { height: 52, borderRadius: 12, borderWidth: 1, borderColor: '#E4E4E7', backgroundColor: '#F4F4F5', paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   selectText: { color: palette.ink, fontSize: 16 },
   placeholder: { color: palette.muted },
-  options: { borderRadius: 12, borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.7)', overflow: 'hidden' },
+  options: { borderRadius: 12, borderWidth: 1, borderColor: '#E4E4E7', backgroundColor: '#FFFFFF', overflow: 'hidden' },
   option: { paddingHorizontal: 14, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: palette.line },
   optionText: { color: palette.ink, fontSize: 15 },
   optionSelected: { color: palette.green, fontWeight: '800' },
   optionNew: { color: palette.cyan, fontWeight: '800' },
   chips: { flexDirection: 'row', gap: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#F2F4EE' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#F4F4F5' },
   chipSelected: { backgroundColor: palette.deepGreen },
   chipText: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   chipTextSelected: { color: palette.white },
   quantityRow: { flexDirection: 'row', gap: 12 },
   quantityField: { flex: 1 },
   imageGroup: { gap: 8 },
-  imageBox: { width: '100%', height: 150, borderRadius: 16, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', backgroundColor: 'rgba(255, 255, 255, 0.7)' },
+  imageBox: { width: '100%', height: 132, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderStyle: 'dashed', borderColor: '#D4D4D8', backgroundColor: '#FAFAFA' },
   imageFill: { width: '100%', height: '100%' },
   imageEmpty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6 },
   imageHint: { color: palette.muted, fontSize: 13 },

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { palette } from './theme';
-import { useAdminEmbedded, useDarkUi } from './ui';
+import { useAdminEmbedded, useAdminLight, useDarkUi } from './ui';
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
@@ -20,7 +20,9 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const admin = useAdminEmbedded();
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
   const dark = useDarkUi();
   const selected = options.find((option) => option.value === value);
   const visibleOptions = options.filter((option) => `${option.label} ${option.hint ?? ''}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
@@ -62,7 +64,7 @@ const styles = StyleSheet.create({
   group: { gap: 8 },
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   darkLabel: { color: '#F4F8F5' },
-  select: { height: 52, borderRadius: 16, backgroundColor: '#F2F4EE', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  select: { height: 52, borderRadius: 12, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   darkSelect: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#333333' },
   selectText: { flex: 1, color: palette.ink, fontSize: 15, fontWeight: '600' },
   darkSelectText: { color: '#FFFFFF' },
@@ -83,5 +85,5 @@ const styles = StyleSheet.create({
   empty: { color: palette.muted, fontSize: 13, padding: 16 },
   filterInput: { height: 44, color: palette.ink, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: palette.line, fontSize: 14 },
   darkFilterInput: { color: '#FFFFFF', backgroundColor: '#18181B', borderBottomColor: '#27272A' },
-  adminGlassInput: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
+  adminGlassInput: { backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', borderRadius: 12, color: '#18181B' },
 });

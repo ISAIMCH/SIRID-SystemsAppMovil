@@ -2,6 +2,7 @@ import { router, type Href } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
@@ -10,7 +11,7 @@ import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
 import type { Routine } from './types';
-import { ActionButton, AppHeader, DarkUiProvider, Eyebrow, Notice, SectionTitle, Surface } from './ui';
+import { ActionButton, AdminLightProvider, AppHeader, DarkUiProvider, Eyebrow, Notice, SectionTitle, Surface } from './ui';
 
 type OperationsDashboard = {
   period: 'day' | 'week';
@@ -86,15 +87,17 @@ function StaffDashboard() {
 
   const activeRoutineCount = routines.filter((routine) => routine.status === 'active').length;
   const roleHeading = isClient ? 'Tu semana, a tu ritmo.' : user?.role === 'Admin' ? 'Tu gimnasio, en foco.' : 'Entrena con estrategia.';
+  const hasDemandData = Boolean(operations?.hourlyDemand.some((entry) => entry.checkIns > 0));
 
   return (
     <DarkUiProvider dark={user?.role === 'Coach'}>
-      <>
-      <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint]} />
-      <View style={[styles.page, user?.role === 'Coach' && styles.darkPage]}>
+      <AdminLightProvider enabled={isAdmin}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, user?.role === 'Coach' && styles.darkSafeArea, isAdmin && styles.adminSafeArea]}>
+        <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint, isAdmin && styles.adminTopTint]} />
+        <View style={[styles.page, user?.role === 'Coach' && styles.darkPage, isAdmin && styles.adminPage]}>
         <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
 
-        <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero]}>
+        <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero, isAdmin && styles.adminHero]}>
           <Eyebrow>{isClient ? 'PLAN PERSONAL' : `${user?.role?.toUpperCase()} · GYMGO`}</Eyebrow>
           <Text style={styles.heroTitle}>{roleHeading}</Text>
           <Text style={[styles.heroDetail, user?.role === 'Coach' && styles.darkHeroDetail]}>
@@ -107,10 +110,10 @@ function StaffDashboard() {
               accessibilityRole="button"
               accessibilityLabel="Abrir escáner de recepción"
               onPress={() => router.push('/(main)/scanner')}
-              style={styles.scannerCta}>
-              <SymbolView name={{ ios: 'qrcode', android: 'qr_code_scanner', web: 'qr_code_scanner' }} tintColor={palette.deepGreen} size={22} />
-              <Text style={styles.scannerCtaText}>Escáner de recepción</Text>
-              <Text style={styles.scannerCtaArrow}>→</Text>
+              style={[styles.scannerCta, isAdmin && styles.adminScannerCta]}>
+              <SymbolView name={{ ios: 'qrcode', android: 'qr_code_scanner', web: 'qr_code_scanner' }} tintColor={isAdmin ? '#18181B' : palette.deepGreen} size={22} />
+              <Text style={[styles.scannerCtaText, isAdmin && styles.adminScannerCtaText]}>Escáner de recepción</Text>
+              <Text style={[styles.scannerCtaArrow, isAdmin && styles.adminScannerCtaText]}>→</Text>
             </Pressable>
           ) : null}
           {isClient ? (
@@ -125,17 +128,17 @@ function StaffDashboard() {
 
         {isClient ? (
           <View style={styles.metricRow}>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
               <Text style={styles.metricLabel}>Rutinas activas</Text>
               <Text style={styles.metricValue}>{isLoading ? '—' : activeRoutineCount}</Text>
             </Surface>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
               <Text style={styles.metricLabel}>Membresía</Text>
               <Text style={[styles.metricStatus, user?.membership?.status === 'active' && styles.active]}>
                 {user?.membership?.status ?? 'pendiente'}
               </Text>
             </Surface>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
               <Text style={styles.metricLabel}>Racha actual</Text>
               <Text style={styles.metricValue}>{isLoadingSummary ? '—' : workoutStats?.currentStreak ?? 0}</Text>
               <Text style={styles.metricHint}>días programados</Text>
@@ -143,12 +146,12 @@ function StaffDashboard() {
           </View>
         ) : (
           <View style={styles.metricRow}>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
               <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Entradas hoy</Text>
               <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.today.checkIns ?? 0}</Text>
               <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>check-in registrados</Text>
             </Surface>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard]}>
+            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
               <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Dentro ahora</Text>
               <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.currentOccupancy ?? 0}</Text>
               <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>clientes presentes</Text>
@@ -170,7 +173,7 @@ function StaffDashboard() {
         ) : null}
 
         {!isClient && operations ? (
-            <Surface style={[styles.analyticsPanel, user?.role === 'Coach' && styles.darkPanel]}>
+            <Surface style={[styles.analyticsPanel, user?.role === 'Coach' && styles.darkPanel, isAdmin && styles.adminAnalyticsPanel]}>
             <View style={styles.analyticsHeader}>
               <View style={styles.analyticsHeading}>
                 <View style={styles.demandDot} />
@@ -180,8 +183,8 @@ function StaffDashboard() {
             </View>
             {operations.peakHour ? (
               <Text style={styles.peakLabel}>Hora pico · {String(operations.peakHour.hour).padStart(2, '0')}:00 ({operations.peakHour.checkIns} entradas)</Text>
-            ) : <Text style={styles.demandBody}>Aún no hay suficientes entradas para calcular una hora pico.</Text>}
-            {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).length ? (
+            ) : null}
+            {hasDemandData && operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).length ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chart}>
                 {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).map((entry) => {
                   const maximum = Math.max(1, ...operations.hourlyDemand.map((value) => value.checkIns));
@@ -195,16 +198,22 @@ function StaffDashboard() {
                 })}
               </ScrollView>
             ) : (
-              <Text style={styles.emptyDemand}>No hay datos suficientes de demanda horaria.</Text>
+              <Text style={styles.emptyDemand}>Aún no hay suficientes entradas para calcular una hora pico.</Text>
             )}
             <View style={styles.zoneList}>
-              {operations.equipmentByZone.map((zone) => (
-                <View key={zone.zone} style={styles.zoneRow}>
-                  <Text style={[styles.zoneName, user?.role === 'Coach' && styles.darkZoneText]}>{zone.zone}</Text>
-                  <Text style={[styles.zoneValue, user?.role === 'Coach' && styles.darkZoneText]}>{zone.available}/{zone.total} disp. · {zone.busy} ocup.</Text>
-                </View>
-              ))}
-              {!operations.equipmentByZone.length ? <Text style={styles.demandBody}>No hay equipos por zona registrados.</Text> : null}
+              <ScrollView
+                nestedScrollEnabled
+                showsVerticalScrollIndicator
+                style={styles.zoneScroll}
+                contentContainerStyle={styles.zoneScrollContent}>
+                {operations.equipmentByZone.map((zone) => (
+                  <View key={zone.zone} style={styles.zoneRow}>
+                    <Text style={[styles.zoneName, user?.role === 'Coach' && styles.darkZoneText]}>{zone.zone}</Text>
+                    <Text style={[styles.zoneValue, user?.role === 'Coach' && styles.darkZoneText]}>{zone.available}/{zone.total} disp. · {zone.busy} ocup.</Text>
+                  </View>
+                ))}
+                {!operations.equipmentByZone.length ? <Text style={styles.demandBody}>No hay equipos por zona registrados.</Text> : null}
+              </ScrollView>
             </View>
           </Surface>
         ) : null}
@@ -245,31 +254,41 @@ function StaffDashboard() {
         <View style={styles.footerLine}>
           <Text style={styles.footerText}>{user?.role === 'Coach' ? 'COACH CREATOR' : 'GYMGO · MOVIMIENTO CON PROPÓSITO'}</Text>
         </View>
-      </View>
-      </>
+        </View>
+      </SafeAreaView>
+      </AdminLightProvider>
     </DarkUiProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  topTint: { position: 'absolute', height: 130, left: 0, right: 0, top: 0, backgroundColor: '#E4EAD8' },
+  safeArea: { flex: 1, backgroundColor: '#F4F4F5' },
+  darkSafeArea: { backgroundColor: '#070B09' },
+  topTint: { position: 'absolute', height: 130, left: 0, right: 0, top: 0, backgroundColor: '#F4F4F5' },
   darkTopTint: { backgroundColor: '#070B09' },
   page: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 22, gap: 22, paddingBottom: 36 },
+  adminSafeArea: { backgroundColor: '#F4F4F5' },
+  adminTopTint: { backgroundColor: '#F4F4F5' },
+  adminPage: { backgroundColor: '#F4F4F5' },
   darkPage: { backgroundColor: '#070B09' },
   hero: { backgroundColor: palette.deepGreen, borderRadius: 10, minHeight: 205, padding: 22, justifyContent: 'center', gap: 12 },
-  darkHero: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E', borderRadius: 24 },
+  adminHero: { backgroundColor: '#18181B', borderRadius: 16 },
+  darkHero: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#27272A', borderRadius: 12 },
   heroTitle: { color: palette.white, fontSize: 30, lineHeight: 36, fontWeight: '800', maxWidth: 420 },
   heroDetail: { color: '#DFE8DF', fontSize: 14, lineHeight: 21 },
   darkHeroDetail: { color: '#A1A1AA' },
   scannerCta: { minHeight: 50, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: palette.lime, paddingHorizontal: 15 },
   scannerCtaText: { color: palette.deepGreen, fontSize: 14, fontWeight: '800', flexShrink: 1 },
   scannerCtaArrow: { color: palette.deepGreen, fontSize: 20, fontWeight: '800' },
+  adminScannerCta: { backgroundColor: '#10FF85', borderRadius: 12 },
+  adminScannerCtaText: { color: '#18181B' },
   qrLink: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingTop: 4 },
   qrLinkText: { color: palette.lime, fontSize: 14, fontWeight: '800' },
   arrow: { color: palette.lime, fontSize: 20, fontWeight: '700' },
   metricRow: { flexDirection: 'row', gap: 12 },
   metric: { flex: 1, minHeight: 118, justifyContent: 'space-between', gap: 12 },
-  darkMetricCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A', borderRadius: 12, borderTopWidth: 2, borderTopColor: '#10FF85' },
+  darkMetricCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A', borderLeftWidth: 4, borderLeftColor: '#10FF85', borderTopWidth: 0, paddingLeft: 14 },
+  adminMetricCard: { backgroundColor: '#FFFFFF', borderColor: '#E4E4E7', borderLeftWidth: 4, borderLeftColor: '#18181B', borderRadius: 16, shadowColor: '#18181B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1, paddingLeft: 14 },
   metricLabel: { color: palette.muted, fontSize: 13, fontWeight: '700' },
   metricValue: { color: palette.ink, fontSize: 29, lineHeight: 32, fontWeight: '800' },
   darkMetricValue: { color: '#F4F8F5' },
@@ -284,7 +303,8 @@ const styles = StyleSheet.create({
   progressRow: { flexDirection: 'row', gap: 28 },
   progressValue: { color: palette.green, fontSize: 22, fontWeight: '800' },
   analyticsPanel: { gap: 14 },
-  darkPanel: { backgroundColor: '#111815', borderColor: '#27342E', borderRadius: 24 },
+  darkPanel: { backgroundColor: '#1E1E1E', borderColor: '#27272A', borderRadius: 12 },
+  adminAnalyticsPanel: { backgroundColor: '#FFFFFF', borderColor: '#E4E4E7', borderRadius: 16 },
   analyticsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   analyticsHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   demandDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.coral },
@@ -299,6 +319,8 @@ const styles = StyleSheet.create({
   darkChartHour: { color: '#A1A1AA' },
   emptyDemand: { color: '#9CA3AF', fontSize: 12, textAlign: 'center', paddingVertical: 26 },
   zoneList: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
+  zoneScroll: { maxHeight: 160 },
+  zoneScrollContent: { gap: 8 },
   zoneRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
   zoneName: { color: palette.ink, flex: 1, fontSize: 12, fontWeight: '700' },
   zoneValue: { color: palette.muted, fontSize: 11 },

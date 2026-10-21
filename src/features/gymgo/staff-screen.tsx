@@ -197,7 +197,7 @@ export default function StaffScreen({ initialRole = 'Coach', hideRoleSelector = 
                       onPress={() => setAvailableTrainingDays((current) => (
                         selected ? current.filter((value) => value !== day.value) : [...current, day.value]
                       ))}
-                      style={[styles.dayChip, selected && styles.optionSelected]}>
+                      style={[styles.dayChip, selected && styles.daySelected]}>
                       <Text style={[styles.dayText, selected && styles.optionTextSelected]}>{day.label}</Text>
                     </Pressable>
                   );
@@ -270,20 +270,21 @@ const styles = StyleSheet.create({
   group: { gap: 8 },
   label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
   options: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  choice: { borderRadius: 20, backgroundColor: '#F2F4EE', paddingHorizontal: 14, paddingVertical: 9 },
-  choiceText: { color: palette.ink, fontSize: 12, fontWeight: '700' },
-  optionSelected: { backgroundColor: palette.deepGreen },
-  optionTextSelected: { color: palette.white },
-  dayOptions: { flexDirection: 'row', justifyContent: 'space-between', gap: 7 },
-  dayChip: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F2F4EE', justifyContent: 'center', alignItems: 'center' },
-  dayText: { color: palette.ink, fontSize: 12, fontWeight: '800' },
+  choice: { borderRadius: 12, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', paddingHorizontal: 14, paddingVertical: 9 },
+  choiceText: { color: '#52525B', fontSize: 12, fontWeight: '700' },
+  optionSelected: { backgroundColor: '#18181B', borderColor: '#18181B' },
+  optionTextSelected: { color: '#FFFFFF', fontWeight: '700' },
+  dayOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  dayChip: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', justifyContent: 'center', alignItems: 'center' },
+  daySelected: { backgroundColor: '#18181B', borderColor: '#10FF85' },
+  dayText: { color: '#52525B', fontSize: 12, fontWeight: '800' },
   roleSelector: { flexDirection: 'row', gap: 12 },
-  roleOption: { flex: 1, alignItems: 'center', gap: 8, borderRadius: 24, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', paddingVertical: 16 },
-  selectedRole: { backgroundColor: '#0F2A24' },
-  roleLabel: { color: palette.ink, fontSize: 15, fontWeight: '800' },
+  roleOption: { flex: 1, alignItems: 'center', gap: 8, borderRadius: 16, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E4E7', paddingVertical: 16 },
+  selectedRole: { backgroundColor: '#18181B', borderColor: '#18181B' },
+  roleLabel: { color: '#52525B', fontSize: 15, fontWeight: '800' },
   selectedRoleLabel: { color: palette.white },
   form: { gap: 16, padding: 20 },
-  link: { color: palette.cyan, fontSize: 13, fontWeight: '800' },
+  link: { color: '#18181B', fontSize: 13, fontWeight: '800', textDecorationLine: 'underline' },
   planSummary: { gap: 8, backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)', borderRadius: 16, padding: 14 },
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   summaryLabel: { color: palette.muted, fontSize: 13 },

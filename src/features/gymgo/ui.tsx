@@ -17,6 +17,7 @@ import { palette } from './theme';
 
 const DarkUiContext = createContext(false);
 const AdminEmbeddedContext = createContext(false);
+const AdminLightContext = createContext(false);
 
 export function DarkUiProvider({ children, dark = false }: PropsWithChildren<{ dark?: boolean }>) {
   return <DarkUiContext.Provider value={dark}>{children}</DarkUiContext.Provider>;
@@ -26,8 +27,16 @@ export function AdminEmbeddedProvider({ children }: PropsWithChildren) {
   return <AdminEmbeddedContext.Provider value>{children}</AdminEmbeddedContext.Provider>;
 }
 
+export function AdminLightProvider({ children, enabled = true }: PropsWithChildren<{ enabled?: boolean }>) {
+  return <AdminLightContext.Provider value={enabled}>{children}</AdminLightContext.Provider>;
+}
+
 export function useAdminEmbedded() {
   return useContext(AdminEmbeddedContext);
+}
+
+export function useAdminLight() {
+  return useContext(AdminLightContext);
 }
 
 export function useDarkUi() {
@@ -37,36 +46,40 @@ export function useDarkUi() {
 export function Page({ children, dark = false, admin = false, overlay }: PropsWithChildren<{ dark?: boolean; admin?: boolean; overlay?: ReactNode }>) {
   return (
     <DarkUiContext.Provider value={dark}>
-      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, admin && styles.adminSafeArea, dark && styles.darkSafeArea]}>
-        <ScrollView contentContainerStyle={[styles.pageContent, admin && styles.adminPageContent]} keyboardShouldPersistTaps="handled">
-          {children}
-        </ScrollView>
-        {overlay}
-      </SafeAreaView>
+      <AdminLightContext.Provider value={admin}>
+        <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, admin && styles.adminSafeArea, dark && styles.darkSafeArea]}>
+          <ScrollView contentContainerStyle={[styles.pageContent, admin && styles.adminPageContent]} keyboardShouldPersistTaps="handled">
+            {children}
+          </ScrollView>
+          {overlay}
+        </SafeAreaView>
+      </AdminLightContext.Provider>
     </DarkUiContext.Provider>
   );
 }
 
 export function Eyebrow({ children }: PropsWithChildren) {
   const dark = useDarkUi();
-  return <Text style={[styles.eyebrow, dark && styles.darkAccentText]}>{children}</Text>;
+  const admin = useAdminLight();
+  return <Text style={[styles.eyebrow, dark && styles.darkAccentText, admin && styles.adminAccentText]}>{children}</Text>;
 }
 
 export function AppHeader({ title, detail, showSignOut = true }: { title: string; detail?: string; showSignOut?: boolean }) {
   const { user, signOut } = useAuth();
   const dark = useDarkUi();
+  const admin = useAdminLight();
   const embedded = useContext(AdminEmbeddedContext);
   if (embedded) return null;
   return (
     <View style={styles.appHeader}>
       <View style={styles.appHeaderText}>
-        <Eyebrow>{user?.role ?? 'GYMGO'}</Eyebrow>
+        <Text style={[styles.eyebrow, dark && styles.darkAccentText, admin && styles.adminEyebrow]}>{user?.role ?? 'GYMGO'}</Text>
         <Text style={[styles.headerTitle, dark && styles.darkPrimaryText]}>{title}</Text>
-        {detail ? <Text style={[styles.detail, dark && styles.darkSecondaryText]}>{detail}</Text> : null}
+        {detail ? <Text style={[styles.detail, dark && styles.darkSecondaryText, admin && styles.adminDetail]}>{detail}</Text> : null}
       </View>
       {showSignOut ? (
-        <Pressable accessibilityRole="button" onPress={() => void signOut()} style={[styles.signOut, dark && styles.darkControl]}>
-          <Text style={[styles.signOutText, dark && styles.darkAccentText]}>Salir</Text>
+        <Pressable accessibilityRole="button" onPress={() => void signOut()} style={[styles.signOut, dark && styles.darkControl, admin && styles.adminSignOut]}>
+          <Text style={[styles.signOutText, dark && styles.darkAccentText, admin && styles.adminSignOutText]}>Salir</Text>
         </Pressable>
       ) : null}
     </View>
@@ -95,14 +108,16 @@ export function SectionTitle({ children, accessory }: { children: ReactNode; acc
 
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
   const dark = useDarkUi();
-  const admin = useAdminEmbedded();
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
   return (
     <View style={styles.fieldGroup}>
       <Text style={[styles.fieldLabel, dark && styles.darkPrimaryText]}>{label}</Text>
       <TextInput
-        placeholderTextColor={dark ? '#71717A' : palette.muted}
-        selectionColor={dark ? '#10FF85' : palette.green}
-        style={[styles.input, dark && styles.darkInput, admin && styles.adminGlassInput]}
+        placeholderTextColor={dark || admin ? '#A1A1AA' : palette.muted}
+        selectionColor={dark || admin ? '#10FF85' : palette.green}
+        style={[styles.input, dark && styles.darkInput, admin && styles.adminInput]}
         {...props}
       />
     </View>
@@ -120,7 +135,9 @@ export function ActionButton({
   secondary?: boolean;
 }>) {
   const dark = useDarkUi();
-  const admin = useAdminEmbedded();
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
   return (
     <Pressable
       accessibilityRole="button"
@@ -134,23 +151,28 @@ export function ActionButton({
         disabled && styles.disabledAction,
         pressed && !disabled && styles.pressed,
       ]}>
-      <Text style={[styles.actionText, admin && !secondary && styles.adminActionText, secondary && styles.secondaryText, dark && !secondary && styles.darkActionText, dark && secondary && styles.darkSecondaryText]}>{children}</Text>
+      <Text style={[styles.actionText, admin && !secondary && styles.adminActionText, admin && secondary && styles.adminSecondaryActionText, secondary && styles.secondaryText, dark && !secondary && styles.darkActionText, dark && secondary && styles.darkSecondaryText]}>{children}</Text>
     </Pressable>
   );
 }
 
 export function Notice({ children, error = false }: PropsWithChildren<{ error?: boolean }>) {
   const dark = useDarkUi();
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
   return (
-    <View style={[styles.notice, dark && styles.darkNotice, error && (dark ? styles.darkErrorNotice : styles.errorNotice)]}>
-      <Text style={[styles.noticeText, dark && styles.darkNoticeText, error && styles.errorText]}>{children}</Text>
+    <View style={[styles.notice, dark && styles.darkNotice, admin && styles.adminNotice, error && (dark ? styles.darkErrorNotice : styles.errorNotice)]}>
+      <Text style={[styles.noticeText, dark && styles.darkNoticeText, admin && styles.adminNoticeText, error && styles.errorText]}>{children}</Text>
     </View>
   );
 }
 
 export function Surface({ children, style }: PropsWithChildren<{ style?: object }>) {
   const dark = useDarkUi();
-  const admin = useAdminEmbedded();
+  const embedded = useAdminEmbedded();
+  const adminLight = useAdminLight();
+  const admin = embedded || adminLight;
   if (admin) return <BlurView tint="light" intensity={40} style={[styles.surface, styles.adminGlassSurface, style]}>{children}</BlurView>;
   return <View style={[styles.surface, dark && styles.darkSurface, style]}>{children}</View>;
 }
@@ -158,9 +180,9 @@ export function Surface({ children, style }: PropsWithChildren<{ style?: object 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: palette.paper },
   darkSafeArea: { backgroundColor: '#070B09' },
-  adminSafeArea: { backgroundColor: '#F8FAFC' },
+  adminSafeArea: { backgroundColor: '#F4F4F5' },
   pageContent: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 22, gap: 24, paddingBottom: 36 },
-  adminPageContent: { backgroundColor: '#F8FAFC' },
+  adminPageContent: { backgroundColor: '#F4F4F5' },
   eyebrow: { color: palette.green, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
   headingGroup: { gap: 8 },
   appHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
@@ -168,6 +190,11 @@ const styles = StyleSheet.create({
   headerTitle: { color: palette.ink, fontSize: 27, lineHeight: 33, fontWeight: '800' },
   signOut: { borderWidth: 1, borderColor: palette.line, borderRadius: 8, minHeight: 40, paddingHorizontal: 13, justifyContent: 'center' },
   signOutText: { color: palette.green, fontWeight: '700', fontSize: 13 },
+  adminEyebrow: { color: '#18181B' },
+  adminAccentText: { color: '#10FF85' },
+  adminDetail: { color: '#52525B' },
+  adminSignOut: { backgroundColor: '#FFFFFF', borderColor: '#E4E4E7', borderRadius: 999, minHeight: 38 },
+  adminSignOutText: { color: '#18181B' },
   heading: { color: palette.ink, fontSize: 30, fontWeight: '800', lineHeight: 36 },
   detail: { color: palette.muted, fontSize: 15, lineHeight: 22 },
   sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
@@ -177,7 +204,7 @@ const styles = StyleSheet.create({
   input: { height: 52, borderRadius: 8, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, color: palette.ink, paddingHorizontal: 14, fontSize: 16 },
   action: { minHeight: 52, borderRadius: 8, backgroundColor: palette.green, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
   darkAction: { backgroundColor: '#10FF85' },
-  adminAction: { backgroundColor: '#10FF85' },
+  adminAction: { backgroundColor: '#18181B', borderRadius: 12 },
   actionText: { color: palette.white, fontSize: 15, fontWeight: '700' },
   secondaryAction: { backgroundColor: palette.lime },
   secondaryText: { color: palette.ink },
@@ -193,13 +220,16 @@ const styles = StyleSheet.create({
   darkAccentText: { color: '#10FF85' },
   darkControl: { borderColor: 'rgba(16, 255, 133, 0.3)', backgroundColor: '#1E1E1E' },
   darkInput: { borderColor: '#27272A', backgroundColor: '#18181B', color: '#FFFFFF' },
-  adminGlassInput: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderColor: 'rgba(0, 0, 0, 0.05)', borderWidth: 1 },
+  adminInput: { backgroundColor: '#F4F4F5', borderColor: '#E4E4E7', borderRadius: 12, borderWidth: 1, color: '#18181B' },
   darkActionText: { color: '#081009' },
-  adminActionText: { color: '#081009' },
+  adminActionText: { color: '#10FF85' },
+  adminSecondaryActionText: { color: '#18181B' },
+  adminNotice: { backgroundColor: '#F4F4F5', borderLeftWidth: 3, borderLeftColor: '#18181B', borderRadius: 10 },
+  adminNoticeText: { color: '#52525B' },
   darkSecondaryAction: { backgroundColor: '#27272A' },
   darkNotice: { backgroundColor: '#18211D' },
   darkErrorNotice: { backgroundColor: '#321B19' },
   darkNoticeText: { color: '#DCE8E0' },
   darkSurface: { backgroundColor: '#111815', borderColor: '#27342E' },
-  adminGlassSurface: { backgroundColor: 'rgba(255, 255, 255, 0.7)', borderWidth: 1, borderColor: 'rgba(0, 0, 0, 0.05)' },
+  adminGlassSurface: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E4E4E7', shadowColor: '#18181B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
 });
