@@ -24,6 +24,7 @@ async function findOwnedTemplate(req) {
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false });
   if (!template) throw new HttpError(404, 'Plantilla no encontrada.');
+  if (template.isDeleted) throw new HttpError(404, 'Plantilla no encontrada.');
   if (req.user.role !== 'Admin' && String(template.createdBy) !== req.user.id) {
     throw new HttpError(403, 'Solo el autor o un Admin puede usar esta plantilla.');
   }
@@ -51,7 +52,9 @@ function cloneBlocks(blocks) {
 }
 
 async function listTemplates(req, res) {
-  const filter = req.user.role === 'Admin' ? {} : { createdBy: req.user.id };
+  const filter = req.user.role === 'Admin'
+    ? { isDeleted: { $ne: true } }
+    : { createdBy: req.user.id, isDeleted: { $ne: true } };
   const templates = await RoutineTemplate.find(filter)
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false })
@@ -96,7 +99,9 @@ async function updateTemplate(req, res) {
 
 async function deleteTemplate(req, res) {
   const template = await findOwnedTemplate(req);
-  await template.deleteOne();
+  template.isDeleted = true;
+  template.deletedAt = new Date();
+  await template.save();
   res.status(204).end();
 }
 

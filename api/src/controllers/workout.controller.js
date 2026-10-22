@@ -289,7 +289,7 @@ async function getClientWorkoutHistory(req, res) {
 
   const sessions = await WorkoutSession.find({ user: client._id })
     .sort({ completedAt: -1 })
-    .limit(20)
+    .limit(100)
     .lean();
   res.json({ sessions: sessions.map(sessionResponse) });
 }

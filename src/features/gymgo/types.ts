@@ -126,6 +126,7 @@ export type WorkoutSessionLog = {
   trainingDay: number;
   completedAt: string;
   durationMinutes: number;
+  caloriesBurned?: number;
   totalRestSeconds?: number;
   activeDurationMinutes?: number;
   targetSetsTotal?: number;
@@ -166,7 +167,7 @@ export type WorkoutSessionLog = {
   exercises?: {
     routineExerciseId: string;
     exerciseName: string;
-    sets: { reps: number; weightKg: number; restSeconds: number }[];
+    sets: { reps: number; weightKg: number; restSeconds: number; skipped?: boolean }[];
   }[];
 };
 

@@ -10,6 +10,8 @@ const routineTemplateSchema = new mongoose.Schema({
   daysPerWeek: { type: Number, required: true, min: 1, max: 7 },
   scheduleDays: [{ type: Number, min: 0, max: 6 }],
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date, default: null },
   blocks: { type: [blockSchema], validate: (items) => items.length > 0 },
 }, { timestamps: true, strict: false });
 
