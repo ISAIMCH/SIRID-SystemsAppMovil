@@ -24,7 +24,9 @@ const routineSchema = new mongoose.Schema({
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   sourceTemplate: { type: mongoose.Schema.Types.ObjectId, ref: 'RoutineTemplate', default: null },
-  status: { type: String, enum: ['active', 'paused'], default: 'active' },
+  status: { type: String, enum: ['active', 'paused', 'inactive'], default: 'active' },
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date, default: null },
   blocks: { type: [blockSchema], default: undefined, validate: (items) => !items || items.length > 0 },
 }, { timestamps: true, strict: false });
 

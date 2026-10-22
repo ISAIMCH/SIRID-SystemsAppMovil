@@ -40,6 +40,7 @@ const workoutSessionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   routine: { type: mongoose.Schema.Types.ObjectId, ref: 'Routine', required: true },
   routineTitle: { type: String, trim: true, maxlength: 120 },
+  routineGoal: { type: String, trim: true, maxlength: 120 },
   trainingDay: { type: Number, required: true, min: 0, max: 6 },
   completedAt: { type: Date, required: true, default: Date.now, index: true },
   durationMinutes: { type: Number, required: true, min: 0, max: 600 },

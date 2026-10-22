@@ -120,8 +120,9 @@ export type RoutineTemplate = {
 
 export type WorkoutSessionLog = {
   _id: string;
-  routine: string | { _id: string; title?: string };
+  routine?: string | { _id?: string; title?: string; goal?: string } | null;
   routineTitle?: string;
+  routineGoal?: string;
   trainingDay: number;
   completedAt: string;
   durationMinutes: number;

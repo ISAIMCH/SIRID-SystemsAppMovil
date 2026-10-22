@@ -7,6 +7,9 @@ const router = express.Router();
 
 router.get('/client/:clientId', authenticate, authorize('Admin', 'Coach'), asyncHandler(controller.getClientWorkoutHistory));
 
+router.patch('/:id', authenticate, authorize('Cliente', 'Admin'), asyncHandler(controller.updateWorkoutSession));
+router.delete('/:id', authenticate, authorize('Cliente', 'Admin'), asyncHandler(controller.deleteWorkoutSession));
+
 router.use(authenticate, authorize('Cliente'));
 router.post('/', asyncHandler(controller.createWorkoutSession));
 router.get('/me', asyncHandler(controller.getMyWorkoutHistory));

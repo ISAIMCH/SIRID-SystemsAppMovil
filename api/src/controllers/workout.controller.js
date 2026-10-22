@@ -45,11 +45,48 @@ const workoutSchema = z.object({
   })).min(1).max(100),
 });
 
+const workoutUpdateSchema = z.object({
+  durationMinutes: z.number().int().min(0).max(600).optional(),
+  perceivedExertion: z.number().int().min(1).max(5).nullable().optional(),
+  clientNotes: z.string().max(5000).nullable().optional(),
+  blocks: z.array(z.object({
+    routineBlockId: z.string(),
+    sets: z.array(z.object({
+      setNumber: z.number().int().min(1),
+      actualRestSeconds: z.number().int().min(0).max(86400).optional(),
+      addedRestCount: z.number().int().min(0).max(1000).optional(),
+      restSkipped: z.boolean().optional(),
+      exercises: z.array(z.object({
+        routineExerciseId: z.string(),
+        skipped: z.boolean().optional(),
+        reps: z.number().int().min(0).max(300).optional(),
+        weightKg: z.number().min(0).max(1000).optional(),
+        durationMinutes: z.number().int().min(1).max(600).optional(),
+        distanceKm: z.number().min(0).max(1000).optional(),
+        level: z.number().int().min(1).max(100).optional(),
+      })),
+    })),
+  })).optional(),
+});
+
 function sessionResponse(session) {
   const value = session.toObject ? session.toObject() : session;
-  if (value.blocks?.length) return value;
-  return {
+  const routine = value.routine && typeof value.routine === 'object' ? value.routine : null;
+  const historicalTitle = value.routineTitle || routine?.title || 'Rutina histórica';
+  const historicalGoal = value.routineGoal || routine?.goal;
+  const response = {
     ...value,
+    routineTitle: historicalTitle,
+    ...(historicalGoal ? { routineGoal: historicalGoal } : {}),
+  };
+  if (value.blocks?.length) {
+    return {
+      ...response,
+      completedSets: value.blocks.reduce((total, block) => total + (block.sets?.length ?? 0), 0),
+    };
+  }
+  return {
+    ...response,
     blocks: (value.exercises ?? []).map((exercise, order) => ({
       routineBlockId: exercise.routineExerciseId,
       blockType: 'single',
@@ -78,6 +115,7 @@ async function createWorkoutSession(req, res) {
     _id: input.routineId,
     assignedTo: req.user.id,
     status: 'active',
+    isDeleted: { $ne: true },
   });
   if (!routine) throw new HttpError(404, 'No se encontró una rutina activa asignada.');
   if (!routine.scheduleDays.includes(input.trainingDay)) {
@@ -181,11 +219,42 @@ async function createWorkoutSession(req, res) {
   const activeDurationMinutes = input.activeDurationMinutes ?? Math.max(0, input.durationMinutes - totalRestSeconds / 60);
   const caloriesBurned = calculateCaloriesBurned(weightKg, input.durationMinutes, includesCardio, totalRestSeconds);
   const targetSetsTotal = routineBlocks.reduce((total, block) => total + block.sets, 0);
+  const previousSessions = await WorkoutSession.find({ user: req.user.id }).select('blocks').lean();
+  const previousBest = new Map();
+  for (const previous of previousSessions) {
+    for (const block of previous.blocks ?? []) {
+      for (const set of block.sets ?? []) {
+        for (const exercise of set.exercises ?? []) {
+          if (exercise.metricType !== 'strength' || exercise.skipped) continue;
+          const key = String(exercise.routineExerciseId);
+          const best = previousBest.get(key) ?? { weightKg: 0, volume: 0 };
+          previousBest.set(key, {
+            weightKg: Math.max(best.weightKg, exercise.weightKg ?? 0),
+            volume: Math.max(best.volume, (exercise.reps ?? 0) * (exercise.weightKg ?? 0)),
+          });
+        }
+      }
+    }
+  }
+  const personalRecords = [];
+  for (const block of sessionBlocks) {
+    for (const set of block.sets) {
+      for (const exercise of set.exercises) {
+        if (exercise.metricType !== 'strength' || exercise.skipped) continue;
+        const best = previousBest.get(String(exercise.routineExerciseId));
+        if (best && ((exercise.weightKg ?? 0) > best.weightKg || (exercise.reps ?? 0) * (exercise.weightKg ?? 0) > best.volume)) {
+          personalRecords.push({ exerciseName: exercise.exerciseName, weightKg: exercise.weightKg ?? 0 });
+          previousBest.set(String(exercise.routineExerciseId), { weightKg: exercise.weightKg ?? 0, volume: (exercise.reps ?? 0) * (exercise.weightKg ?? 0) });
+        }
+      }
+    }
+  }
 
   const [session] = await WorkoutSession.create([{
     user: req.user.id,
     routine: routine.id,
     routineTitle: routine.title,
+    routineGoal: routine.goal,
     trainingDay: input.trainingDay,
     completedAt: new Date(),
     durationMinutes: input.durationMinutes,
@@ -199,7 +268,7 @@ async function createWorkoutSession(req, res) {
     blocks: sessionBlocks,
   }]);
 
-  res.status(201).json({ session: sessionResponse(session) });
+  res.status(201).json({ session: { ...sessionResponse(session), personalRecords } });
 }
 
 async function getMyWorkoutHistory(req, res) {
@@ -217,11 +286,76 @@ async function getClientWorkoutHistory(req, res) {
   if (!client || (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id)) {
     throw new HttpError(404, 'Cliente no encontrado.');
   }
+
   const sessions = await WorkoutSession.find({ user: client._id })
     .sort({ completedAt: -1 })
     .limit(20)
     .lean();
   res.json({ sessions: sessions.map(sessionResponse) });
+}
+
+function sessionOwnerFilter(req, id) {
+  return req.user.role === 'Admin' ? { _id: id } : { _id: id, user: req.user.id };
+}
+
+function recalculateSession(session) {
+  let totalVolumeKg = 0;
+  let totalRestSeconds = 0;
+  let includesCardio = false;
+  for (const block of session.blocks ?? []) {
+    for (const set of block.sets ?? []) {
+      totalRestSeconds += set.actualRestSeconds ?? 0;
+      for (const exercise of set.exercises ?? []) {
+        if (exercise.metricType === 'cardio') includesCardio = true;
+        if (exercise.metricType === 'strength' && !exercise.skipped) {
+          totalVolumeKg += (exercise.reps ?? 0) * (exercise.weightKg ?? 0);
+        }
+      }
+    }
+  }
+  session.totalRestSeconds = totalRestSeconds;
+  session.activeDurationMinutes = Math.max(0, session.durationMinutes - totalRestSeconds / 60);
+  session.totalVolumeKg = totalVolumeKg;
+  return { includesCardio };
+}
+
+async function updateWorkoutSession(req, res) {
+  const input = workoutUpdateSchema.parse(req.body);
+  const session = await WorkoutSession.findOne(sessionOwnerFilter(req, req.params.id));
+  if (!session) throw new HttpError(404, 'No se encontró el entrenamiento.');
+  if (input.durationMinutes !== undefined) session.durationMinutes = input.durationMinutes;
+  if (input.perceivedExertion !== undefined) session.perceivedExertion = input.perceivedExertion;
+  if (input.clientNotes !== undefined) session.clientNotes = input.clientNotes;
+  if (input.blocks) {
+    const blocksById = new Map(session.blocks.map((block) => [String(block.routineBlockId), block]));
+    for (const blockInput of input.blocks) {
+      const block = blocksById.get(blockInput.routineBlockId);
+      if (!block) throw new HttpError(400, 'El bloque indicado no pertenece a esta sesión.');
+      const setsByNumber = new Map(block.sets.map((set) => [set.setNumber, set]));
+      for (const setInput of blockInput.sets) {
+        const set = setsByNumber.get(setInput.setNumber);
+        if (!set) throw new HttpError(400, 'La serie indicada no pertenece a esta sesión.');
+        Object.assign(set, setInput);
+        const exercisesById = new Map(set.exercises.map((exercise) => [String(exercise.routineExerciseId), exercise]));
+        for (const exerciseInput of setInput.exercises) {
+          const exercise = exercisesById.get(exerciseInput.routineExerciseId);
+          if (!exercise) throw new HttpError(400, 'El ejercicio indicado no pertenece a esta serie.');
+          Object.assign(exercise, exerciseInput);
+        }
+      }
+    }
+  }
+  const { includesCardio } = recalculateSession(session);
+  const client = await User.findById(session.user).select('weightKg').lean();
+  session.caloriesBurned = calculateCaloriesBurned(client?.weightKg ?? 70, session.durationMinutes, includesCardio, session.totalRestSeconds);
+  await session.save();
+  res.json({ session: sessionResponse(session) });
+}
+
+async function deleteWorkoutSession(req, res) {
+  const result = await WorkoutSession.deleteOne(sessionOwnerFilter(req, req.params.id));
+  if (!result.deletedCount) throw new HttpError(404, 'No se encontró el entrenamiento.');
+  res.status(200).json({ ok: true });
 }
 
 async function getMyWorkoutStats(req, res) {
@@ -233,7 +367,7 @@ async function getMyWorkoutStats(req, res) {
   const startOfWeek = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 6));
   const [user, routines, sessions, aggregate] = await Promise.all([
     User.findById(req.user.id).select('availableTrainingDays'),
-    Routine.find({ assignedTo: req.user.id, status: 'active' }).select('scheduleDays').lean(),
+    Routine.find({ assignedTo: req.user.id, status: 'active', isDeleted: { $ne: true } }).select('scheduleDays').lean(),
     WorkoutSession.find({ user: req.user.id }).select('completedAt trainingDay').sort({ completedAt: -1 }).limit(366).lean(),
     WorkoutSession.aggregate([
       { $match: { user: req.user._id } },
@@ -264,6 +398,8 @@ module.exports = {
   getMyWorkoutHistory,
   getMyWorkoutStats,
   getClientWorkoutHistory,
+  updateWorkoutSession,
+  deleteWorkoutSession,
   workoutSchema,
   calculateCaloriesBurned,
 };

@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -19,7 +19,17 @@ import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
 type RestTimer = { blockId: string; setNumber: number; remaining: number; startedAt: number; addedRestCount: number };
 type RestTracking = { actualRestSeconds: number; addedRestCount: number; restSkipped: boolean };
-type WorkoutReward = { caloriesBurned: number; durationMinutes: number; totalVolumeKg: number };
+type WorkoutReward = {
+  caloriesBurned: number;
+  durationMinutes: number;
+  activeDurationMinutes?: number;
+  totalRestSeconds?: number;
+  totalVolumeKg: number;
+  targetSetsTotal?: number;
+  completedSets?: number;
+  perceivedExertion?: number;
+  personalRecords?: { exerciseName: string; weightKg: number }[];
+};
 type LastPerformance = {
   metricType: 'strength' | 'cardio';
   reps?: number;
@@ -938,10 +948,23 @@ function MetricInput({ label, keyboard, value, onChange, disabled }: { label: st
 }
 
 function WeightInput({ unit, value, onChange, onToggle, disabled }: { unit: 'kg' | 'lbs'; value: string; onChange: (value: string) => void; onToggle: () => void; disabled: boolean }) {
-  const currentWeightKg = Number(value.replace(',', '.'));
-  const displayValue = value !== '' && Number.isFinite(currentWeightKg)
-    ? unit === 'lbs' ? (currentWeightKg * KG_PER_LB).toFixed(1) : currentWeightKg.toFixed(1)
-    : '';
+  const formatValue = (weightKg: string, displayUnit: 'kg' | 'lbs') => {
+    const weight = Number(weightKg.replace(',', '.'));
+    if (weightKg === '' || !Number.isFinite(weight)) return '';
+    return displayUnit === 'lbs' ? (weight * KG_PER_LB).toFixed(1) : weightKg;
+  };
+  const [displayValue, setDisplayValue] = useState(() => formatValue(value, unit));
+  const lastUnit = useRef(unit);
+  const lastCommittedValue = useRef(value);
+
+  useEffect(() => {
+    if (unit !== lastUnit.current || value !== lastCommittedValue.current) {
+      setDisplayValue(formatValue(value, unit));
+      lastUnit.current = unit;
+      lastCommittedValue.current = value;
+    }
+  }, [unit, value]);
+
   return (
     <View style={styles.metricGroup}>
       <TextInput
@@ -949,9 +972,20 @@ function WeightInput({ unit, value, onChange, onToggle, disabled }: { unit: 'kg'
         keyboardType="decimal-pad"
         value={displayValue}
         onChangeText={(text) => {
-          const numVal = Number.parseFloat(text.replace(',', '.'));
+          const normalizedText = text.replace(',', '.');
+          if ((normalizedText.match(/\./g) ?? []).length > 1 || /[^0-9.]/.test(normalizedText)) return;
+          setDisplayValue(text);
+          if (normalizedText === '') {
+            lastCommittedValue.current = '';
+            onChange('');
+            return;
+          }
+          const numVal = Number.parseFloat(normalizedText);
+          if (!Number.isFinite(numVal)) return;
           const finalKg = unit === 'lbs' ? numVal / KG_PER_LB : numVal;
-          onChange(Number.isNaN(finalKg) ? '' : finalKg.toFixed(1));
+          const nextValue = String(finalKg);
+          lastCommittedValue.current = nextValue;
+          onChange(nextValue);
         }}
         placeholder="—"
         placeholderTextColor={palette.muted}
@@ -987,6 +1021,26 @@ function WorkoutRewardModal({ reward, onClose }: { reward: WorkoutReward | null;
               <Text style={styles.rewardMetricValue}>{reward ? number(reward.durationMinutes) : '—'} min</Text>
               <Text style={styles.rewardMetricLabel}>TIEMPO ACTIVO</Text>
             </View>
+          <View style={styles.rewardMetrics}>
+            <View style={styles.rewardMetric}>
+              <MaterialIcons name="check-circle" size={21} color="#A3FF68" />
+              <Text style={styles.rewardMetricValue}>{reward ? `${reward.completedSets ?? '—'} / ${reward.targetSetsTotal ?? '—'}` : '—'}</Text>
+              <Text style={styles.rewardMetricLabel}>SERIES</Text>
+            </View>
+            <View style={styles.rewardDivider} />
+            <View style={styles.rewardMetric}>
+              <MaterialIcons name="insights" size={21} color="#55D6D0" />
+              <Text style={styles.rewardMetricValue}>RPE {reward?.perceivedExertion ?? '—'}</Text>
+              <Text style={styles.rewardMetricLabel}>ESFUERZO</Text>
+            </View>
+          </View>
+          <Text style={styles.rewardRestText}>Tiempo efectivo: {reward ? number(reward.activeDurationMinutes ?? reward.durationMinutes) : '—'} min · Descanso: {reward ? number(reward.totalRestSeconds ?? 0) : '—'}s</Text>
+          {reward?.personalRecords?.length ? (
+            <View style={styles.prList}>
+              <Text style={styles.prTitle}>MEJORES MARCAS</Text>
+              {reward.personalRecords.map((record) => <Text key={record.exerciseName} style={styles.prText}>Nuevo récord en {record.exerciseName}: {record.weightKg} kg</Text>)}
+            </View>
+          ) : null}
             <View style={styles.rewardDivider} />
             <View style={styles.rewardMetric}>
               <MaterialIcons name="fitness-center" size={21} color="#A3FF68" />
@@ -1160,6 +1214,10 @@ const styles = StyleSheet.create({
   rewardMetricValue: { color: '#F4F8F5', fontSize: 20, fontWeight: '900' },
   rewardMetricLabel: { color: '#91A098', fontSize: 9, fontWeight: '900' },
   rewardDivider: { width: 1, height: 55, backgroundColor: '#27342E' },
+  rewardRestText: { color: '#91A098', fontSize: 12, fontWeight: '700', textAlign: 'center', marginTop: 14 },
+  prList: { width: '100%', borderRadius: 14, borderWidth: 1, borderColor: '#A3FF6850', backgroundColor: '#A3FF6812', padding: 13, gap: 6, marginTop: 12 },
+  prTitle: { color: '#A3FF68', fontSize: 11, fontWeight: '900' },
+  prText: { color: '#F4F8F5', fontSize: 12, fontWeight: '700' },
   rewardButton: { minHeight: 56, borderRadius: 18, backgroundColor: '#A3FF68', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 },
   rewardButtonText: { color: '#081009', fontSize: 15, fontWeight: '900' },
 });

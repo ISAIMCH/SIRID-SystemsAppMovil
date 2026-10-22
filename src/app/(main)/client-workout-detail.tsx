@@ -4,12 +4,15 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   FlatList,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
   type ListRenderItemInfo,
@@ -101,9 +104,10 @@ function sessionTargetSets(session: WorkoutSession, targetMap: Map<string, Targe
   }, 0);
 }
 
-function createSlides(mode: Mode, now = new Date()): Slide[] {
+function createSlides(mode: Mode, now = new Date(), sessions: WorkoutSession[] = []): Slide[] {
   const today = startOfDay(now);
-  return Array.from({ length: 7 }, (_, index) => {
+  const count = mode === 'day' ? 90 : 24;
+  const slides = Array.from({ length: count }, (_, index) => {
     if (mode === 'day') {
       const start = addDays(today, -index);
       return { key: `${mode}-${start.toISOString()}`, mode, start, end: addDays(start, 1), label: formatDate(start) };
@@ -123,6 +127,15 @@ function createSlides(mode: Mode, now = new Date()): Slide[] {
       label: start.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }),
     };
   });
+  if (mode !== 'day') return slides.reverse();
+  const dates = new Set(slides.map((slide) => slide.start.getTime()));
+  sessions.forEach((session) => {
+    const date = startOfDay(new Date(session.completedAt));
+    if (!dates.has(date.getTime())) {
+      slides.push({ key: `${mode}-${date.toISOString()}`, mode, start: date, end: addDays(date, 1), label: formatDate(date) });
+    }
+  });
+  return slides.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
 function sessionMatches(session: WorkoutSession, slide: Slide) {
@@ -190,7 +203,7 @@ function summarizeBlockExercises(block: SessionBlock, targetMap: Map<string, Tar
   return [...summaries.values()];
 }
 
-function DetailSlide({ slide, sessions, targetMap, width, onInfo }: { slide: Slide; sessions: WorkoutSession[]; targetMap: Map<string, TargetData>; width: number; onInfo: () => void }) {
+function DetailSlide({ slide, sessions, targetMap, width, onInfo, onEdit, onDelete }: { slide: Slide; sessions: WorkoutSession[]; targetMap: Map<string, TargetData>; width: number; onInfo: () => void; onEdit: (session: WorkoutSession) => void; onDelete: (session: WorkoutSession) => void }) {
   const [transition] = useState(() => new Animated.Value(0));
   const matchingSessions = sessions.filter((session) => sessionMatches(session, slide));
   const calories = matchingSessions.reduce((total, session) => total + (session.caloriesBurned ?? 0), 0);
@@ -223,7 +236,8 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo }: { slide: Sli
 
   return (
     <Animated.View style={[styles.slide, { width, opacity: transition, transform: [{ translateY: transition.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
-      <Text style={styles.periodLabel}>{slide.label}</Text>
+      <ScrollView nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={styles.slideContent}>
+      <Text style={styles.periodLabel}><MaterialIcons name="event" size={16} color={dark.neon} /> {slide.label}</Text>
       <View style={styles.detailCard}>
         <View style={styles.cardEyebrowRow}>
           <Text style={styles.cardEyebrow}>CALORÍAS QUEMADAS</Text>
@@ -269,7 +283,7 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo }: { slide: Sli
             <Text style={styles.sectionLabel}>EJERCICIOS</Text>
             <View style={styles.sessionList}>
               {sortedSessions.map((session, sessionIndex) => (
-                <SessionSection key={session._id} session={session} sessionIndex={sessionIndex} targetMap={targetMap} />
+                <SessionSection key={session._id} session={session} sessionIndex={sessionIndex} targetMap={targetMap} onEdit={onEdit} onDelete={onDelete} />
               ))}
             </View>
           </>
@@ -280,6 +294,7 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo }: { slide: Sli
           </View>
         )}
       </View>
+      </ScrollView>
     </Animated.View>
   );
 }
@@ -296,15 +311,24 @@ function ExerciseRow({ exercise, showRest = true }: { exercise: ExerciseSummary;
   );
 }
 
-function SessionSection({ session, sessionIndex, targetMap }: { session: WorkoutSession; sessionIndex: number; targetMap: Map<string, TargetData> }) {
+function SessionSection({ session, sessionIndex, targetMap, onEdit, onDelete }: { session: WorkoutSession; sessionIndex: number; targetMap: Map<string, TargetData>; onEdit: (session: WorkoutSession) => void; onDelete: (session: WorkoutSession) => void }) {
   const completedDate = new Date(session.completedAt);
   const performedDay = completedDate.getDay();
   const isMakeup = session.trainingDay !== performedDay;
+  const routineTitle = session.routineTitle
+    || (session.routine && typeof session.routine === 'object' ? session.routine.title : undefined)
+    || 'Rutina registrada';
   return (
     <View style={styles.sessionSection}>
-      <Text style={styles.sessionTitle}>Entrenamiento {sessionIndex + 1} · {formatSessionTime(session.completedAt)}</Text>
+      <View style={styles.sessionHeader}>
+        <Text style={styles.sessionTitle}>Entrenamiento {sessionIndex + 1} · {formatSessionTime(session.completedAt)}</Text>
+        <View style={styles.sessionActions}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Editar entrenamiento" onPress={() => onEdit(session)} hitSlop={8}><MaterialIcons name="edit" size={18} color={dark.neon} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Eliminar entrenamiento" onPress={() => onDelete(session)} hitSlop={8}><MaterialIcons name="delete-outline" size={19} color="#FF8A80" /></Pressable>
+        </View>
+      </View>
       <View style={styles.sessionMetaRow}>
-        <Text style={styles.sessionMeta}>{session.routineTitle ?? (typeof session.routine === 'object' ? session.routine.title : undefined) ?? 'Rutina'}</Text>
+        <Text style={styles.sessionMeta}>{routineTitle}</Text>
         <Text style={styles.sessionMeta}>Rutina de {dayNames[session.trainingDay] ?? 'día desconocido'}</Text>
         {isMakeup ? <Text style={styles.makeupBadge}>Recuperada · Rutina de {dayNames[session.trainingDay]}</Text> : null}
       </View>
@@ -357,7 +381,12 @@ export default function ClientWorkoutDetailScreen() {
   const [showCalorieInfo, setShowCalorieInfo] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const slides = useMemo(() => createSlides(mode).reverse(), [mode]);
+  const [calendarVisible, setCalendarVisible] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(startOfDay(new Date()));
+  const [editingSession, setEditingSession] = useState<WorkoutSession | null>(null);
+  const [editBlocks, setEditBlocks] = useState<NonNullable<WorkoutSession['blocks']>>([]);
+  const [editForm, setEditForm] = useState({ perceivedExertion: '', clientNotes: '', durationMinutes: '' });
+  const slides = useMemo(() => createSlides(mode, new Date(), sessions), [mode, sessions]);
 
   useEffect(() => {
     listRef.current?.scrollToIndex({ index: slides.length - 1, animated: false });
@@ -393,6 +422,66 @@ export default function ClientWorkoutDetailScreen() {
     setMode(nextMode);
   };
 
+  const jumpToDate = (date: Date) => {
+    const selected = startOfDay(date);
+    const index = slides.findIndex((slide) => mode === 'day'
+      ? slide.start.getTime() === selected.getTime()
+      : selected >= slide.start && selected < slide.end);
+    if (index >= 0) listRef.current?.scrollToIndex({ index, animated: true });
+    setCalendarVisible(false);
+  };
+
+  const deleteSession = (session: WorkoutSession) => {
+    Alert.alert('Eliminar entrenamiento', 'Esta acción no se puede deshacer.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Eliminar', style: 'destructive', onPress: async () => {
+        try {
+          await api.delete(`/workouts/${session._id}`);
+          setSessions((current) => current.filter((entry) => entry._id !== session._id));
+        } catch (requestError) {
+          setError(getApiErrorMessage(requestError, 'No se pudo eliminar el entrenamiento.'));
+        }
+      } },
+    ]);
+  };
+
+  const openEditor = (session: WorkoutSession) => {
+    setEditingSession(session);
+    setEditForm({
+      perceivedExertion: session.perceivedExertion ? String(session.perceivedExertion) : '',
+      clientNotes: session.clientNotes ?? '',
+      durationMinutes: String(session.durationMinutes),
+    });
+    setEditBlocks(JSON.parse(JSON.stringify(session.blocks ?? [])) as NonNullable<WorkoutSession['blocks']>);
+  };
+
+  const saveEdit = async () => {
+    if (!editingSession) return;
+    const payload = {
+      perceivedExertion: editForm.perceivedExertion ? Number(editForm.perceivedExertion) : null,
+      clientNotes: editForm.clientNotes.trim() || null,
+      durationMinutes: Number(editForm.durationMinutes),
+      blocks: editBlocks,
+    };
+    try {
+      const response = await api.patch<{ session: WorkoutSession }>(`/workouts/${editingSession._id}`, payload);
+      setSessions((current) => current.map((session) => session._id === editingSession._id ? response.data.session : session));
+      setEditingSession(null);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'No se pudo actualizar el entrenamiento.'));
+    }
+  };
+
+  const updateEditExercise = (blockIndex: number, setIndex: number, exerciseIndex: number, changes: Partial<LoggedExercise>) => {
+    setEditBlocks((blocks) => blocks.map((block, currentBlock) => currentBlock !== blockIndex ? block : {
+      ...block,
+      sets: block.sets.map((set, currentSet) => currentSet !== setIndex ? set : {
+        ...set,
+        exercises: set.exercises.map((exercise, currentExercise) => currentExercise !== exerciseIndex ? exercise : { ...exercise, ...changes }),
+      }),
+    }));
+  };
+
   return (
     <View style={styles.safeArea}>
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -416,6 +505,10 @@ export default function ClientWorkoutDetailScreen() {
       </View>
       {isLoading ? <ActivityIndicator color={dark.neon} style={styles.loader} /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      <Pressable style={styles.periodPicker} onPress={() => setCalendarVisible(true)} accessibilityRole="button" accessibilityLabel="Abrir calendario del historial">
+        <MaterialIcons name="calendar-month" size={18} color={dark.neon} />
+        <Text style={styles.periodPickerText}>Elegir fecha</Text>
+      </Pressable>
       <FlatList
         ref={listRef}
         data={slides}
@@ -424,9 +517,60 @@ export default function ClientWorkoutDetailScreen() {
         pagingEnabled
         initialScrollIndex={slides.length - 1}
         showsHorizontalScrollIndicator={false}
-        renderItem={({ item }: ListRenderItemInfo<Slide>) => <DetailSlide slide={item} sessions={sessions} targetMap={targetMap} width={width} onInfo={() => setShowCalorieInfo(true)} />}
+        renderItem={({ item }: ListRenderItemInfo<Slide>) => <DetailSlide slide={item} sessions={sessions} targetMap={targetMap} width={width} onInfo={() => setShowCalorieInfo(true)} onEdit={openEditor} onDelete={deleteSession} />}
         getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
       />
+      <Modal visible={calendarVisible} transparent animationType="fade" onRequestClose={() => setCalendarVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.calendarCard}>
+            <View style={styles.calendarHeader}>
+              <Pressable onPress={() => setCalendarMonth((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1))} hitSlop={10}><MaterialIcons name="chevron-left" size={24} color={dark.text} /></Pressable>
+              <Text style={styles.modalTitle}>{calendarMonth.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}</Text>
+              <Pressable onPress={() => setCalendarMonth((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1))} hitSlop={10}><MaterialIcons name="chevron-right" size={24} color={dark.text} /></Pressable>
+            </View>
+            <View style={styles.calendarWeek}><Text>L</Text><Text>M</Text><Text>M</Text><Text>J</Text><Text>V</Text><Text>S</Text><Text>D</Text></View>
+            <View style={styles.calendarGrid}>
+              {Array.from({ length: (new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() + 6) % 7 }, (_, index) => <View key={`empty-${index}`} style={styles.calendarDay} />)}
+              {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate() }, (_, index) => {
+                const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), index + 1);
+                const hasWorkout = sessions.some((session) => startOfDay(new Date(session.completedAt)).getTime() === date.getTime());
+                return <Pressable key={date.toISOString()} style={styles.calendarDay} onPress={() => jumpToDate(date)}><Text style={styles.calendarDayText}>{index + 1}</Text>{hasWorkout ? <View style={styles.calendarDot} /> : null}</Pressable>;
+              })}
+            </View>
+            <Pressable style={styles.modalClose} onPress={() => setCalendarVisible(false)}><Text style={styles.modalCloseText}>Cerrar</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal visible={Boolean(editingSession)} transparent animationType="slide" onRequestClose={() => setEditingSession(null)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Editar entrenamiento</Text>
+            <Text style={styles.inputLabel}>RPE (1-5)</Text>
+            <TextInput keyboardType="number-pad" value={editForm.perceivedExertion} onChangeText={(value) => setEditForm((form) => ({ ...form, perceivedExertion: value.replace(/\D/g, '').slice(0, 1) }))} style={styles.editInput} />
+            <Text style={styles.inputLabel}>Duración (minutos)</Text>
+            <TextInput keyboardType="number-pad" value={editForm.durationMinutes} onChangeText={(value) => setEditForm((form) => ({ ...form, durationMinutes: value.replace(/\D/g, '') }))} style={styles.editInput} />
+            <Text style={styles.inputLabel}>Notas</Text>
+            <TextInput multiline value={editForm.clientNotes} onChangeText={(value) => setEditForm((form) => ({ ...form, clientNotes: value }))} style={[styles.editInput, styles.notesInput]} />
+            <ScrollView style={styles.editSets} nestedScrollEnabled>
+              {editBlocks.map((block, blockIndex) => block.sets.map((set, setIndex) => set.exercises.map((exercise, exerciseIndex) => (
+                <View key={`${blockIndex}-${setIndex}-${exerciseIndex}`} style={styles.editSetRow}>
+                  <Text style={styles.editSetLabel}>Serie {set.setNumber} · {exercise.exerciseName}</Text>
+                  {exercise.metricType === 'cardio' ? (
+                    <TextInput keyboardType="decimal-pad" placeholder="Duración / distancia / nivel" placeholderTextColor={dark.muted} value={exercise.durationMinutes?.toString() ?? exercise.distanceKm?.toString() ?? exercise.level?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { durationMinutes: Number(value) || undefined })} style={styles.editInput} />
+                  ) : (
+                    <View style={styles.editMetricRow}>
+                      <TextInput keyboardType="number-pad" placeholder="Reps" placeholderTextColor={dark.muted} value={exercise.reps?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { reps: Number(value) || undefined })} style={[styles.editInput, styles.editMetricInput]} />
+                      <TextInput keyboardType="decimal-pad" placeholder="kg" placeholderTextColor={dark.muted} value={exercise.weightKg?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { weightKg: Number(value) || undefined })} style={[styles.editInput, styles.editMetricInput]} />
+                    </View>
+                  )}
+                </View>
+              ))))}
+            </ScrollView>
+            <Pressable style={styles.modalClose} onPress={() => void saveEdit()}><Text style={styles.modalCloseText}>Guardar cambios</Text></Pressable>
+            <Pressable onPress={() => setEditingSession(null)}><Text style={styles.cancelText}>Cancelar</Text></Pressable>
+          </View>
+        </View>
+      </Modal>
       <Modal visible={showCalorieInfo} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowCalorieInfo(false)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
@@ -455,8 +599,11 @@ const styles = StyleSheet.create({
   segmentTextSelected: { color: '#081009', fontWeight: '900' },
   loader: { marginVertical: 12 },
   error: { color: '#FF8A80', paddingHorizontal: 20, paddingBottom: 12, textAlign: 'center' },
-  slide: { paddingHorizontal: 16, paddingBottom: 28 },
+  slide: { paddingHorizontal: 16 },
+  slideContent: { paddingBottom: 120 },
   periodLabel: { color: dark.muted, fontSize: 14, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
+  periodPicker: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: dark.elevated, borderWidth: 1, borderColor: dark.border },
+  periodPickerText: { color: dark.text, fontSize: 12, fontWeight: '800' },
   detailCard: { backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border, borderRadius: 16, padding: 18, shadowColor: '#000000', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 4 },
   cardEyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardEyebrow: { color: dark.muted, fontSize: 10, fontWeight: '900' },
@@ -482,6 +629,8 @@ const styles = StyleSheet.create({
   noteText: { color: dark.text, fontSize: 12, lineHeight: 18 },
   sessionList: { gap: 18 },
   sessionSection: { gap: 10 },
+  sessionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+  sessionActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   sessionTitle: { color: dark.text, fontSize: 13, fontWeight: '900' },
   sessionMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7 },
   sessionMeta: { color: dark.muted, fontSize: 11, fontWeight: '700' },
@@ -510,4 +659,20 @@ const styles = StyleSheet.create({
   modalBody: { color: dark.muted, fontSize: 14, lineHeight: 21 },
   modalClose: { alignItems: 'center', justifyContent: 'center', minHeight: 50, borderRadius: 10, backgroundColor: dark.neon },
   modalCloseText: { color: '#081009', fontSize: 14, fontWeight: '900' },
+  calendarCard: { width: '100%', maxWidth: 420, gap: 16, borderRadius: 24, borderWidth: 1, borderColor: dark.border, backgroundColor: dark.surface, padding: 20, paddingBottom: 24 },
+  calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  calendarWeek: { flexDirection: 'row', justifyContent: 'space-between' },
+  calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
+  calendarDay: { width: '14.285%', minHeight: 44, alignItems: 'center', justifyContent: 'center', gap: 3 },
+  calendarDayText: { color: dark.text, fontSize: 13, fontWeight: '700' },
+  calendarDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: dark.neon },
+  inputLabel: { color: dark.muted, fontSize: 11, fontWeight: '800' },
+  editInput: { minHeight: 44, borderWidth: 1, borderColor: dark.border, borderRadius: 10, backgroundColor: dark.elevated, color: dark.text, paddingHorizontal: 12 },
+  notesInput: { minHeight: 90, textAlignVertical: 'top', paddingTop: 12 },
+  editSets: { maxHeight: 220 },
+  editSetRow: { gap: 6, paddingVertical: 6 },
+  editSetLabel: { color: dark.text, fontSize: 11, fontWeight: '800' },
+  editMetricRow: { flexDirection: 'row', gap: 8 },
+  editMetricInput: { flex: 1 },
+  cancelText: { color: dark.muted, textAlign: 'center', fontWeight: '800', paddingVertical: 8 },
 });

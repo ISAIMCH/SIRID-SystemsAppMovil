@@ -243,16 +243,16 @@ async function ensureEligibleBlocks(blocks) {
 }
 
 async function listRoutines(req, res) {
-  let filter = {};
-  if (req.user.role === 'Cliente') filter = { assignedTo: req.user.id };
+  let filter = { isDeleted: { $ne: true } };
+  if (req.user.role === 'Cliente')   filter = { assignedTo: req.user.id, isDeleted: { $ne: true } };
   if (req.user.role === 'Coach') {
     const clientIds = await User.find({ assignedCoach: req.user.id }).distinct('_id');
-    filter = { assignedTo: { $in: clientIds } };
+    filter = { assignedTo: { $in: clientIds }, isDeleted: { $ne: true } };
   }
   if (req.user.role !== 'Cliente' && /^[a-f\d]{24}$/i.test(String(req.query.clientId ?? ''))) {
     const clientId = String(req.query.clientId);
     const isAssigned = req.user.role === 'Admin' || filter.assignedTo.$in.some((id) => String(id) === clientId);
-    filter = isAssigned ? { assignedTo: clientId } : { _id: null };
+    filter = isAssigned ? { assignedTo: clientId, isDeleted: { $ne: true } } : { _id: null };
   }
   const routines = await Routine.find(filter)
     .populate('assignedTo', 'name email')
@@ -407,7 +407,10 @@ async function deleteRoutine(req, res) {
     && String(routine.createdBy) === req.user.id
     && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
   if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede eliminar esta rutina.');
-  await routine.deleteOne();
+  routine.isDeleted = true;
+  routine.deletedAt = new Date();
+  routine.status = 'inactive';
+  await routine.save();
   emitRealtime(req, 'routine-updated', { action: 'deleted', routineId: req.params.id });
   res.status(204).end();
 }
