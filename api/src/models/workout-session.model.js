@@ -13,6 +13,11 @@ const exerciseLogSchema = new mongoose.Schema({
   durationMinutes: { type: Number, min: 1, max: 600 },
   distanceKm: { type: Number, min: 0, max: 1000 },
   level: { type: Number, min: 1, max: 100 },
+  targetReps: { type: Number, default: null },
+  targetWeightKg: { type: Number, default: null },
+  targetDurationMinutes: { type: Number, default: null },
+  targetDistanceKm: { type: Number, default: null },
+  targetLevel: { type: Number, default: null },
   observations: { type: String, trim: true, maxlength: 1000 },
 }, { _id: false });
 
@@ -20,9 +25,13 @@ const workoutBlockSchema = new mongoose.Schema({
   routineBlockId: { type: mongoose.Schema.Types.ObjectId, required: true },
   blockType: { type: String, enum: ['single', 'superset', 'circuit'], required: true },
   restSeconds: { type: Number, required: true, min: 0, max: 3600 },
+  targetSets: { type: Number, min: 0, max: 50 },
   sets: { type: [{
     setNumber: { type: Number, required: true, min: 1 },
     completedAt: { type: Date, required: true, default: Date.now },
+    actualRestSeconds: { type: Number, default: 0, min: 0, max: 86400 },
+    addedRestCount: { type: Number, default: 0, min: 0, max: 1000 },
+    restSkipped: { type: Boolean, default: false },
     exercises: { type: [exerciseLogSchema], required: true, validate: (items) => items.length > 0 },
   }], required: true, validate: (items) => items.length > 0 },
 }, { _id: false });
@@ -30,9 +39,13 @@ const workoutBlockSchema = new mongoose.Schema({
 const workoutSessionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   routine: { type: mongoose.Schema.Types.ObjectId, ref: 'Routine', required: true },
+  routineTitle: { type: String, trim: true, maxlength: 120 },
   trainingDay: { type: Number, required: true, min: 0, max: 6 },
   completedAt: { type: Date, required: true, default: Date.now, index: true },
   durationMinutes: { type: Number, required: true, min: 0, max: 600 },
+  totalRestSeconds: { type: Number, default: 0, min: 0, max: 86400 },
+  activeDurationMinutes: { type: Number, min: 0, max: 600 },
+  targetSetsTotal: { type: Number, min: 0 },
   totalVolumeKg: { type: Number, required: true, min: 0, default: 0 },
   caloriesBurned: { type: Number, required: true, min: 0, default: 0 },
   perceivedExertion: { type: Number, min: 1, max: 5 },

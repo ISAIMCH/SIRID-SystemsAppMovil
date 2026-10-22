@@ -1,4 +1,3 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -59,18 +58,18 @@ export default function ClientDetailScreen() {
   const isCoach = person?.role === 'Coach';
 
   return (
-    <Page dark={user?.role === 'Coach'}>
+    <Page admin={isAdmin} dark={user?.role === 'Coach'}>
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Volver al directorio"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color="#FFFFFF" />
+          <IconBadge name="arrow-back" color={isAdmin ? '#18181B' : '#FFFFFF'} />
         </Pressable>
         <View style={styles.flex}>
-          <Text style={styles.title}>{person ? [person.name, person.lastName].filter(Boolean).join(' ') : 'Perfil'}</Text>
-          <Text style={styles.subtitle}>{person ? (isCoach ? 'Perfil del coach' : 'Perfil del cliente') : ' '}</Text>
+          <Text style={[styles.title, isAdmin && styles.adminTitle]}>{person ? [person.name, person.lastName].filter(Boolean).join(' ') : 'Perfil'}</Text>
+          <Text style={[styles.subtitle, isAdmin && styles.adminSubtitle]}>{person ? (isCoach ? 'Perfil del coach' : 'Perfil del cliente') : ' '}</Text>
         </View>
       </View>
 
@@ -93,7 +92,7 @@ export default function ClientDetailScreen() {
           ) : (
             <>
               <SectionTitle>Información</SectionTitle>
-              <FloatingCard style={styles.details}>
+              <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
                 <DetailRow label="Correo" value={person.email} />
                 <DetailRow label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
                 <DetailRow label="Teléfono" value={person.phone || 'No registrado'} />
@@ -110,14 +109,14 @@ export default function ClientDetailScreen() {
               {!isCoach ? (
                 <>
                   <SectionTitle>Membresía</SectionTitle>
-                  <FloatingCard style={styles.details}>
+                  <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
                     <DetailRow label="Estado" value={person.membership ? membershipLabels[person.membership.status] : 'Pendiente'} accent={person.membership?.status === 'active'} />
                     <DetailRow label="Inicio" value={formatDate(person.membership?.startsAt)} />
                     <DetailRow label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
                   </FloatingCard>
 
                   <SectionTitle>Coach asignado</SectionTitle>
-                  <FloatingCard style={styles.coachCard}>
+                  <FloatingCard style={[styles.coachCard, isAdmin && styles.adminSlateCard]}>
                     {person.assignedCoach ? (
                       <>
                         <View style={styles.flex}>
@@ -219,6 +218,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   title: { color: '#F4F8F5', fontSize: 24, fontWeight: '800' },
   subtitle: { color: '#91A098', fontSize: 13 },
+  adminTitle: { color: '#18181B' },
+  adminSubtitle: { color: '#52525B' },
   loading: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
   details: { paddingVertical: 6, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
   detailRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 12 },
@@ -227,6 +228,7 @@ const styles = StyleSheet.create({
   detailValue: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '500', textAlign: 'right' },
   detailValueAccent: { color: '#10FF85' },
   coachCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A' },
+  adminSlateCard: { backgroundColor: '#3F3F46', borderColor: '#52525B', borderRadius: 16 },
   coachName: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   coachEmail: { color: '#A1A1AA', fontSize: 13 },
   form: { gap: 16, padding: 20, backgroundColor: '#1E1E1E', borderColor: '#27272A' },

@@ -120,18 +120,28 @@ export type RoutineTemplate = {
 
 export type WorkoutSessionLog = {
   _id: string;
-  routine: string;
+  routine: string | { _id: string; title?: string };
+  routineTitle?: string;
   trainingDay: number;
   completedAt: string;
   durationMinutes: number;
+  totalRestSeconds?: number;
+  activeDurationMinutes?: number;
+  targetSetsTotal?: number;
+  perceivedExertion?: number;
+  clientNotes?: string;
   totalVolumeKg: number;
   blocks?: {
     routineBlockId: string;
     blockType: RoutineBlock['blockType'];
     restSeconds: number;
+    targetSets?: number;
     sets: {
       setNumber: number;
       completedAt: string;
+      actualRestSeconds?: number;
+      addedRestCount?: number;
+      restSkipped?: boolean;
       exercises: {
         routineExerciseId: string;
         exerciseName: string;
@@ -144,6 +154,11 @@ export type WorkoutSessionLog = {
         durationMinutes?: number;
         distanceKm?: number;
         level?: number;
+        targetReps?: number | null;
+        targetWeightKg?: number | null;
+        targetDurationMinutes?: number | null;
+        targetDistanceKm?: number | null;
+        targetLevel?: number | null;
       }[];
     }[];
   }[];
@@ -158,10 +173,15 @@ export type WorkoutSessionPayload = {
   routineId: string;
   trainingDay: number;
   durationMinutes: number;
+  totalRestSeconds: number;
+  activeDurationMinutes?: number;
   blocks: {
     routineBlockId: string;
     sets: {
       setNumber: number;
+      actualRestSeconds?: number;
+      addedRestCount?: number;
+      restSkipped?: boolean;
       exercises: {
         routineExerciseId: string;
         skipped: boolean;

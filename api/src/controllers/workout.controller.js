@@ -6,21 +6,32 @@ const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
 const { normalizeBlocks } = require('./routine.controller');
 
-function calculateCaloriesBurned(weightKg, durationMinutes, includesCardio) {
+function toNumberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function calculateCaloriesBurned(weightKg, durationMinutes, includesCardio, totalRestSeconds = 0) {
   const met = includesCardio ? 6 : 3.5;
-  return ((met * 3.5 * weightKg) / 200) * durationMinutes;
+  const effectiveMinutes = Math.max(1, durationMinutes - (totalRestSeconds / 60) * 0.7);
+  return ((met * 3.5 * weightKg) / 200) * effectiveMinutes;
 }
 
 const workoutSchema = z.object({
   routineId: z.string().regex(/^[a-f\d]{24}$/i),
   trainingDay: z.number().int().min(0).max(6),
   durationMinutes: z.number().int().min(0).max(600),
+  totalRestSeconds: z.number().int().min(0).max(86400).default(0),
+  activeDurationMinutes: z.number().min(0).max(600).optional(),
   perceivedExertion: z.number().int().min(1).max(5).optional(),
   clientNotes: z.string().optional(),
   blocks: z.array(z.object({
     routineBlockId: z.string().regex(/^[a-f\d]{24}$/i),
     sets: z.array(z.object({
       setNumber: z.number().int().min(1).max(50),
+      actualRestSeconds: z.number().int().min(0).max(86400).default(0),
+      addedRestCount: z.number().int().min(0).max(1000).default(0),
+      restSkipped: z.boolean().default(false),
       exercises: z.array(z.object({
         routineExerciseId: z.string().regex(/^[a-f\d]{24}$/i),
         skipped: z.boolean().default(false),
@@ -125,15 +136,28 @@ async function createWorkoutSession(req, res) {
           durationMinutes: entryExercise.skipped ? null : entryExercise.durationMinutes,
           distanceKm: entryExercise.skipped ? null : entryExercise.distanceKm,
           level: entryExercise.skipped ? null : entryExercise.level,
+          targetReps: toNumberOrNull(exercise.reps),
+          targetWeightKg: toNumberOrNull(exercise.suggestedWeight),
+          targetDurationMinutes: exercise.targetDurationMinutes ?? null,
+          targetDistanceKm: exercise.targetDistanceKm ?? null,
+          targetLevel: exercise.targetLevel ?? null,
         };
       });
       if (usedExerciseIds.size !== exercisesById.size) throw new HttpError(400, 'Completa todos los ejercicios del bloque.');
-      return { setNumber: round.setNumber, completedAt: new Date(), exercises: loggedExercises };
+      return {
+        setNumber: round.setNumber,
+        completedAt: new Date(),
+        actualRestSeconds: round.actualRestSeconds,
+        addedRestCount: round.addedRestCount,
+        restSkipped: round.restSkipped,
+        exercises: loggedExercises,
+      };
     });
     return {
       routineBlockId: block._id,
       blockType: block.blockType,
       restSeconds: block.restSeconds,
+      targetSets: block.sets,
       sets: rounds,
     };
   });
@@ -151,14 +175,23 @@ async function createWorkoutSession(req, res) {
   const includesCardio = sessionBlocks.some((block) => block.sets.some((round) => (
     round.exercises.some((exercise) => exercise.metricType === 'cardio')
   )));
-  const caloriesBurned = calculateCaloriesBurned(weightKg, input.durationMinutes, includesCardio);
+  const totalRestSeconds = input.totalRestSeconds ?? sessionBlocks.reduce((total, block) => (
+    total + block.sets.reduce((blockTotal, round) => blockTotal + round.actualRestSeconds, 0)
+  ), 0);
+  const activeDurationMinutes = input.activeDurationMinutes ?? Math.max(0, input.durationMinutes - totalRestSeconds / 60);
+  const caloriesBurned = calculateCaloriesBurned(weightKg, input.durationMinutes, includesCardio, totalRestSeconds);
+  const targetSetsTotal = routineBlocks.reduce((total, block) => total + block.sets, 0);
 
   const [session] = await WorkoutSession.create([{
     user: req.user.id,
     routine: routine.id,
+    routineTitle: routine.title,
     trainingDay: input.trainingDay,
     completedAt: new Date(),
     durationMinutes: input.durationMinutes,
+    totalRestSeconds,
+    activeDurationMinutes,
+    targetSetsTotal,
     totalVolumeKg,
     caloriesBurned,
     ...(input.perceivedExertion !== undefined ? { perceivedExertion: input.perceivedExertion } : {}),
@@ -193,11 +226,15 @@ async function getClientWorkoutHistory(req, res) {
 
 async function getMyWorkoutStats(req, res) {
   const today = new Date();
+  const parsedTzOffset = Number(req.query.tzOffsetMinutes);
+  const tzOffsetMinutes = Number.isFinite(parsedTzOffset) && parsedTzOffset >= -840 && parsedTzOffset <= 840
+    ? parsedTzOffset
+    : -360;
   const startOfWeek = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 6));
   const [user, routines, sessions, aggregate] = await Promise.all([
     User.findById(req.user.id).select('availableTrainingDays'),
     Routine.find({ assignedTo: req.user.id, status: 'active' }).select('scheduleDays').lean(),
-    WorkoutSession.find({ user: req.user.id }).select('completedAt').sort({ completedAt: -1 }).limit(366).lean(),
+    WorkoutSession.find({ user: req.user.id }).select('completedAt trainingDay').sort({ completedAt: -1 }).limit(366).lean(),
     WorkoutSession.aggregate([
       { $match: { user: req.user._id } },
       { $group: {
@@ -213,7 +250,7 @@ async function getMyWorkoutStats(req, res) {
   const scheduledDays = plannedDays.length ? plannedDays : (user?.availableTrainingDays ?? []);
   const totals = aggregate[0] ?? { totalSessions: 0, totalVolumeKg: 0, completedThisWeek: 0 };
   res.json({
-    currentStreak: calculateCurrentTrainingStreak(sessions.map((session) => session.completedAt), scheduledDays, today),
+    currentStreak: calculateCurrentTrainingStreak(sessions, scheduledDays, today, tzOffsetMinutes),
     scheduledDays,
     totalSessions: totals.totalSessions,
     completedThisWeek: totals.completedThisWeek,

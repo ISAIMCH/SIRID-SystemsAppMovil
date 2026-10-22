@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { router, type Href } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
@@ -191,7 +191,11 @@ export default function ClientHomeScreen() {
         ) : null}
 
         <View>
-          <View style={styles.calorieCard}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Ver historial de entrenamientos"
+            onPress={() => router.push('/(main)/client-workout-detail')}
+            style={({ pressed }) => [styles.calorieCard, pressed && styles.calorieCardPressed]}>
           <View style={styles.calorieHead}>
             <View>
               <Text style={styles.metricLabel}>CALORÍAS QUEMADAS</Text>
@@ -251,7 +255,7 @@ export default function ClientHomeScreen() {
               <Text style={styles.chartCaption}>TOTAL {period === 'day' ? 'POR HORA' : 'POR DÍA'}</Text>
             </View>
           ) : null}
-          </View>
+          </Pressable>
         </View>
 
         <View style={styles.summaryRow}>
@@ -335,6 +339,7 @@ const styles = StyleSheet.create({
   errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, backgroundColor: '#17221C', padding: 12 },
   errorText: { flex: 1, color: dark.white, fontSize: 12 },
   calorieCard: { borderRadius: 16, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, overflow: 'hidden', shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 4 },
+  calorieCardPressed: { opacity: 0.82 },
   calorieHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   metricLabel: { color: dark.muted, fontSize: 10, fontWeight: '900' },
   periodCaption: { color: dark.white, fontSize: 14, fontWeight: '700', marginTop: 4 },

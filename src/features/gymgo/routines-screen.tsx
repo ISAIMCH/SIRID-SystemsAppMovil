@@ -1,7 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,7 +17,8 @@ import type { EquipmentTraffic, Exercise, Routine, RoutineBlock, WorkoutSessionL
 import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 
 type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
-type RestTimer = { blockId: string; remaining: number };
+type RestTimer = { blockId: string; setNumber: number; remaining: number; startedAt: number; addedRestCount: number };
+type RestTracking = { actualRestSeconds: number; addedRestCount: number; restSkipped: boolean };
 type WorkoutReward = { caloriesBurned: number; durationMinutes: number; totalVolumeKg: number };
 type LastPerformance = {
   metricType: 'strength' | 'cardio';
@@ -35,9 +37,47 @@ const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes
 const levelNames = { principiante: 'Principiante', intermedio: 'Intermedio', avanzado: 'Avanzado' };
 const KG_PER_LB = 2.20462;
 const emptyInput = (): MetricValues => ({ reps: '', weightKg: '', durationMinutes: '', distanceKm: '', level: '' });
+const ACTIVE_WORKOUT_DRAFT_KEY = '@gymgo_active_workout_draft';
+const PENDING_WORKOUTS_KEY = '@gymgo_pending_workouts';
+const ROUTINES_CACHE_KEY = '@gymgo_routines_cache';
 
 function minutesSince(start: number | null) {
   return start ? Math.round((Date.now() - start) / 60000) : 0;
+}
+
+function secondsSince(start: number | null) {
+  return start ? Math.max(0, Math.floor((Date.now() - start) / 1000)) : 0;
+}
+
+function now() {
+  return Date.now();
+}
+
+function isNetworkError(error: unknown) {
+  return Boolean(error && typeof error === 'object' && 'response' in error && !(error as { response?: unknown }).response);
+}
+
+async function flushPendingWorkouts() {
+  const stored = await AsyncStorage.getItem(PENDING_WORKOUTS_KEY);
+  if (!stored) return;
+  let queue: WorkoutSessionPayload[];
+  try {
+    queue = JSON.parse(stored) as WorkoutSessionPayload[];
+  } catch {
+    await AsyncStorage.removeItem(PENDING_WORKOUTS_KEY);
+    return;
+  }
+  const remaining: WorkoutSessionPayload[] = [];
+  for (const payload of queue) {
+    try {
+      await api.post('/workouts', payload);
+    } catch {
+      remaining.push(payload);
+      break;
+    }
+  }
+  if (remaining.length) await AsyncStorage.setItem(PENDING_WORKOUTS_KEY, JSON.stringify(remaining));
+  else await AsyncStorage.removeItem(PENDING_WORKOUTS_KEY);
 }
 
 function routineBlocks(routine: Routine): RoutineBlock[] {
@@ -161,6 +201,7 @@ export default function RoutinesScreen() {
   const [lastPerformance, setLastPerformance] = useState<Map<string, LastPerformance>>(new Map());
   const [completedSets, setCompletedSets] = useState<Record<string, number[]>>({});
   const [restTimer, setRestTimer] = useState<RestTimer | null>(null);
+  const [restTracking, setRestTracking] = useState<Record<string, RestTracking>>({});
   const [restTime, setRestTime] = useState<number | null>(null);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
   const [activeGif, setActiveGif] = useState<{ name: string; url: string } | null>(null);
@@ -172,7 +213,10 @@ export default function RoutinesScreen() {
   const [clientNotes, setClientNotes] = useState('');
   const [savingDay, setSavingDay] = useState(false);
   const [logMessage, setLogMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const startedAt = useRef<number | null>(null);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [deferredRoutineReload, setDeferredRoutineReload] = useState(false);
 
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
@@ -185,10 +229,24 @@ export default function RoutinesScreen() {
       .then(([routineResponse, historyResponse, traffic]) => {
         if (!isCurrent) return;
         setRoutines(routineResponse.data.routines);
+        void AsyncStorage.setItem(ROUTINES_CACHE_KEY, JSON.stringify(routineResponse.data.routines));
         setLastPerformance(buildLastPerformanceMap(historyResponse.data.sessions));
         setEquipmentTraffic(traffic);
       })
-      .catch((requestError: unknown) => { if (isCurrent) setError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas.')); })
+      .catch(async (requestError: unknown) => {
+        if (!isCurrent) return;
+        try {
+          const cached = await AsyncStorage.getItem(ROUTINES_CACHE_KEY);
+          if (cached) {
+            setRoutines(JSON.parse(cached) as Routine[]);
+            setLogMessage({ text: 'Mostrando la última rutina guardada sin conexión.', error: false });
+            return;
+          }
+        } catch {
+          // Cache failures should not hide the original request error.
+        }
+        setError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas.'));
+      })
       .finally(() => { if (isCurrent) setIsLoading(false); });
     return () => { isCurrent = false; };
   }, [isClient, retryNumber]));
@@ -196,18 +254,91 @@ export default function RoutinesScreen() {
   useEffect(() => {
     const realtime = connectSocket();
     const refreshRoutines = () => {
+      if (startedAt !== null || Object.keys(completedSets).length > 0) {
+        setDeferredRoutineReload(true);
+        return;
+      }
       setIsLoading(true);
       setRetryNumber((value) => value + 1);
     };
     realtime.on('routine-updated', refreshRoutines);
     return () => { realtime.off('routine-updated', refreshRoutines); };
+  }, [completedSets, startedAt]);
+
+  useEffect(() => {
+    if (!deferredRoutineReload || startedAt !== null || Object.keys(completedSets).length > 0) return;
+    const reloadTimer = setTimeout(() => {
+      setDeferredRoutineReload(false);
+      setIsLoading(true);
+      setRetryNumber((value) => value + 1);
+    }, 0);
+    return () => clearTimeout(reloadTimer);
+  }, [completedSets, deferredRoutineReload, startedAt]);
+
+  useEffect(() => {
+    let isCurrent = true;
+    Promise.all([
+      AsyncStorage.getItem(ACTIVE_WORKOUT_DRAFT_KEY),
+      AsyncStorage.getItem(PENDING_WORKOUTS_KEY),
+    ]).then(([draft, pending]) => {
+      if (!isCurrent) return;
+      if (draft) {
+        try {
+          const value = JSON.parse(draft) as {
+            selectedDay?: number;
+            inputs?: Record<string, MetricValues>;
+            skipped?: Record<string, boolean>;
+            completedSets?: Record<string, number[]>;
+            restTracking?: Record<string, RestTracking>;
+            restTimer?: RestTimer | null;
+            startedAt?: number | null;
+          };
+          if (value.selectedDay !== undefined) setSelectedDay(value.selectedDay);
+          if (value.inputs) setInputs(value.inputs);
+          if (value.skipped) setSkipped(value.skipped);
+          if (value.completedSets) setCompletedSets(value.completedSets);
+          if (value.restTracking) setRestTracking(value.restTracking);
+          if (value.restTimer) {
+            setRestTimer(value.restTimer);
+            setRestTime(value.restTimer.remaining);
+          }
+          if (value.startedAt) {
+            setStartedAt(value.startedAt);
+            setElapsedSeconds(secondsSince(value.startedAt));
+          }
+        } catch {
+          void AsyncStorage.removeItem(ACTIVE_WORKOUT_DRAFT_KEY);
+        }
+      }
+      setDraftLoaded(true);
+      if (pending) void flushPendingWorkouts();
+    }).catch(() => setDraftLoaded(true));
+    return () => { isCurrent = false; };
   }, []);
+
+  useEffect(() => {
+    if (!startedAt) return undefined;
+    const interval = setInterval(() => setElapsedSeconds(secondsSince(startedAt)), 1000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+
+  useEffect(() => {
+    if (!draftLoaded || !startedAt) return;
+    void AsyncStorage.setItem(ACTIVE_WORKOUT_DRAFT_KEY, JSON.stringify({
+      selectedDay, inputs, skipped, completedSets, restTracking, startedAt,
+      restTimer,
+    }));
+  }, [completedSets, draftLoaded, inputs, restTimer, restTracking, selectedDay, skipped, startedAt]);
 
   useEffect(() => {
     if (!restTimer) return undefined;
     const interval = setInterval(() => {
       setRestTimer((current) => {
-        if (!current || current.remaining <= 1) return null;
+        if (!current) return null;
+        if (current.remaining <= 1) {
+          finalizeRest(current, false);
+          return null;
+        }
         return { ...current, remaining: current.remaining - 1 };
       });
     }, 1000);
@@ -217,8 +348,8 @@ export default function RoutinesScreen() {
   useEffect(() => {
     if (restTime === 0) {
       Vibration.vibrate([0, 500, 200, 500]);
-      setRestTime(null);
-      return undefined;
+      const clearTimer = setTimeout(() => setRestTime(null), 0);
+      return () => clearTimeout(clearTimer);
     }
     if (restTime === null || restTime < 1) return undefined;
     const interval = setInterval(() => {
@@ -226,10 +357,6 @@ export default function RoutinesScreen() {
     }, 1000);
     return () => clearInterval(interval);
   }, [restTime]);
-
-  useEffect(() => {
-    if (Object.keys(inputs).length > 0 && !startedAt.current) startedAt.current = Date.now();
-  }, [inputs]);
 
   const routine = routines.find((entry) => entry.status === 'active') ?? routines[0];
   const allBlocks = routine ? routineBlocks(routine) : [];
@@ -273,8 +400,40 @@ export default function RoutinesScreen() {
           level: performance.level === undefined ? '' : String(performance.level),
         };
       }
+
       return next;
     });
+  }
+
+  function finalizeRest(timer: RestTimer, restSkipped: boolean) {
+    const key = `${timer.blockId}.${timer.setNumber}`;
+    const actualRestSeconds = Math.max(0, Math.floor((Date.now() - timer.startedAt) / 1000));
+    setRestTracking((current) => ({
+      ...current,
+      [key]: { actualRestSeconds, addedRestCount: timer.addedRestCount, restSkipped },
+    }));
+  }
+
+  function startWorkout() {
+    if (!startedAt) {
+      setStartedAt(Date.now());
+      setElapsedSeconds(0);
+      setLogMessage(null);
+    }
+  }
+
+  function discardWorkout() {
+    setStartedAt(null);
+    setElapsedSeconds(0);
+    setInputs({});
+    setSkipped({});
+    setCompletedSets({});
+    setRestTracking({});
+    setRestTimer(null);
+    setRestTime(null);
+    setPendingWorkout(null);
+    void AsyncStorage.removeItem(ACTIVE_WORKOUT_DRAFT_KEY);
+    setLogMessage({ text: 'Entrenamiento descartado.', error: false });
   }
 
   function finishBlockSet(block: RoutineBlock, setNumber: number) {
@@ -302,17 +461,27 @@ export default function RoutinesScreen() {
     if (activeExercise) {
       const timeToRest = activeExercise.restSeconds || block.restSeconds || 60;
       setRestTime(timeToRest);
-      if (setNumber < block.sets) setRestTimer({ blockId, remaining: timeToRest });
+      if (setNumber < block.sets) setRestTimer({ blockId, setNumber, remaining: timeToRest, startedAt: now(), addedRestCount: 0 });
     }
   }
 
   async function saveSession() {
     if (!routine) return;
+    if (!startedAt) {
+      setLogMessage({ text: 'Inicia el entrenamiento antes de guardar.', error: true });
+      return;
+    }
+    if (restTimer) {
+      setLogMessage({ text: 'Termina o salta el descanso antes de guardar.', error: true });
+      return;
+    }
+    const totalRestSeconds = Object.values(restTracking).reduce((total, rest) => total + rest.actualRestSeconds, 0);
     const payloadBlocks = dayBlocks.flatMap((block) => {
       const blockId = block._id ?? String(block.order);
       const done = completedSets[blockId] ?? [];
       const sets = done.map((setNumber) => ({
         setNumber,
+        ...(restTracking[`${blockId}.${setNumber}`] ?? { actualRestSeconds: 0, addedRestCount: 0, restSkipped: false }),
         exercises: block.exercises.map((exercise, index) => {
           const values = inputs[inputKey(block, setNumber, exercise, index)] ?? emptyInput();
           const exerciseSkipped = skipped[inputKey(block, setNumber, exercise, index)] === true;
@@ -339,7 +508,9 @@ export default function RoutinesScreen() {
     setPendingWorkout({
         routineId: routine._id,
         trainingDay: selectedDay,
-        durationMinutes: Math.min(600, minutesSince(startedAt.current)),
+        durationMinutes: Math.min(600, minutesSince(startedAt)),
+        activeDurationMinutes: Math.min(600, Math.max(0, minutesSince(startedAt) - totalRestSeconds / 60)),
+        totalRestSeconds,
         blocks: payloadBlocks,
       });
     setPerceivedExertion(3);
@@ -361,12 +532,25 @@ export default function RoutinesScreen() {
       setInputs({});
       setSkipped({});
       setCompletedSets({});
+      setRestTracking({});
       setRestTimer(null);
       setRestTime(null);
-      startedAt.current = null;
+      setStartedAt(null);
+      setElapsedSeconds(0);
+      await AsyncStorage.removeItem(ACTIVE_WORKOUT_DRAFT_KEY);
       setWorkoutReward(response.data.session);
     } catch (requestError) {
+      if (isNetworkError(requestError)) {
+        const stored = await AsyncStorage.getItem(PENDING_WORKOUTS_KEY);
+        const queue = stored ? JSON.parse(stored) as WorkoutSessionPayload[] : [];
+        queue.push({ ...pendingWorkout, perceivedExertion, ...(clientNotes.trim() ? { clientNotes: clientNotes.trim() } : {}) });
+        await AsyncStorage.setItem(PENDING_WORKOUTS_KEY, JSON.stringify(queue));
+        setPendingWorkout(null);
+        discardWorkout();
+        setLogMessage({ text: 'Guardado sin conexión. Se sincronizará al recuperar red', error: false });
+      } else {
       setLogMessage({ text: getApiErrorMessage(requestError, 'No se pudo guardar el entrenamiento.'), error: true });
+      }
     } finally {
       setSavingDay(false);
     }
@@ -383,7 +567,7 @@ export default function RoutinesScreen() {
         accessibilityLabel="Añadir 15 segundos al descanso"
         onPress={() => {
           setRestTime((previous) => (previous || 0) + 15);
-          setRestTimer((current) => (current ? { ...current, remaining: current.remaining + 15 } : current));
+          setRestTimer((current) => (current ? { ...current, remaining: current.remaining + 15, addedRestCount: current.addedRestCount + 1 } : current));
         }}
         style={styles.restTimerButton}>
         <Text style={styles.restTimerButtonText}>+15s</Text>
@@ -391,7 +575,11 @@ export default function RoutinesScreen() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Saltar descanso"
-        onPress={() => { setRestTime(null); setRestTimer(null); }}
+        onPress={() => {
+          if (restTimer) finalizeRest(restTimer, true);
+          setRestTime(null);
+          setRestTimer(null);
+        }}
         style={styles.restTimerSkipButton}>
         <Text style={styles.restTimerSkipText}>Saltar</Text>
       </Pressable>
@@ -455,7 +643,7 @@ export default function RoutinesScreen() {
                   const selected = selectedDay === day.value;
                   const count = allBlocks.filter((block) => block.day === day.value).length;
                   return (
-                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { setSelectedDay(day.value); setRestTimer(null); setRestTime(null); setLogMessage(null); }} style={[styles.dayTab, styles.dayTabDark, selected && styles.dayTabSelectedDark]}>
+                    <Pressable key={day.value} accessibilityRole="tab" accessibilityState={{ selected, disabled: Boolean(startedAt) }} onPress={() => { if (startedAt) { setLogMessage({ text: 'Termina o descarta el entrenamiento actual antes de cambiar de día.', error: true }); return; } setSelectedDay(day.value); setRestTimer(null); setRestTime(null); setLogMessage(null); }} style={[styles.dayTab, styles.dayTabDark, selected && styles.dayTabSelectedDark]}>
                       <Text style={[styles.dayTabText, styles.dayTabTextDark, selected && styles.dayTabTextSelectedDark]}>{day.label}</Text>
                       <View style={[styles.dayDot, count > 0 && (selected ? styles.dayDotSelected : styles.dayDotActive)]} />
                     </Pressable>
@@ -463,6 +651,31 @@ export default function RoutinesScreen() {
                 })}
               </View>
               <Text style={styles.selectedDayTitleDark}>{dayNames[selectedDay]}</Text>
+              {selectedDay !== new Date().getDay() && dayBlocks.length ? (
+                <Text style={styles.makeupBanner}>Recuperando rutina del {dayNames[selectedDay]}</Text>
+              ) : null}
+
+              {dayBlocks.length ? (
+                <View style={styles.workoutStartCard}>
+                  <View style={styles.flex}>
+                    <Text style={styles.workoutStartTitle}>{startedAt ? 'Entrenamiento en curso' : '¿Listo para entrenar?'}</Text>
+                    <Text style={styles.workoutStartMeta}>
+                      {startedAt
+                        ? `Tiempo activo: ${Math.floor(elapsedSeconds / 60).toString().padStart(2, '0')}:${(elapsedSeconds % 60).toString().padStart(2, '0')}`
+                        : 'Inicia para desbloquear tus series y registrar el tiempo real.'}
+                    </Text>
+                  </View>
+                  {!startedAt ? (
+                    <Pressable accessibilityRole="button" onPress={startWorkout} style={styles.startWorkoutButton}>
+                      <Text style={styles.startWorkoutButtonText}>Iniciar entrenamiento</Text>
+                    </Pressable>
+                  ) : (
+                    <Pressable accessibilityRole="button" onPress={discardWorkout} style={styles.discardWorkoutButton}>
+                      <Text style={styles.discardWorkoutText}>Descartar</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ) : null}
 
               {dayBlocks.length ? (
                 <View style={styles.smartOrderControls}>
@@ -558,7 +771,7 @@ export default function RoutinesScreen() {
                                 {block.exercises.map((exercise, exerciseIndex) => {
                                   const cardio = isCardio(exercise);
                                   const values = inputs[inputKey(block, setNumber, exercise, exerciseIndex)] ?? emptyInput();
-                                  const disabled = isDone || savingDay;
+                                  const disabled = isDone || savingDay || !startedAt;
                                   const exerciseKey = inputKey(block, setNumber, exercise, exerciseIndex);
                                   const exerciseSkipped = skipped[exerciseKey] === true;
                                   return (
@@ -589,7 +802,7 @@ export default function RoutinesScreen() {
                                 accessibilityRole="checkbox"
                                 accessibilityLabel={`Completar serie ${setNumber} del bloque ${blockIndex + 1}`}
                                 accessibilityState={{ checked: isDone, disabled: !canComplete || savingDay || waitingOnRest }}
-                                disabled={!canComplete || isDone || savingDay || waitingOnRest}
+                                disabled={!canComplete || isDone || savingDay || waitingOnRest || !startedAt}
                                 onPress={() => finishBlockSet(block, setNumber)}
                                 style={[styles.roundCheck, isDone && styles.roundCheckDone, (!canComplete || waitingOnRest) && styles.roundCheckDisabled]}>
                                 {isDone ? <MaterialIcons name="check" size={19} color="#081009" /> : waitingOnRest ? <Text style={styles.restCountdown}>{restTimer?.remaining}</Text> : null}
@@ -602,9 +815,9 @@ export default function RoutinesScreen() {
                   })}
                   <Pressable
                     accessibilityRole="button"
-                    disabled={savingDay || !Object.values(completedSets).some((sets) => sets.length > 0)}
+                    disabled={savingDay || !startedAt || !Object.values(completedSets).some((sets) => sets.length > 0)}
                     onPress={() => void saveSession()}
-                    style={({ pressed }) => [styles.saveWorkoutButton, (savingDay || !Object.values(completedSets).some((sets) => sets.length > 0)) && styles.saveWorkoutButtonDisabled, pressed && styles.saveWorkoutButtonPressed]}>
+                    style={({ pressed }) => [styles.saveWorkoutButton, (savingDay || !startedAt || !Object.values(completedSets).some((sets) => sets.length > 0)) && styles.saveWorkoutButtonDisabled, pressed && styles.saveWorkoutButtonPressed]}>
                     {savingDay ? <ActivityIndicator color="#081009" /> : <><Text style={styles.saveWorkoutText}>Guardar entrenamiento</Text><MaterialIcons name="arrow-forward" size={20} color="#081009" /></>}
                   </Pressable>
                 </>
@@ -824,6 +1037,14 @@ const styles = StyleSheet.create({
   dayDotSelected: { backgroundColor: palette.neon },
   selectedDayTitle: { color: palette.ink, fontSize: 19, fontWeight: '800' },
   selectedDayTitleDark: { color: '#F4F8F5', fontSize: 19, fontWeight: '800' },
+  makeupBanner: { color: '#9BFF63', backgroundColor: '#9BFF631C', borderRadius: 10, paddingHorizontal: 11, paddingVertical: 8, fontSize: 11, fontWeight: '800' },
+  workoutStartCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, borderWidth: 1, borderColor: '#9BFF6350', backgroundColor: '#111815', padding: 13 },
+  workoutStartTitle: { color: '#F4F8F5', fontSize: 14, fontWeight: '900' },
+  workoutStartMeta: { color: '#91A098', fontSize: 11, lineHeight: 16, marginTop: 3 },
+  startWorkoutButton: { minHeight: 40, justifyContent: 'center', borderRadius: 10, backgroundColor: '#9BFF63', paddingHorizontal: 12 },
+  startWorkoutButtonText: { color: '#081009', fontSize: 11, fontWeight: '900' },
+  discardWorkoutButton: { minHeight: 36, justifyContent: 'center', borderRadius: 9, borderWidth: 1, borderColor: '#52635A', paddingHorizontal: 10 },
+  discardWorkoutText: { color: '#DCE8E0', fontSize: 10, fontWeight: '800' },
   restCard: { alignItems: 'center', gap: 10, paddingVertical: 30 },
   restTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
   restCopy: { color: palette.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
