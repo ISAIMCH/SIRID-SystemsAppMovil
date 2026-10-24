@@ -1,5 +1,6 @@
 const { z } = require('zod');
 const ExerciseDictionary = require('../models/exercise-dictionary.model');
+const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -20,7 +21,12 @@ async function searchExercises(req, res) {
     .sort({ name: 1 })
     .limit(50)
     .lean();
-  res.json({ exercises });
+  res.json({
+    exercises: exercises.map((exercise) => ({
+      ...exercise,
+      targetMuscle: normalizeMuscleGroup(exercise.targetMuscle),
+    })),
+  });
 }
 
 module.exports = { searchExercises };

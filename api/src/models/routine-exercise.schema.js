@@ -1,8 +1,9 @@
 const mongoose = require('mongoose');
+const { MUSCLE_GROUPS } = require('../constants/muscle-groups');
 
 const exerciseSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
-  muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
+  muscleGroup: { type: String, required: true, enum: MUSCLE_GROUPS },
   equipment: { type: String, trim: true, maxlength: 100 },
   equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment' },
   gifUrl: { type: String, trim: true, maxlength: 500 },
@@ -31,11 +32,13 @@ const blockSchema = new mongoose.Schema({
 }, { _id: true });
 
 blockSchema.pre('validate', function validateBlockType() {
+  if (this.blockType === 'circuit') this.blockType = 'superset';
+  if (this.structure === 'Circuito') this.structure = 'Superset';
   if (this.blockType === 'single' && this.exercises.length !== 1) {
     this.invalidate('exercises', 'Un bloque individual debe tener exactamente un ejercicio.');
   }
-  if (this.blockType !== 'single' && this.exercises.length < 2) {
-    this.invalidate('exercises', 'Un superset o circuito requiere al menos dos ejercicios.');
+  if (this.blockType === 'superset' && this.exercises.length < 2) {
+    this.invalidate('exercises', 'Un superset requiere al menos dos ejercicios.');
   }
 });
 

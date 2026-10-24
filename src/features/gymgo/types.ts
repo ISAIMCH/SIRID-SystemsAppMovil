@@ -1,7 +1,62 @@
+export const MUSCLE_GROUPS = [
+  'Abdominales',
+  'Abductores',
+  'Aductores',
+  'Antebrazos',
+  'Bíceps',
+  'Cardio',
+  'Cuello',
+  'Cuádriceps',
+  'Dorsales',
+  'Espalda',
+  'Femoral',
+  'Gemelos',
+  'Glúteos',
+  'Hombros',
+  'Lumbar',
+  'Pecho',
+  'Trapecio',
+  'Tríceps',
+] as const;
+
+export type MuscleGroup = typeof MUSCLE_GROUPS[number];
+
+const legacyMuscleGroups: Record<string, MuscleGroup> = {
+  pierna: 'Cuádriceps',
+  piernas: 'Cuádriceps',
+  brazos: 'Bíceps',
+  core: 'Abdominales',
+  'cuerpo completo': 'Cardio',
+  gluteo: 'Glúteos',
+  glúteo: 'Glúteos',
+  gluteos: 'Glúteos',
+  glúteos: 'Glúteos',
+  hombro: 'Hombros',
+  hombros: 'Hombros',
+  pecho: 'Pecho',
+  pectoral: 'Pecho',
+  pectorales: 'Pecho',
+  espalda: 'Espalda',
+  biceps: 'Bíceps',
+  bíceps: 'Bíceps',
+  triceps: 'Tríceps',
+  tríceps: 'Tríceps',
+  cardio: 'Cardio',
+};
+
+export function normalizeMuscleGroup(value: string | null | undefined): MuscleGroup {
+  const normalized = value?.trim().toLocaleLowerCase() ?? '';
+  return legacyMuscleGroups[normalized] ?? (isMuscleGroup(value ?? '') ? value as MuscleGroup : 'Abdominales');
+}
+
+export function isMuscleGroup(value: string): value is MuscleGroup {
+  return (MUSCLE_GROUPS as readonly string[]).includes(value);
+}
+
 export type Exercise = {
   _id?: string;
   name: string;
-  muscleGroup: string;
+  muscleGroup: MuscleGroup;
   equipmentId?: string | {
     _id: string;
     name: string;
@@ -38,9 +93,18 @@ export type RoutineBlock = {
 export type CuratedExercise = {
   _id: string;
   name: string;
-  muscleGroup: string;
+  muscleGroup: MuscleGroup;
   equipment: string | null;
+  gifUrl?: string | null;
   videoUrl: string;
+  isCustom?: boolean;
+};
+
+export type CustomExercisePayload = {
+  name: string;
+  muscleGroup: MuscleGroup;
+  equipment?: string | null;
+  videoUrl?: string | null;
 };
 
 export type Routine = {
@@ -147,7 +211,7 @@ export type WorkoutSessionLog = {
       exercises: {
         routineExerciseId: string;
         exerciseName: string;
-        muscleGroup: string;
+        muscleGroup: MuscleGroup;
         gifUrl?: string;
         metricType: 'strength' | 'cardio';
         skipped?: boolean;

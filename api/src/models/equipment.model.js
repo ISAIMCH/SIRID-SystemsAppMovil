@@ -9,6 +9,8 @@ const equipmentSchema = new mongoose.Schema({
   totalQuantity: { type: Number, default: 1, min: 1, max: 500, required: true },
   maintenanceQuantity: { type: Number, default: 0, min: 0, required: true },
   usageFrequency: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date, default: null },
   // Derivado de las cantidades; se conserva para consultas y rutinas existentes.
   status: { type: String, enum: ['available', 'out_of_service'], default: 'available', index: true },
 }, { timestamps: true });

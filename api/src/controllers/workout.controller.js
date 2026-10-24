@@ -5,6 +5,7 @@ const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
 const { normalizeBlocks } = require('./routine.controller');
+const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 function toNumberOrNull(value) {
   const number = Number(value);
@@ -98,7 +99,7 @@ function sessionResponse(session) {
         exercises: [{
           routineExerciseId: exercise.routineExerciseId,
           exerciseName: exercise.exerciseName,
-          muscleGroup: exercise.muscleGroup,
+          muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
           equipmentId: exercise.equipmentId,
           metricType: 'strength',
           reps: set.reps,
@@ -164,7 +165,7 @@ async function createWorkoutSession(req, res) {
         return {
           routineExerciseId: exercise._id,
           exerciseName: exercise.name,
-          muscleGroup: exercise.muscleGroup,
+          muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
           gifUrl: exercise.gifUrl,
           equipmentId: exercise.equipmentId ?? null,
           metricType: isCardio ? 'cardio' : 'strength',

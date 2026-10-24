@@ -23,7 +23,7 @@ function assertId(id) {
 }
 
 async function getProducts(req, res) {
-  const products = await Product.find({ gymId: getGymId(req) }).sort({ category: 1, name: 1 }).lean();
+  const products = await Product.find({ gymId: getGymId(req), isDeleted: { $ne: true } }).sort({ category: 1, name: 1 }).lean();
   res.json({ products });
 }
 
@@ -37,7 +37,7 @@ async function updateProduct(req, res) {
   const input = productSchema.partial().parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const product = await Product.findOneAndUpdate({ _id: req.params.id, gymId: getGymId(req) }, input, {
+  const product = await Product.findOneAndUpdate({ _id: req.params.id, gymId: getGymId(req), isDeleted: { $ne: true } }, input, {
     new: true,
     runValidators: true,
   }).lean();
@@ -47,7 +47,11 @@ async function updateProduct(req, res) {
 
 async function deleteProduct(req, res) {
   assertId(req.params.id);
-  const product = await Product.findOneAndDelete({ _id: req.params.id, gymId: getGymId(req) });
+  const product = await Product.findOneAndUpdate(
+    { _id: req.params.id, gymId: getGymId(req), isDeleted: { $ne: true } },
+    { $set: { isDeleted: true, deletedAt: new Date(), stock: 0 } },
+    { new: true },
+  );
   if (!product) throw new HttpError(404, 'Producto no encontrado.');
   res.status(204).end();
 }

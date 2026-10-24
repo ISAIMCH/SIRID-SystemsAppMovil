@@ -5,11 +5,12 @@ const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
+const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 const exerciseSchema = z.object({
   _id: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   name: z.string().trim().min(1).max(120),
-  muscleGroup: z.string().trim().min(1).max(80),
+  muscleGroup: z.enum(MUSCLE_GROUPS),
   equipment: z.string().trim().max(100).optional(),
   equipmentId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   gifUrl: z.string().url().max(500).optional(),
@@ -40,7 +41,7 @@ const blockSchema = z.object({
     context.addIssue({ code: 'custom', path: ['exercises'], message: 'Un bloque individual requiere exactamente un ejercicio.' });
   }
   if (block.blockType !== 'single' && block.exercises.length < 2) {
-    context.addIssue({ code: 'custom', path: ['exercises'], message: 'Un superset o circuito requiere al menos dos ejercicios.' });
+    context.addIssue({ code: 'custom', path: ['exercises'], message: 'Un superset requiere al menos dos ejercicios.' });
   }
 });
 
@@ -93,7 +94,7 @@ const simpleRoutineUpdateSchema = simpleRoutineSchema.partial();
 
 const advancedExerciseInputSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  muscleGroup: z.string().trim().max(80).optional(),
+  muscleGroup: z.enum(MUSCLE_GROUPS).optional(),
   equipment: z.string().trim().max(100).optional(),
   reps: z.coerce.number().int().min(1).max(1000).optional(),
   time: z.union([z.string().trim().min(1), z.coerce.number().positive()]).optional(),
@@ -130,7 +131,7 @@ function isAdvancedRoutinePayload(body) {
 }
 
 function normalizeAdvancedBlocks(blocks) {
-  const blockTypeByStructure = { Individual: 'single', Superset: 'superset', Circuito: 'circuit' };
+  const blockTypeByStructure = { Individual: 'single', Superset: 'superset', Circuito: 'superset' };
   return blocks.map((block, order) => ({
     ...block,
     day: block.day ?? order % 7,
@@ -140,7 +141,7 @@ function normalizeAdvancedBlocks(blocks) {
     restSeconds: block.restTime,
     exercises: block.exercises.map((exercise, exerciseOrder) => ({
       ...exercise,
-      muscleGroup: exercise.muscleGroup ?? 'General',
+      muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
       metricType: exercise.time !== undefined && exercise.reps === undefined ? 'cardio' : 'strength',
       reps: exercise.reps === undefined ? undefined : String(exercise.reps),
       suggestedWeight: exercise.suggestedWeight,
@@ -164,7 +165,18 @@ async function validateSimpleAssignment(assignedTo, req) {
 }
 
 function normalizeBlocks(source) {
-  if (source.blocks?.length) return source.blocks;
+  if (source.blocks?.length) {
+    return source.blocks.map((block, order) => ({
+      ...block,
+      blockType: block.blockType === 'circuit' ? 'superset' : block.blockType,
+      order: block.order ?? order,
+      exercises: block.exercises.map((exercise, exerciseOrder) => ({
+        ...exercise,
+        muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
+        order: exercise.order ?? exerciseOrder,
+      })),
+    }));
+  }
   return (source.exercises ?? []).map((exercise, order) => {
     const equipmentType = typeof exercise.equipmentId === 'object' ? exercise.equipmentId.type : undefined;
     const metricType = exercise.metricType ?? equipmentType ?? 'strength';
@@ -187,7 +199,13 @@ function normalizeBlocks(source) {
 
 function routineResponse(routine) {
   const value = routine.toObject ? routine.toObject() : routine;
-  const blocks = normalizeBlocks(value);
+  const blocks = normalizeBlocks(value).map((block) => ({
+    ...block,
+    exercises: block.exercises.map((exercise) => ({
+      ...exercise,
+      muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
+    })),
+  }));
   const exercises = blocks.flatMap((block) => block.exercises.map((exercise) => ({
     ...exercise,
     day: block.day,
@@ -210,7 +228,11 @@ async function ensureEligibleBlocks(blocks) {
   const exercises = blocks.flatMap((block) => block.exercises);
   const equipmentIds = [...new Set(exercises.filter((exercise) => exercise.equipmentId && !exercise.bodyweight).map((exercise) => String(exercise.equipmentId)))];
   const equipment = equipmentIds.length
-    ? await Equipment.find({ _id: { $in: equipmentIds }, status: { $ne: 'out_of_service' } }).select('_id type zone').lean()
+    ? await Equipment.find({
+      _id: { $in: equipmentIds },
+      isDeleted: { $ne: true },
+      status: { $ne: 'out_of_service' },
+    }).select('_id type zone').lean()
     : [];
   if (equipment.length !== equipmentIds.length) {
     throw new HttpError(400, 'Selecciona equipos existentes que no estén fuera de servicio en el inventario.');

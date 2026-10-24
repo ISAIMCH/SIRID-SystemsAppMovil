@@ -8,6 +8,8 @@ const membershipPlanSchema = new mongoose.Schema({
   autoRenew: { type: Boolean, default: true },
   planType: { type: String, enum: ['standard', 'promotional'], default: 'standard' },
   isActive: { type: Boolean, default: true, index: true },
+  isDeleted: { type: Boolean, default: false, index: true },
+  deletedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 module.exports = mongoose.model('MembershipPlan', membershipPlanSchema);

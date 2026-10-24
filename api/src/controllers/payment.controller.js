@@ -54,7 +54,7 @@ async function createPayment(req, res) {
   const input = paymentSchema.parse(req.body);
   const [user, plan] = await Promise.all([
     User.findById(input.userId).select('_id'),
-    MembershipPlan.findById(input.planId).select('name durationInDays'),
+    MembershipPlan.findOne({ _id: input.planId, isDeleted: { $ne: true } }).select('name durationInDays'),
   ]);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
   if (!plan) throw new HttpError(404, 'Plan no encontrado.');
@@ -82,7 +82,7 @@ async function updatePayment(req, res) {
   if (input.source) update.method = input.source;
   if (input.userId) update.user = input.userId;
   if (input.planId) {
-    const plan = await MembershipPlan.findById(input.planId).select('name');
+    const plan = await MembershipPlan.findOne({ _id: input.planId, isDeleted: { $ne: true } }).select('name');
     if (!plan) throw new HttpError(404, 'Plan no encontrado.');
     update.planName = plan.name;
   }

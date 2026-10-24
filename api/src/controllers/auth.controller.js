@@ -164,7 +164,7 @@ async function createManagedUser(req, res) {
     throw new HttpError(400, 'La dirección solo aplica a Coaches.');
   }
   if (input.role === 'Cliente' && input.membershipPlanId) {
-    const plan = await MembershipPlan.findOne({ _id: input.membershipPlanId, isActive: true });
+    const plan = await MembershipPlan.findOne({ _id: input.membershipPlanId, isActive: true, isDeleted: { $ne: true } });
     if (!plan) throw new HttpError(400, 'El plan seleccionado no existe o está inactivo.');
     input.membershipPlanName = plan.name;
     input.membershipPrice = plan.price;

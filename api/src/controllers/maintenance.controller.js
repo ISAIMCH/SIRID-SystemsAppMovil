@@ -11,7 +11,7 @@ const reportInputSchema = z.object({
 
 async function createReport(req, res) {
   const input = reportInputSchema.parse(req.body);
-  const equipment = await Equipment.findById(input.equipmentId).select('_id');
+  const equipment = await Equipment.findOne({ _id: input.equipmentId, isDeleted: { $ne: true } }).select('_id');
   if (!equipment) throw new HttpError(404, 'El equipo no existe en el inventario.');
 
   const report = await MaintenanceReport.create({

@@ -84,7 +84,7 @@ export default function AppTabs() {
             options={{
               title: label,
               ...(visible ? {} : HIDDEN_OPTIONS),
-              tabBarIcon: ({ color }) => <MaterialIcons name={icon} size={24} color={color} />,
+              tabBarIcon: ({ color }) => <MaterialIcons name={icon} size={24} color={typeof color === 'number' ? palette.muted : color ?? palette.muted} />,
             }}
           />
         );

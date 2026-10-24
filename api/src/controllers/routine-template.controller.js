@@ -10,6 +10,7 @@ const {
   normalizeBlocks,
   legacyExercisesFromBlocks,
 } = require('./routine.controller');
+const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 const templateBaseSchema = routineBaseSchema.omit({ assignedTo: true, status: true });
 const templateSchema = templateBaseSchema.superRefine(scheduleRefinement);
@@ -33,7 +34,13 @@ async function findOwnedTemplate(req) {
 
 function templateResponse(template) {
   const value = template.toObject ? template.toObject() : template;
-  const blocks = normalizeBlocks(value);
+  const blocks = normalizeBlocks(value).map((block) => ({
+    ...block,
+    exercises: block.exercises.map((exercise) => ({
+      ...exercise,
+      muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
+    })),
+  }));
   return { ...value, blocks, exercises: legacyExercisesFromBlocks(blocks) };
 }
 

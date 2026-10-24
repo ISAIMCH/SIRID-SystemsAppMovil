@@ -3,23 +3,23 @@ import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { api, getApiErrorMessage, getEquipmentTraffic } from './api';
+import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
 import { ExerciseSearch } from './exercise-search';
+import type { ExerciseSelection } from './exercise-search';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { SelectField } from './select-field';
 import { palette } from './theme';
-import type { CuratedExercise, EquipmentTraffic, Exercise, Routine, RoutineBlock, RoutineTemplate } from './types';
+import type { Routine, RoutineBlock, RoutineTemplate } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
 
 type Equipment = { _id: string; name: string; zone: string; type: 'strength' | 'cardio'; status: 'available' | 'busy' | 'out_of_service' };
 type RoutineLevel = 'principiante' | 'intermedio' | 'avanzado';
 type BlockType = RoutineBlock['blockType'];
-type DraftExercise = Omit<Exercise, '_id' | 'equipmentId'> & { _id?: string; equipmentId?: string };
+type DraftExercise = ExerciseSelection & { _id?: string; equipmentId?: string };
 type DraftBlock = Omit<RoutineBlock, '_id' | 'exercises'> & { _id?: string; exercises: DraftExercise[] };
 
-const BODYWEIGHT = 'bodyweight';
 const weekDays = [
   { value: 1, label: 'Lun' }, { value: 2, label: 'Mar' }, { value: 3, label: 'Mié' },
   { value: 4, label: 'Jue' }, { value: 5, label: 'Vie' }, { value: 6, label: 'Sáb' }, { value: 0, label: 'Dom' },
@@ -29,11 +29,10 @@ const levels: RoutineLevel[] = ['principiante', 'intermedio', 'avanzado'];
 const blockTypes: { value: BlockType; label: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
   { value: 'single', label: 'Individual', icon: 'looks-one' },
   { value: 'superset', label: 'Superset', icon: 'sync-alt' },
-  { value: 'circuit', label: 'Circuito', icon: 'autorenew' },
 ];
 
 function draftBlocks(source: Routine | RoutineTemplate): DraftBlock[] {
-  if (source.blocks?.length) return source.blocks.map((block, order) => ({ ...block, order, exercises: block.exercises.map((exercise) => ({
+  if (source.blocks?.length) return source.blocks.map((block, order) => ({ ...block, blockType: block.blockType === 'circuit' ? 'superset' : block.blockType, order, exercises: block.exercises.map((exercise) => ({
     ...exercise,
     equipmentId: typeof exercise.equipmentId === 'object' ? exercise.equipmentId._id : exercise.equipmentId,
   })) }));
@@ -51,30 +50,6 @@ function draftBlocks(source: Routine | RoutineTemplate): DraftBlock[] {
   }));
 }
 
-function findInventoryEquipment(label: string, equipment: Equipment[]) {
-  const normalized = label.toLowerCase();
-  if (normalized.includes('body weight') || normalized.includes('bodyweight')) return BODYWEIGHT;
-  const aliases: Record<string, string[]> = {
-    dumbbell: ['mancuerna', 'peso libre'],
-    barbell: ['barra', 'rack', 'peso libre'],
-    cable: ['polea', 'cable'],
-    'leverage machine': ['máquina', 'maquina'],
-    treadmill: ['caminadora', 'treadmill'],
-    elliptical: ['elíptica', 'eliptica'],
-    'stationary bike': ['bicicleta'],
-  };
-  const terms = aliases[normalized] ?? [normalized];
-  return equipment.find((item) => terms.some((term) => `${item.name} ${item.zone}`.toLowerCase().includes(term)))?._id
-    ?? `catalog:${label}`;
-}
-
-function equipmentTrafficHint(traffic?: EquipmentTraffic) {
-  if (!traffic || traffic.trafficLevel === 'free') return 'Libre';
-  if (traffic.trafficLevel === 'moderate') return 'Demanda media';
-  if (traffic.trafficLevel === 'busy') return `Alta demanda · ~${traffic.estimatedWaitMinutes} min`;
-  return 'En mantenimiento';
-}
-
 export default function RoutineCreateScreen() {
   const { n } = useLocalSearchParams<{ n?: string }>();
   return <RoutineForm key={n ?? 'default'} />;
@@ -89,8 +64,6 @@ function RoutineForm() {
 
   const [clients, setClients] = useState<DirectoryClient[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
-  const [equipmentTraffic, setEquipmentTraffic] = useState<EquipmentTraffic[]>([]);
-  const [muscleGroups, setMuscleGroups] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -114,34 +87,19 @@ function RoutineForm() {
   const [blockSets, setBlockSets] = useState('3');
   const [blockRest, setBlockRest] = useState('60');
   const [draftExercises, setDraftExercises] = useState<DraftExercise[]>([]);
-
-  const [exerciseName, setExerciseName] = useState('');
-  const [selectedCatalogExercise, setSelectedCatalogExercise] = useState<CuratedExercise | null>(null);
-  const [muscleGroup, setMuscleGroup] = useState('');
-  const [isAddingGroup, setIsAddingGroup] = useState(false);
-  const [newGroup, setNewGroup] = useState('');
-  const [equipmentChoice, setEquipmentChoice] = useState('');
-  const [reps, setReps] = useState('10');
-  const [suggestedWeight, setSuggestedWeight] = useState('');
-  const [targetDuration, setTargetDuration] = useState('');
-  const [targetDistance, setTargetDistance] = useState('');
-  const [targetLevel, setTargetLevel] = useState('');
+  const [isExercisePickerVisible, setIsExercisePickerVisible] = useState(false);
 
   useEffect(() => {
     let isCurrent = true;
     async function load() {
       try {
-        const [clientsResponse, equipmentResponse, groupsResponse, traffic] = await Promise.all([
+        const [clientsResponse, equipmentResponse] = await Promise.all([
           api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: 'Cliente' } }),
           api.get<{ equipment: Equipment[] }>('/inventory'),
-          api.get<{ groups: { name: string }[] }>('/muscle-groups'),
-          getEquipmentTraffic().catch(() => [] as EquipmentTraffic[]),
         ]);
         if (!isCurrent) return;
         setClients(clientsResponse.data.users);
         setEquipment(equipmentResponse.data.equipment);
-        setEquipmentTraffic(traffic);
-        setMuscleGroups(groupsResponse.data.groups.map((group) => group.name));
 
         if (editingId) {
           const source = isTemplate
@@ -179,6 +137,8 @@ function RoutineForm() {
     if (!client) return;
     const availableDays = client.availableTrainingDays?.filter((day) => day >= 0 && day <= 6) ?? [];
     prefilledClientId.current = assignedTo;
+    // This effect hydrates the routine from the selected client once.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGoal(client.goal ?? '');
     setLevel(client.experienceLevel ?? 'principiante');
     setSelectedDays(availableDays.length ? availableDays : [1, 2, 3]);
@@ -187,11 +147,6 @@ function RoutineForm() {
   if (user?.role !== 'Coach') return <Redirect href="/(main)/routines" />;
 
   const availableEquipment = equipment.filter((item) => item.status !== 'out_of_service');
-  const selectedEquipment = equipmentChoice === BODYWEIGHT ? undefined : availableEquipment.find((item) => item._id === equipmentChoice);
-  const metricType: 'strength' | 'cardio' = equipmentChoice === BODYWEIGHT
-    ? 'strength'
-    : selectedEquipment?.type ?? 'strength';
-  const maxBlockExercises = blockType === 'single' ? 1 : 20;
   const selectedClient = clients.find((client) => client.id === assignedTo);
 
   function openClientFile() {
@@ -216,94 +171,13 @@ function RoutineForm() {
     }
   }
 
-  async function selectCatalogExercise(exercise: CuratedExercise) {
-    setSelectedCatalogExercise(exercise);
-    setExerciseName(exercise.name);
-    const targetMuscle = exercise.muscleGroup || 'General';
-    setMuscleGroups((current) => current.includes(targetMuscle) ? current : [...current, targetMuscle].sort((a, b) => a.localeCompare(b)));
-    setMuscleGroup(targetMuscle);
-    setEquipmentChoice(exercise.equipment ? findInventoryEquipment(exercise.equipment, availableEquipment) : BODYWEIGHT);
-    try {
-      const response = await api.post<{ group: { name: string } }>('/muscle-groups', { name: targetMuscle });
-      setMuscleGroups((current) => current.includes(response.data.group.name) ? current : [...current, response.data.group.name].sort((a, b) => a.localeCompare(b)));
-      setMuscleGroup(response.data.group.name);
-    } catch {
-      setError('El grupo muscular se usará en este ejercicio, pero no se pudo guardar para próximos usos.');
-    }
-    setSuggestedWeight('');
-    setTargetDuration('');
-    setTargetDistance('');
-    setTargetLevel('');
-  }
-
   function toggleDay(day: number) {
     setSelectedDays((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day]);
     setBlockDay((current) => current === day ? null : current);
   }
 
-  async function saveGroup() {
-    const name = newGroup.trim();
-    if (name.length < 2) return setError('Escribe el nombre del grupo muscular.');
-    setError('');
-    try {
-      const response = await api.post<{ group: { name: string } }>('/muscle-groups', { name });
-      const saved = response.data.group.name;
-      setMuscleGroups((current) => current.includes(saved) ? current : [...current, saved].sort((a, b) => a.localeCompare(b)));
-      setMuscleGroup(saved);
-      setNewGroup('');
-      setIsAddingGroup(false);
-    } catch (requestError) {
-      setError(getApiErrorMessage(requestError, 'No se pudo guardar el grupo muscular.'));
-    }
-  }
-
-  function addExerciseToBlock() {
-    setError('');
-    if (draftExercises.length >= maxBlockExercises) return setError('Este bloque individual ya tiene su ejercicio.');
-    if (!exerciseName.trim() || !muscleGroup || !equipmentChoice) return setError('Selecciona un ejercicio del catálogo, grupo muscular y equipo.');
-
-    let exercise: DraftExercise;
-    if (metricType === 'cardio') {
-      const duration = targetDuration ? Number(targetDuration) : undefined;
-      const distance = targetDistance ? Number(targetDistance.replace(',', '.')) : undefined;
-      const target = targetLevel ? Number(targetLevel) : undefined;
-      if (!duration && !distance && !target) return setError('Agrega duración, distancia o nivel/inclinación para cardio.');
-      if ((duration !== undefined && (!Number.isInteger(duration) || duration < 1 || duration > 600))
-        || (distance !== undefined && (!Number.isFinite(distance) || distance <= 0))
-        || (target !== undefined && (!Number.isInteger(target) || target < 1 || target > 100))) {
-        return setError('Revisa las métricas objetivo de cardio.');
-      }
-      exercise = {
-        name: exerciseName.trim(), muscleGroup, equipment: selectedCatalogExercise?.equipment ?? selectedEquipment?.name,
-        metricType: 'cardio', gifUrl: selectedCatalogExercise?.videoUrl, videoUrl: selectedCatalogExercise?.videoUrl, order: draftExercises.length,
-        ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
-        ...(duration ? { targetDurationMinutes: duration } : {}),
-        ...(distance ? { targetDistanceKm: distance } : {}),
-        ...(target ? { targetLevel: target } : {}),
-      };
-    } else {
-      if (!reps.trim()) return setError('Indica las repeticiones objetivo.');
-      const weight = suggestedWeight.trim() ? Number(suggestedWeight.replace(',', '.')) : undefined;
-      if (weight !== undefined && (!Number.isFinite(weight) || weight < 0 || weight > 1000)) return setError('El peso sugerido debe ser de 0 a 1000 kg.');
-      exercise = {
-        name: exerciseName.trim(), muscleGroup,
-        equipment: selectedCatalogExercise?.equipment ?? (selectedEquipment?.name ?? (equipmentChoice === BODYWEIGHT ? 'Peso corporal / libre' : undefined)),
-        metricType: 'strength', gifUrl: selectedCatalogExercise?.videoUrl, videoUrl: selectedCatalogExercise?.videoUrl, reps: reps.trim(), order: draftExercises.length,
-        bodyweight: equipmentChoice === BODYWEIGHT || selectedCatalogExercise?.equipment?.toLowerCase().includes('body weight') === true,
-        ...(selectedEquipment ? { equipmentId: selectedEquipment._id } : {}),
-        ...(weight !== undefined ? { suggestedWeight: weight } : {}),
-      };
-    }
-
-    setDraftExercises((current) => [...current, exercise]);
-    setExerciseName('');
-    setSelectedCatalogExercise(null);
-    setMuscleGroup('');
-    setEquipmentChoice('');
-    setSuggestedWeight('');
-    setTargetDuration('');
-    setTargetDistance('');
-    setTargetLevel('');
+  function addExercisesToBlock(exercises: ExerciseSelection[]) {
+    setDraftExercises((current) => [...current, ...exercises.map((exercise, index) => ({ ...exercise, order: current.length + index }))]);
   }
 
   function addBlock() {
@@ -314,8 +188,8 @@ function RoutineForm() {
     if (!Number.isInteger(count) || count < 1 || count > 50 || !Number.isInteger(rest) || rest < 0 || rest > 3600) {
       return setError('Revisa las series y el descanso del bloque.');
     }
-    if ((blockType === 'single' && draftExercises.length !== 1) || (blockType !== 'single' && draftExercises.length < 2)) {
-      return setError(blockType === 'single' ? 'Agrega un ejercicio al bloque.' : 'Un superset o circuito requiere al menos dos ejercicios.');
+    if ((blockType === 'single' && draftExercises.length !== 1) || (blockType === 'superset' && draftExercises.length < 2)) {
+      return setError(blockType === 'single' ? 'Agrega un ejercicio al bloque.' : 'Un superset requiere al menos dos ejercicios.');
     }
     setBlocks((current) => [...current, {
       day: blockDay,
@@ -495,55 +369,7 @@ function RoutineForm() {
         </View>
 
         <View style={styles.rule} />
-        <SectionTitle>Ejercicio {draftExercises.length + 1}{blockType === 'single' ? '' : ` de ${maxBlockExercises}`}</SectionTitle>
-        <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={muscleGroups.map((name) => ({ value: name, label: name }))} value={muscleGroup} onChange={(value) => { setMuscleGroup(value); setExerciseName(''); setSelectedCatalogExercise(null); setEquipmentChoice(''); }} addOption={{ label: '+ Agregar nuevo grupo', onSelect: () => setIsAddingGroup(true) }} />
-        <ExerciseSearch
-          value={exerciseName}
-          muscleGroup={muscleGroup}
-          onChangeText={(value) => {
-            setExerciseName(value);
-            setSelectedCatalogExercise(null);
-          }}
-          onSelect={selectCatalogExercise}
-        />
-        {isAddingGroup ? (
-          <View style={styles.group}>
-            <Field label="Nuevo grupo muscular" placeholder="Antebrazo" value={newGroup} onChangeText={setNewGroup} />
-            <View style={styles.row}><View style={styles.flex}><ActionButton onPress={() => void saveGroup()}>Guardar grupo</ActionButton></View><View style={styles.flex}><ActionButton secondary onPress={() => { setIsAddingGroup(false); setNewGroup(''); }}>Cancelar</ActionButton></View></View>
-          </View>
-        ) : null}
-        <SelectField label="Equipo" placeholder="Selecciona el equipo" options={[
-          { value: BODYWEIGHT, label: 'Peso Corporal / Libre', hint: 'Fuerza sin máquina' },
-          ...(equipmentChoice.startsWith('catalog:') && selectedCatalogExercise?.equipment ? [{ value: equipmentChoice, label: selectedCatalogExercise.equipment, hint: 'Equipo del catálogo' }] : []),
-          ...availableEquipment.map((item) => ({
-            value: item._id,
-            label: item.name,
-            hint: `${item.zone} · ${item.type === 'cardio' ? 'Cardio' : 'Fuerza'} · ${equipmentTrafficHint(equipmentTraffic.find((traffic) => traffic.equipmentId === item._id))}`,
-          })),
-        ]} value={equipmentChoice} onChange={setEquipmentChoice} />
-        {metricType === 'cardio' ? (
-          <>
-            <Text style={styles.helper}>Cardio: define al menos un objetivo de duración, distancia o nivel/inclinación.</Text>
-            <View style={styles.row}>
-              <View style={styles.flex}><Field label="Duración objetivo (min)" keyboardType="number-pad" value={targetDuration} onChangeText={(value) => setTargetDuration(value.replace(/\D/g, ''))} placeholder="Opcional" /></View>
-              <View style={styles.flex}><Field label="Distancia objetivo (km)" keyboardType="decimal-pad" value={targetDistance} onChangeText={setTargetDistance} placeholder="Opcional" /></View>
-            </View>
-            <Field label="Nivel / inclinación" keyboardType="number-pad" value={targetLevel} onChangeText={(value) => setTargetLevel(value.replace(/\D/g, ''))} placeholder="Opcional" />
-          </>
-        ) : (
-          <View style={styles.row}>
-            <View style={styles.flex}><Field label="Repeticiones objetivo" value={reps} onChangeText={setReps} placeholder="8-10" /></View>
-            <View style={styles.flex}><Field label="Peso sugerido (kg)" keyboardType="decimal-pad" value={suggestedWeight} onChangeText={setSuggestedWeight} placeholder="Opcional" /></View>
-          </View>
-        )}
-        <Pressable
-          accessibilityRole="button"
-          disabled={isLoading || draftExercises.length >= maxBlockExercises}
-          onPress={addExerciseToBlock}
-          style={({ pressed }) => [styles.addExerciseButton, (isLoading || draftExercises.length >= maxBlockExercises) && styles.disabledButton, pressed && styles.buttonPressed]}>
-          <Text style={styles.addExerciseButtonText}>Añadir ejercicio al bloque</Text>
-        </Pressable>
-
+        <SectionTitle>Ejercicios del bloque</SectionTitle>
         {draftExercises.map((exercise, index) => (
           <View key={exercise._id ?? `${exercise.name}-${index}`} style={styles.draftRow}>
             <IconBadge name={exercise.metricType === 'cardio' ? 'directions-run' : 'fitness-center'} color={exercise.metricType === 'cardio' ? palette.cyan : palette.violet} size={36} />
@@ -554,6 +380,20 @@ function RoutineForm() {
             <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${exercise.name}`} onPress={() => setDraftExercises((current) => current.filter((_, i) => i !== index))}><MaterialIcons name="delete" size={21} color={palette.danger} /></Pressable>
           </View>
         ))}
+        <Pressable
+          accessibilityRole="button"
+          disabled={blockType === 'single' && draftExercises.length === 1}
+          onPress={() => setIsExercisePickerVisible(true)}
+          style={({ pressed }) => [styles.addExerciseButton, (blockType === 'single' && draftExercises.length === 1) && styles.disabledButton, pressed && styles.buttonPressed]}>
+          <Text style={styles.addExerciseButtonText}>{blockType === 'single' ? '+ Añadir ejercicio' : '+ Añadir ejercicios al superset'}</Text>
+        </Pressable>
+        <ExerciseSearch
+          visible={isExercisePickerVisible}
+          mode={blockType === 'single' ? 'single' : 'superset'}
+          equipment={availableEquipment}
+          onClose={() => setIsExercisePickerVisible(false)}
+          onConfirm={addExercisesToBlock}
+        />
         {error ? <Notice error>{error}</Notice> : null}
         <Pressable
           accessibilityRole="button"

@@ -36,7 +36,7 @@ function serializeEquipment(item, activeReportsCount = 0) {
 }
 
 async function getEquipment(req, res) {
-  const equipment = await Equipment.find({}).sort({ name: 1 }).lean();
+  const equipment = await Equipment.find({ isDeleted: { $ne: true } }).sort({ name: 1 }).lean();
   const activeReports = await MaintenanceReport.aggregate([
     { $match: { status: { $in: ['pending', 'in_progress'] } } },
     { $group: { _id: '$equipment', activeReportsCount: { $sum: 1 } } },
@@ -60,7 +60,7 @@ async function updateEquipment(req, res) {
   const input = equipmentSchema.partial().parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const equipment = await Equipment.findByIdAndUpdate(req.params.id, input, {
+  const equipment = await Equipment.findOneAndUpdate({ _id: req.params.id, isDeleted: { $ne: true } }, input, {
     new: true,
     runValidators: true,
   }).lean();
@@ -70,7 +70,11 @@ async function updateEquipment(req, res) {
 
 async function deleteEquipment(req, res) {
   assertId(req.params.id);
-  const equipment = await Equipment.findByIdAndDelete(req.params.id);
+  const equipment = await Equipment.findOneAndUpdate(
+    { _id: req.params.id, isDeleted: { $ne: true } },
+    { $set: { isDeleted: true, deletedAt: new Date(), status: 'out_of_service' } },
+    { new: true, runValidators: true },
+  );
   if (!equipment) throw new HttpError(404, 'Equipo no encontrado.');
   res.status(204).end();
 }

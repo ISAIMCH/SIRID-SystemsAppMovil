@@ -59,7 +59,10 @@ function assertId(id) {
 }
 
 async function listPlans(req, res) {
-  const filter = req.user.role === 'Admin' && req.query.all === 'true' ? {} : { isActive: true };
+  const filter = {
+    isDeleted: { $ne: true },
+    ...(req.user.role === 'Admin' && req.query.all === 'true' ? {} : { isActive: true }),
+  };
   const plans = await MembershipPlan.find(filter).sort({ price: 1, name: 1 }).lean();
   res.json({ plans });
 }
@@ -73,14 +76,22 @@ async function updatePlan(req, res) {
   assertId(req.params.id);
   const input = parsePlanInput(req.body, { partial: true });
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
-  const plan = await MembershipPlan.findByIdAndUpdate(req.params.id, input, { new: true, runValidators: true });
+  const plan = await MembershipPlan.findOneAndUpdate(
+    { _id: req.params.id, isDeleted: { $ne: true } },
+    input,
+    { new: true, runValidators: true },
+  );
   if (!plan) throw new HttpError(404, 'Plan no encontrado.');
   res.json({ plan });
 }
 
 async function deletePlan(req, res) {
   assertId(req.params.id);
-  const plan = await MembershipPlan.findByIdAndDelete(req.params.id);
+  const plan = await MembershipPlan.findOneAndUpdate(
+    { _id: req.params.id, isDeleted: { $ne: true } },
+    { $set: { isDeleted: true, deletedAt: new Date(), isActive: false } },
+    { new: true },
+  );
   if (!plan) throw new HttpError(404, 'Plan no encontrado.');
   res.status(204).end();
 }

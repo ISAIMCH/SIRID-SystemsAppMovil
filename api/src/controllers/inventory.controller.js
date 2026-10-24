@@ -34,7 +34,7 @@ function serializeEquipment(item) {
 }
 
 async function listEquipment(req, res) {
-  const equipment = await Equipment.find({}).sort({ zone: 1, name: 1 }).lean();
+  const equipment = await Equipment.find({ isDeleted: { $ne: true } }).sort({ zone: 1, name: 1 }).lean();
   res.json({ equipment: equipment.map(serializeEquipment) });
 }
 
@@ -81,7 +81,7 @@ async function getEquipmentTraffic(req, res) {
   startOfToday.setHours(0, 0, 0, 0);
 
   const [equipment, routines, sessions] = await Promise.all([
-    Equipment.find({}).sort({ zone: 1, name: 1 }).lean(),
+    Equipment.find({ isDeleted: { $ne: true } }).sort({ zone: 1, name: 1 }).lean(),
     Routine.find({ status: 'active', assignedTo: { $ne: null } })
       .populate('assignedTo', 'role isActive currentlyInside preferredTrainingTime availableTrainingDays')
       .lean(),
@@ -149,10 +149,10 @@ async function updateEquipment(req, res) {
   const input = equipmentSchema.partial().parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const equipment = await Equipment.findById(req.params.id);
+  const equipment = await Equipment.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
   if (!equipment) throw new HttpError(404, 'Equipo no encontrado.');
 
-  const raw = await Equipment.findById(req.params.id).lean();
+  const raw = await Equipment.findOne({ _id: req.params.id, isDeleted: { $ne: true } }).lean();
   const normalized = serializeEquipment(raw);
   equipment.set({
     ...input,

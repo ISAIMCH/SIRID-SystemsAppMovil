@@ -18,7 +18,7 @@ function validRoutine(overrides = {}) {
       order: 0,
       exercises: [{
         name: 'Prensa',
-        muscleGroup: 'Pierna',
+        muscleGroup: 'Cuádriceps',
         equipmentId: '507f1f77bcf86cd799439022',
         reps: '10',
         order: 0,

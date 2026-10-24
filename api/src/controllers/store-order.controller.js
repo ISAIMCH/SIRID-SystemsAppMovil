@@ -41,7 +41,7 @@ function generatePickupPin() {
 async function deductInventory(session, order) {
   for (const item of order.items) {
     const product = await Product.findOneAndUpdate(
-      { _id: item.productId, gymId: order.gymId, stock: { $gte: item.quantity } },
+      { _id: item.productId, gymId: order.gymId, isDeleted: { $ne: true }, stock: { $gte: item.quantity } },
       { $inc: { stock: -item.quantity } },
       { new: true, session },
     );
@@ -58,7 +58,7 @@ async function createOrder(req, res) {
   for (const item of input.items) quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
 
   const productIds = [...quantities.keys()];
-  const products = await Product.find({ _id: { $in: productIds }, gymId }).lean();
+  const products = await Product.find({ _id: { $in: productIds }, gymId, isDeleted: { $ne: true } }).lean();
   if (products.length !== productIds.length) throw new HttpError(400, 'Uno o más productos no existen en este gimnasio.');
 
   const productById = new Map(products.map((product) => [String(product._id), product]));
