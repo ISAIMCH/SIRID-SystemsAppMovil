@@ -2,6 +2,7 @@ const { z } = require('zod');
 const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const HttpError = require('../utils/http-error');
+const { inferEquipmentCategory } = require('../constants/equipment-families');
 
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const equipmentSchema = z.object({
@@ -13,6 +14,7 @@ const equipmentSchema = z.object({
   totalQuantity: z.coerce.number().int().min(1).max(500).default(1),
   maintenanceQuantity: z.coerce.number().int().min(0).max(500).default(0),
   status: z.enum(['available', 'out_of_service']).default('available'),
+  equipmentCategory: z.string().trim().max(40).optional(),
 });
 
 function assertId(id) {
@@ -31,6 +33,7 @@ function serializeEquipment(item, activeReportsCount = 0) {
     maintenanceQuantity: item.maintenanceQuantity,
     status: item.status,
     usageFrequency: item.usageFrequency,
+    equipmentCategory: item.equipmentCategory ?? inferEquipmentCategory(item),
     activeReportsCount,
   };
 }
@@ -51,7 +54,8 @@ async function getEquipment(req, res) {
 }
 
 async function createEquipment(req, res) {
-  const equipment = await Equipment.create(equipmentSchema.parse(req.body));
+  const input = equipmentSchema.parse(req.body);
+  const equipment = await Equipment.create({ ...input, equipmentCategory: inferEquipmentCategory(input) });
   res.status(201).json({ equipment: serializeEquipment(equipment.toObject()) });
 }
 

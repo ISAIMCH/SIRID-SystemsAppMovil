@@ -6,6 +6,7 @@ const equipmentSchema = new mongoose.Schema({
   brand: { type: String, trim: true, maxlength: 80 },
   imageUrl: { type: String, trim: true, default: '' },
   type: { type: String, enum: ['strength', 'cardio'], default: 'strength', required: true },
+  equipmentCategory: { type: String, trim: true, maxlength: 40 },
   totalQuantity: { type: Number, default: 1, min: 1, max: 500, required: true },
   maintenanceQuantity: { type: Number, default: 0, min: 0, required: true },
   usageFrequency: { type: String, enum: ['low', 'medium', 'high'], default: 'medium' },

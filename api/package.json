@@ -13,6 +13,7 @@
     "test": "node --test",
     "seed": "node seed.js",
     "import:exercises": "node scripts/import-exercises.js",
+    "seed:exercises": "node scripts/seed-external-exercises.js",
     "translate:exercises": "node scripts/translate-dictionary.js"
   },
   "dependencies": {

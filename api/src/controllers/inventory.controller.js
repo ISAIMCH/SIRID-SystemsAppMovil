@@ -3,6 +3,7 @@ const Equipment = require('../models/equipment.model');
 const Routine = require('../models/routine.model');
 const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
+const { inferEquipmentCategory } = require('../constants/equipment-families');
 
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const equipmentSchema = z.object({
@@ -13,6 +14,7 @@ const equipmentSchema = z.object({
   type: z.enum(['strength', 'cardio']),
   totalQuantity: z.number().int().min(1).max(500),
   maintenanceQuantity: z.number().int().min(0).max(500),
+  equipmentCategory: z.string().trim().max(40).optional(),
 });
 
 // Los equipos anteriores no tienen cantidades; se completan al leerlos.
@@ -30,6 +32,7 @@ function serializeEquipment(item) {
     totalQuantity,
     maintenanceQuantity,
     status: totalQuantity - maintenanceQuantity > 0 ? 'available' : 'out_of_service',
+    equipmentCategory: item.equipmentCategory ?? inferEquipmentCategory(item),
   };
 }
 
@@ -140,7 +143,7 @@ async function createEquipment(req, res) {
   if (input.maintenanceQuantity > input.totalQuantity) {
     throw new HttpError(400, 'Las unidades en mantenimiento no pueden superar el total.');
   }
-  const equipment = await Equipment.create(input);
+  const equipment = await Equipment.create({ ...input, equipmentCategory: inferEquipmentCategory(input) });
   res.status(201).json({ equipment: serializeEquipment(equipment.toObject()) });
 }
 
@@ -156,6 +159,7 @@ async function updateEquipment(req, res) {
   const normalized = serializeEquipment(raw);
   equipment.set({
     ...input,
+    equipmentCategory: input.equipmentCategory ?? inferEquipmentCategory({ ...normalized, ...input }),
     totalQuantity: input.totalQuantity ?? normalized.totalQuantity,
     maintenanceQuantity: input.maintenanceQuantity ?? normalized.maintenanceQuantity,
   });
