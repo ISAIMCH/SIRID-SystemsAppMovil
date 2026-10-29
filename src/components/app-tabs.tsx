@@ -42,7 +42,6 @@ const TAB_NAMES = Object.keys(TAB_META) as TabName[];
 const SECONDARY_SCREENS = ['routine-create', 'clients', 'profile', 'plans', 'client-workout-detail', 'client-billing'];
 
 const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } } as const;
-const CLIENT_DETAIL_OPTIONS = { href: null } as const;
 
 export default function AppTabs() {
   const { user } = useAuth();
@@ -90,7 +89,7 @@ export default function AppTabs() {
         );
       })}
       {SECONDARY_SCREENS.map((name) => (
-        <Tabs.Screen key={name} name={name} options={name === 'client-workout-detail' ? CLIENT_DETAIL_OPTIONS : HIDDEN_OPTIONS} />
+        <Tabs.Screen key={name} name={name} options={HIDDEN_OPTIONS} />
       ))}
     </Tabs>
   );
