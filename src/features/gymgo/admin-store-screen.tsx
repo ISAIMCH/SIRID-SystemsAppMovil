@@ -45,10 +45,8 @@ export default function AdminStoreScreen({ initialTab = 'products', hideTabs = f
 
   useEffect(() => {
     const realtime = connectSocket();
-    const refreshStore = () => {
-      setIsLoading(true);
-      setRetryNumber((value) => value + 1);
-    };
+    // Realtime refreshes are silent so open forms are not unmounted.
+    const refreshStore = () => setRetryNumber((value) => value + 1);
     realtime.on('sale-updated', refreshStore);
     return () => { realtime.off('sale-updated', refreshStore); };
   }, []);

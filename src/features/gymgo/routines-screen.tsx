@@ -268,7 +268,7 @@ export default function RoutinesScreen() {
         setDeferredRoutineReload(true);
         return;
       }
-      setIsLoading(true);
+      // Realtime refreshes are silent: the current routines stay visible while reloading.
       setRetryNumber((value) => value + 1);
     };
     realtime.on('routine-updated', refreshRoutines);
@@ -279,7 +279,6 @@ export default function RoutinesScreen() {
     if (!deferredRoutineReload || startedAt !== null || Object.keys(completedSets).length > 0) return;
     const reloadTimer = setTimeout(() => {
       setDeferredRoutineReload(false);
-      setIsLoading(true);
       setRetryNumber((value) => value + 1);
     }, 0);
     return () => clearTimeout(reloadTimer);

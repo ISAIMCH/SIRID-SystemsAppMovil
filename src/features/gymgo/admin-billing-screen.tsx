@@ -67,10 +67,8 @@ export default function AdminBillingScreen() {
 
   useEffect(() => {
     const realtime = connectSocket();
-    const refreshPayments = () => {
-      setIsLoading(true);
-      setReloadKey((value) => value + 1);
-    };
+    // Realtime refreshes are silent: the current list stays visible while reloading.
+    const refreshPayments = () => setReloadKey((value) => value + 1);
     realtime.on('payment-updated', refreshPayments);
     return () => { realtime.off('payment-updated', refreshPayments); };
   }, []);

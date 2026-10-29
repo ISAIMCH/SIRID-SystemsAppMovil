@@ -48,6 +48,7 @@ export default function StoreScreen() {
     ])
       .then(([productsResponse, promotionsResponse]) => {
         if (!isCurrent) return;
+        setError('');
         setProducts(productsResponse.data.products);
         setPromotions(promotionsResponse);
       })
@@ -62,10 +63,8 @@ export default function StoreScreen() {
 
   useEffect(() => {
     const realtime = connectSocket();
-    const refreshStore = () => {
-      setIsLoading(true);
-      setReloadKey((value) => value + 1);
-    };
+    // Realtime refreshes are silent: the current list stays visible while reloading.
+    const refreshStore = () => setReloadKey((value) => value + 1);
     realtime.on('sale-updated', refreshStore);
     return () => { realtime.off('sale-updated', refreshStore); };
   }, []);

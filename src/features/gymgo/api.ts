@@ -23,6 +23,22 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+let handleUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null) {
+  handleUnauthorized = handler;
+}
+
+// An expired or revoked session ends here; requests sent with an older token are ignored.
+api.interceptors.response.use(undefined, async (error: unknown) => {
+  if (isAxiosError(error) && error.response?.status === 401) {
+    const sentAuthorization = error.config?.headers?.Authorization;
+    const token = await readAccessToken();
+    if (token && sentAuthorization === `Bearer ${token}`) handleUnauthorized?.();
+  }
+  return Promise.reject(error);
+});
+
 export function getApiErrorMessage(error: unknown, fallback: string) {
   if (isAxiosError<{ error?: string }>(error)) {
     if (error.response) return error.response.data?.error ?? fallback;
