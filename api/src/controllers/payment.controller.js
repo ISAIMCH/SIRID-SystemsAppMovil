@@ -68,7 +68,7 @@ async function createPayment(req, res) {
     method: input.source,
     reference: input.reference ?? `GYM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
   });
-  emitRealtime(req, 'payment-updated', { action: 'created', payment: payment.toObject() });
+  emitRealtime(req, 'payment-updated', { action: 'created', payment: payment.toObject() }, [payment.user]);
   res.status(201).json({ payment });
 }
 
@@ -96,7 +96,7 @@ async function updatePayment(req, res) {
     .populate('planId', 'name')
     .populate('user', 'name email');
   if (!payment) throw new HttpError(404, 'Pago no encontrado.');
-  emitRealtime(req, 'payment-updated', { action: 'updated', payment: payment.toObject() });
+  emitRealtime(req, 'payment-updated', { action: 'updated', payment: payment.toObject() }, [payment.user]);
   res.json({ payment });
 }
 
@@ -129,7 +129,7 @@ async function redeemPaymentByPin(req, res) {
     .populate('planId', 'name')
     .populate('user', 'name email')
     .lean();
-  emitRealtime(req, 'payment-updated', { action: 'redeemed', payment });
+  emitRealtime(req, 'payment-updated', { action: 'redeemed', payment }, [payment.user]);
   res.json({ payment });
 }
 
@@ -137,7 +137,7 @@ async function deletePayment(req, res) {
   assertId(req.params.id);
   const payment = await Payment.findByIdAndDelete(req.params.id);
   if (!payment) throw new HttpError(404, 'Pago no encontrado.');
-  emitRealtime(req, 'payment-updated', { action: 'deleted', paymentId: req.params.id });
+  emitRealtime(req, 'payment-updated', { action: 'deleted', paymentId: req.params.id }, [payment.user]);
   res.status(204).end();
 }
 

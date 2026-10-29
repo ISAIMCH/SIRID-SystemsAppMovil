@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
+import { disconnectSocket } from '../../services/socket';
 import { api } from './api';
 import { readAccessToken, removeAccessToken, writeAccessToken } from './token-storage';
 
@@ -108,6 +109,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function signOut() {
+    disconnectSocket();
     await removeAccessToken();
     setUser(null);
   }

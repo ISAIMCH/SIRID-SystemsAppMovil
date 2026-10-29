@@ -4,7 +4,7 @@ const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
-const { emitRealtime } = require('../utils/realtime');
+const { emitRealtime, broadcastRealtime } = require('../utils/realtime');
 const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 const exerciseSchema = z.object({
@@ -197,6 +197,12 @@ function normalizeBlocks(source) {
   });
 }
 
+// Unassigned (template) routines reach everyone; assigned ones only their client, author and Admins.
+function emitRoutineUpdate(req, payload, routine, previousAssignedTo = null) {
+  if (!routine.assignedTo) return broadcastRealtime(req, 'routine-updated', payload);
+  return emitRealtime(req, 'routine-updated', payload, [routine.assignedTo, previousAssignedTo, routine.createdBy]);
+}
+
 function routineResponse(routine) {
   const value = routine.toObject ? routine.toObject() : routine;
   const blocks = normalizeBlocks(value).map((block) => ({
@@ -297,7 +303,7 @@ async function createRoutine(req, res) {
       createdBy: req.user.id,
     });
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+    emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
     return res.status(201).json({ routine: response });
   }
 
@@ -310,7 +316,7 @@ async function createRoutine(req, res) {
       createdBy: req.user.id,
     });
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+    emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
     return res.status(201).json({ routine: response });
   }
 
@@ -323,7 +329,7 @@ async function createRoutine(req, res) {
   }
   const routine = await Routine.create({ ...input, createdBy: req.user.id });
   const response = routineResponse(routine);
-  emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+  emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
   res.status(201).json({ routine: response });
 }
 
@@ -356,6 +362,7 @@ async function updateRoutine(req, res) {
     const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
     if (nextType === 'custom' && !nextAssignedTo) throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
     if (input.assignedTo) await validateSimpleAssignment(input.assignedTo, req);
+    const previousAssignedTo = routine.assignedTo;
     Object.assign(routine, {
       ...input,
       objective: input.objective ?? routine.objective,
@@ -365,7 +372,7 @@ async function updateRoutine(req, res) {
     });
     await routine.save();
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+    emitRoutineUpdate(req, { action: 'updated', routine: response }, routine, previousAssignedTo);
     return res.json({ routine: response });
   }
 
@@ -383,6 +390,7 @@ async function updateRoutine(req, res) {
     const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
     if (nextType === 'custom' && !nextAssignedTo) throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
     if (input.assignedTo) await validateSimpleAssignment(input.assignedTo, req);
+    const previousAssignedTo = routine.assignedTo;
     Object.assign(routine, {
       ...input,
       type: nextType,
@@ -390,7 +398,7 @@ async function updateRoutine(req, res) {
     });
     await routine.save();
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+    emitRoutineUpdate(req, { action: 'updated', routine: response }, routine, previousAssignedTo);
     return res.json({ routine: response });
   }
 
@@ -418,7 +426,7 @@ async function updateRoutine(req, res) {
   Object.assign(routine, input);
   await routine.save();
   const response = routineResponse(routine);
-  emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+  emitRoutineUpdate(req, { action: 'updated', routine: response }, routine);
   res.json({ routine: response });
 }
 
@@ -433,7 +441,7 @@ async function deleteRoutine(req, res) {
   routine.deletedAt = new Date();
   routine.status = 'inactive';
   await routine.save();
-  emitRealtime(req, 'routine-updated', { action: 'deleted', routineId: req.params.id });
+  emitRoutineUpdate(req, { action: 'deleted', routineId: req.params.id }, routine);
   res.status(204).end();
 }
 

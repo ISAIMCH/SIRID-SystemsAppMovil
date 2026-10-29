@@ -49,11 +49,16 @@ async function deductInventory(session, order) {
   }
 }
 
+// Only an Admin may create orders for another user or with a non-pending status.
+function resolveOrderOwnership(user, input) {
+  if (user.role !== 'Admin') return { userId: String(user._id), status: 'pending' };
+  return { userId: input.userId ?? String(user._id), status: input.status ?? 'paid' };
+}
+
 async function createOrder(req, res) {
   const input = orderSchema.parse(req.body);
   const gymId = getGymId(req);
-  const userId = input.userId ?? String(req.user._id);
-  const status = input.status ?? (req.user.role === 'Admin' ? 'paid' : 'pending');
+  const { userId, status } = resolveOrderOwnership(req.user, input);
   const quantities = new Map();
   for (const item of input.items) quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
 
@@ -111,7 +116,7 @@ async function createOrder(req, res) {
       .populate('items.productId', 'name imageUrl price')
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
-    emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder });
+    emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder }, [createdOrder.userId]);
     res.status(201).json({ order: createdOrder });
   } finally {
     await session.endSession();
@@ -163,7 +168,7 @@ async function updateOrderStatus(req, res) {
       .populate('items.productId', 'name imageUrl price')
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
-    emitRealtime(req, 'sale-updated', { action: 'updated', order: updatedOrder });
+    emitRealtime(req, 'sale-updated', { action: 'updated', order: updatedOrder }, [updatedOrder.userId]);
     res.json({ order: updatedOrder });
   } finally {
     await session.endSession();
@@ -189,11 +194,11 @@ async function redeemOrderByPin(req, res) {
       .populate('items.productId', 'name imageUrl price')
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
-    emitRealtime(req, 'sale-updated', { action: 'redeemed', order: updatedOrder });
+    emitRealtime(req, 'sale-updated', { action: 'redeemed', order: updatedOrder }, [updatedOrder.userId]);
     res.json({ order: updatedOrder });
   } finally {
     await session.endSession();
   }
 }
 
-module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus, redeemOrderByPin };
+module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus, redeemOrderByPin, resolveOrderOwnership };

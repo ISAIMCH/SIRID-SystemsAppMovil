@@ -1,5 +1,4 @@
 const express = require('express');
-const path = require('node:path');
 const cors = require('cors');
 const helmet = require('helmet');
 const { rateLimit } = require('express-rate-limit');
@@ -24,6 +23,7 @@ const muscleGroupRoutes = require('./routes/muscle-group.routes');
 const exerciseDictionaryRoutes = require('./routes/exercise-dictionary.routes');
 const exerciseRoutes = require('./routes/exercise.routes');
 const userRoutes = require('./routes/user.routes');
+const documentRoutes = require('./routes/document.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -51,7 +51,7 @@ app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draf
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/bootstrap-admin', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false }));
 
-app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/api/uploads', documentRoutes);
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
