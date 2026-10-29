@@ -58,7 +58,7 @@ Las contraseñas se guardan hasheadas con bcrypt. El login entrega un JWT firmad
 
 ### Configuración sensible y Render
 
-Las variables se describen en `api/.env.example`. En Render deben definirse, como mínimo, `MONGO_URI`, `JWT_SECRET`, `QR_TOKEN_SECRET`, `IOT_DEVICE_API_KEY`, `ADMIN_BOOTSTRAP_KEY` y `NODE_ENV=production`; los secretos JWT y QR deben ser distintos y fuertes. `CORS_ORIGINS` permite restringir orígenes web.
+Las variables se describen en `api/.env.example`. En Render deben definirse, como mínimo, `MONGO_URI`, `JWT_SECRET`, `QR_TOKEN_SECRET`, `IOT_DEVICE_API_KEY`, `ADMIN_BOOTSTRAP_KEY` y `NODE_ENV=production`; los secretos JWT y QR deben ser distintos y fuertes. En producción también es obligatorio `CORS_ORIGINS`: la lista, separada por comas, de los orígenes web permitidos (por ejemplo, la URL del dashboard de Admin). Sin esa variable, la API no arranca. La app móvil no envía `Origin`, así que no le afecta.
 
 Para crear el primer Admin, configura `ENABLE_ADMIN_BOOTSTRAP=true` de forma temporal. Envía a `/api/auth/bootstrap-admin` un JSON con `name`, `email`, `password` (mínimo 10 caracteres) y `bootstrapKey` igual a `ADMIN_BOOTSTRAP_KEY`. Después de crearlo, cambia `ENABLE_ADMIN_BOOTSTRAP=false` y elimina o rota la clave de bootstrap. Si ya existe un Admin, inicia sesión con esa cuenta; el endpoint inicial responde conflicto y no crea otro.
 

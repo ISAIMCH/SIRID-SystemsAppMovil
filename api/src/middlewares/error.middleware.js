@@ -22,6 +22,10 @@ function errorHandler(error, req, res, next) {
   } else if (error instanceof mongoose.Error.CastError) {
     statusCode = 400;
     message = 'El identificador o valor enviado no es válido.';
+  } else if (error.type === 'entity.too.large') {
+    message = 'El contenido enviado es demasiado grande.';
+  } else if (error.type === 'entity.parse.failed') {
+    message = 'El cuerpo de la petición no es JSON válido.';
   } else if (error.code === 11000) {
     statusCode = 409;
     message = 'Ya existe un registro con esos datos.';
