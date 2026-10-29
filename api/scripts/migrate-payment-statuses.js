@@ -1,12 +1,13 @@
 // Fase 3 de la auditoría: unifica los estados de pago y crea los índices únicos parciales.
-// Uso: MONGO_URI=... node scripts/migrate-payment-statuses.js [--dry-run]
+// Uso: npm run migrate:payments --dry-run   (o: node scripts/migrate-payment-statuses.js --dry-run)
 require('dotenv').config();
 const { randomInt } = require('node:crypto');
 const mongoose = require('mongoose');
 const Payment = require('../src/models/payment.model');
 const StoreOrder = require('../src/models/store-order.model');
 
-const DRY_RUN = process.argv.includes('--dry-run');
+// PowerShell drops `--` in `npm run x -- --dry-run`, so npm keeps the flag and exposes it as npm_config_dry_run.
+const DRY_RUN = process.argv.includes('--dry-run') || process.env.npm_config_dry_run === 'true';
 const LEGACY_STATUSES = { Completed: 'paid', Pending: 'pending', Failed: 'cancelled' };
 const PICKUP_PIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const OBSOLETE_INDEXES = [[Payment, 'user_1'], [Payment, 'validationPin_1'], [StoreOrder, 'pickupPin_1']];
