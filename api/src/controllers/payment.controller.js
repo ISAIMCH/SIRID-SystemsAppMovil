@@ -4,6 +4,9 @@ const User = require('../models/user.model');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
+const { activateMembership } = require('../utils/membership');
+const { generateUniquePaymentPin } = require('../utils/payment-pin');
+const parseUpdate = require('../utils/parse-update');
 
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 const paymentSchema = z.object({
@@ -22,24 +25,6 @@ function assertId(id) {
   if (!/^[a-f\d]{24}$/i.test(id)) throw new HttpError(400, 'ID de pago inválido.');
 }
 
-async function activateMembership(session, payment) {
-  const user = await User.findOne({ _id: payment.user ?? payment.userId, role: 'Cliente' }).session(session);
-  if (!user) throw new HttpError(404, 'No se encontró el cliente del pago.');
-
-  const now = new Date();
-  const currentExpiry = user.membership.expiresAt;
-  const isMembershipCurrent = currentExpiry && currentExpiry > now;
-  const periodStartsAt = isMembershipCurrent ? currentExpiry : now;
-  user.membership.status = 'active';
-  if (!isMembershipCurrent) user.membership.startsAt = now;
-  user.membership.expiresAt = new Date(periodStartsAt.getTime() + payment.durationDays * 86400000);
-  user.membership.planName = payment.planName;
-  user.membership.price = payment.amount;
-  user.membership.currency = payment.currency;
-  user.membership.durationDays = payment.durationDays;
-  await user.save({ session });
-}
-
 async function getPayments(req, res) {
   const payments = await Payment.find({})
     .populate('userId', 'name email')
@@ -50,6 +35,12 @@ async function getPayments(req, res) {
   res.json({ payments });
 }
 
+async function assertNoOtherPendingPayment(userId, paymentId = null) {
+  if (await Payment.exists({ user: userId, status: 'pending', _id: { $ne: paymentId } })) {
+    throw new HttpError(409, 'El cliente ya tiene un pago pendiente.');
+  }
+}
+
 async function createPayment(req, res) {
   const input = paymentSchema.parse(req.body);
   const [user, plan] = await Promise.all([
@@ -58,23 +49,36 @@ async function createPayment(req, res) {
   ]);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
   if (!plan) throw new HttpError(404, 'Plan no encontrado.');
+  if (input.status === 'pending') await assertNoOtherPendingPayment(input.userId);
+  const pin = input.status === 'pending' ? await generateUniquePaymentPin() : null;
 
-  const payment = await Payment.create({
-    ...input,
-    currency: input.currency.toUpperCase(),
-    user: input.userId,
-    planName: plan.name,
-    durationDays: input.durationDays ?? plan.durationInDays,
-    method: input.source,
-    reference: input.reference ?? `GYM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-  });
+  const session = await Payment.startSession();
+  let payment;
+  try {
+    await session.withTransaction(async () => {
+      [payment] = await Payment.create([{
+        ...input,
+        currency: input.currency.toUpperCase(),
+        user: input.userId,
+        planName: plan.name,
+        durationDays: input.durationDays ?? plan.durationInDays,
+        method: input.source,
+        reference: input.reference ?? `GYM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+        ...(pin ? { pin, validationPin: pin } : {}),
+        ...(input.status === 'paid' ? { processedBy: req.user.id, processedAt: new Date() } : {}),
+      }], { session });
+      if (payment.status === 'paid') await activateMembership(session, payment);
+    });
+  } finally {
+    await session.endSession();
+  }
   emitRealtime(req, 'payment-updated', { action: 'created', payment: payment.toObject() }, [payment.user]);
   res.status(201).json({ payment });
 }
 
 async function updatePayment(req, res) {
   assertId(req.params.id);
-  const input = paymentSchema.partial().parse(req.body);
+  const input = parseUpdate(paymentSchema, req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const update = { ...input };
@@ -87,15 +91,39 @@ async function updatePayment(req, res) {
     update.planName = plan.name;
   }
 
-  const payment = await Payment.findByIdAndUpdate(
-    req.params.id,
-    update,
-    { new: true, runValidators: true },
-  )
+  const session = await Payment.startSession();
+  let paymentId;
+  try {
+    await session.withTransaction(async () => {
+      const payment = await Payment.findById(req.params.id).session(session);
+      if (!payment) throw new HttpError(404, 'Pago no encontrado.');
+      const wasPaid = payment.status === 'paid';
+      if (wasPaid && update.status && update.status !== 'paid') {
+        throw new HttpError(409, 'Un pago pagado no puede cambiar de estado.');
+      }
+      payment.set(update);
+      if (payment.status === 'pending') {
+        await assertNoOtherPendingPayment(payment.user, payment._id);
+        if (!payment.validationPin) {
+          const pin = await generateUniquePaymentPin();
+          payment.set({ pin, validationPin: pin });
+        }
+      }
+      if (!wasPaid && payment.status === 'paid') {
+        payment.set({ processedBy: req.user.id, processedAt: new Date() });
+        await activateMembership(session, payment);
+      }
+      await payment.save({ session });
+      paymentId = payment._id;
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const payment = await Payment.findById(paymentId)
     .populate('userId', 'name email')
     .populate('planId', 'name')
     .populate('user', 'name email');
-  if (!payment) throw new HttpError(404, 'Pago no encontrado.');
   emitRealtime(req, 'payment-updated', { action: 'updated', payment: payment.toObject() }, [payment.user]);
   res.json({ payment });
 }

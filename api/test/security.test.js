@@ -62,3 +62,18 @@ test('error handler maps CastError to 400', () => {
   errorHandler(new mongoose.Error.CastError('ObjectId', 'abc', '_id'), {}, res, () => {});
   assert.equal(res.statusCode, 400);
 });
+
+test('partial updates keep only the fields that were sent', () => {
+  const { z } = require('zod');
+  const parseUpdate = require('../src/utils/parse-update');
+  const schema = z.object({ name: z.string(), imageUrl: z.string().default(''), currency: z.string().default('MXN') });
+  assert.deepEqual(parseUpdate(schema, { name: 'Proteína' }), { name: 'Proteína' });
+  assert.deepEqual(parseUpdate(schema, { imageUrl: '' }), { imageUrl: '' });
+});
+
+test('promotion active flags stay in sync between app and dashboard fields', () => {
+  const { syncActiveFlags } = require('../src/controllers/store.controller');
+  assert.deepEqual(syncActiveFlags({ title: 'Banner', active: false }), { title: 'Banner', isActive: false, active: false });
+  assert.deepEqual(syncActiveFlags({ isActive: true }), { isActive: true, active: true });
+  assert.deepEqual(syncActiveFlags({ title: 'Banner' }), { title: 'Banner' });
+});

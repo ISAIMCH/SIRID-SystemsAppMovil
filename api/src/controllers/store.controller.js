@@ -2,35 +2,35 @@ const { z } = require('zod');
 const mongoose = require('mongoose');
 const Product = require('../models/product.model');
 const Promotion = require('../models/promotion.model');
-const Order = require('../models/order.model');
 const HttpError = require('../utils/http-error');
+const parseUpdate = require('../utils/parse-update');
 
+// Serves both /api/store/{products,promotions} (mobile app) and /api/products, /api/promotions (Admin dashboard).
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
-const imageSchema = z.string().max(MAX_IMAGE_LENGTH).refine(
-  (value) => value === '' || /^https:\/\/\S+$/i.test(value) || /^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/.test(value),
-  'La imagen debe ser una URL https o una imagen png, jpg o webp.',
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de producto inválido.');
+const imageSchema = z.string().trim().max(MAX_IMAGE_LENGTH).refine(
+  (value) => value === '' || /^https?:\/\/\S+$/i.test(value) || /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value),
+  'La imagen debe ser una URL http(s) o una imagen png, jpg, webp o gif.',
 );
 
 const productSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  category: z.enum(['Suplementos', 'Ropa', 'Accesorios']),
-  price: z.number().min(0).max(1000000),
+  category: z.string().trim().min(1).max(80),
+  price: z.coerce.number().min(0).max(1000000),
   imageUrl: imageSchema.default(''),
-  stock: z.number().int().min(0).max(100000),
+  stock: z.coerce.number().int().min(0).max(100000),
 });
 
 const promotionSchema = z.object({
   title: z.string().trim().min(1).max(120),
-  imageUrl: imageSchema.min(1),
-  active: z.boolean().default(true),
-});
-
-const orderSchema = z.object({
-  items: z.array(z.object({
-    productId: z.string().regex(/^[a-f\d]{24}$/i),
-    quantity: z.number().int().positive(),
-  })).min(1),
+  description: z.string().trim().max(1000).default(''),
+  imageUrl: imageSchema.default(''),
+  discountPercentage: z.coerce.number().min(0).max(100).default(0),
+  applicableProducts: z.array(objectIdSchema).default([]),
+  validUntil: z.coerce.date().optional(),
+  isActive: z.boolean().optional(),
+  active: z.boolean().optional(),
 });
 
 function getGymId(req) {
@@ -43,6 +43,13 @@ function getGymId(req) {
 
 function assertId(id) {
   if (!/^[a-f\d]{24}$/i.test(id)) throw new HttpError(400, 'ID inválido.');
+}
+
+// The app uses `active` and the dashboard `isActive`; both fields are kept in sync.
+function syncActiveFlags(input) {
+  const { isActive, active, ...rest } = input;
+  const value = isActive ?? active;
+  return value === undefined ? rest : { ...rest, isActive: value, active: value };
 }
 
 async function getProducts(req, res) {
@@ -58,7 +65,7 @@ async function createProduct(req, res) {
 
 async function updateProduct(req, res) {
   assertId(req.params.id);
-  const input = productSchema.partial().parse(req.body);
+  const input = parseUpdate(productSchema, req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
   const product = await Product.findOneAndUpdate(
     { _id: req.params.id, gymId: getGymId(req), isDeleted: { $ne: true } },
@@ -82,19 +89,20 @@ async function deleteProduct(req, res) {
 
 async function listPromotions(req, res) {
   const filter = { gymId: getGymId(req) };
-  if (req.user.role !== 'Admin') filter.active = true;
+  if (req.user.role !== 'Admin') Object.assign(filter, { active: { $ne: false }, isActive: { $ne: false } });
   const promotions = await Promotion.find(filter).sort({ createdAt: -1 }).lean();
   res.json({ promotions });
 }
 
 async function createPromotion(req, res) {
-  const promotion = await Promotion.create({ ...promotionSchema.parse(req.body), gymId: getGymId(req) });
+  const input = syncActiveFlags({ isActive: true, ...promotionSchema.parse(req.body) });
+  const promotion = await Promotion.create({ ...input, gymId: getGymId(req) });
   res.status(201).json({ promotion });
 }
 
 async function updatePromotion(req, res) {
   assertId(req.params.id);
-  const input = promotionSchema.partial().parse(req.body);
+  const input = syncActiveFlags(parseUpdate(promotionSchema, req.body));
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
   const promotion = await Promotion.findOneAndUpdate({ _id: req.params.id, gymId: getGymId(req) }, input, { new: true, runValidators: true });
   if (!promotion) throw new HttpError(404, 'Promoción no encontrada.');
@@ -108,53 +116,8 @@ async function deletePromotion(req, res) {
   res.status(204).end();
 }
 
-async function createOrder(req, res) {
-  const gymId = getGymId(req);
-  const { items } = orderSchema.parse(req.body);
-  const quantities = new Map();
-  for (const item of items) quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
-
-  const productIds = [...quantities.keys()];
-  const products = await Product.find({ _id: { $in: productIds }, gymId, isDeleted: { $ne: true } }).lean();
-  if (products.length !== productIds.length) throw new HttpError(400, 'Uno o más productos no existen en este gimnasio.');
-
-  const productById = new Map(products.map((product) => [String(product._id), product]));
-  let totalPrice = 0;
-  for (const [productId, quantity] of quantities) {
-    const product = productById.get(productId);
-    if (product.stock < quantity) throw new HttpError(409, `Stock insuficiente para ${product.name}.`);
-    totalPrice += product.price * quantity;
-  }
-
-  const session = await mongoose.startSession();
-  try {
-    let order;
-    await session.withTransaction(async () => {
-      for (const [productId, quantity] of quantities) {
-        const updated = await Product.findOneAndUpdate(
-          { _id: productId, gymId, isDeleted: { $ne: true }, stock: { $gte: quantity } },
-          { $inc: { stock: -quantity } },
-          { new: true, session },
-        );
-        if (!updated) throw new HttpError(409, 'El stock cambió. Intenta de nuevo.');
-      }
-      [order] = await Order.create([{
-        userId: req.user._id,
-        gymId,
-        items: [...quantities].map(([productId, quantity]) => ({ productId, quantity })),
-        totalPrice,
-        status: 'pending',
-      }], { session });
-    });
-    res.status(201).json({ order });
-  } finally {
-    await session.endSession();
-  }
-}
-
 module.exports = {
   getProducts,
-  listProducts: getProducts,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -162,5 +125,5 @@ module.exports = {
   createPromotion,
   updatePromotion,
   deletePromotion,
-  createOrder,
+  syncActiveFlags,
 };

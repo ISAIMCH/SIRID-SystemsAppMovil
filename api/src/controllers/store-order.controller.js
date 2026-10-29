@@ -34,8 +34,13 @@ function assertId(id) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(400, 'ID de pedido inválido.');
 }
 
-function generatePickupPin() {
-  return Array.from({ length: 4 }, () => PICKUP_PIN_ALPHABET[randomInt(PICKUP_PIN_ALPHABET.length)]).join('');
+// A unique partial index on pending orders backs this check against races.
+async function generateUniquePickupPin() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const pin = Array.from({ length: 4 }, () => PICKUP_PIN_ALPHABET[randomInt(PICKUP_PIN_ALPHABET.length)]).join('');
+    if (!(await StoreOrder.exists({ pickupPin: pin, status: 'pending' }))) return pin;
+  }
+  throw new HttpError(503, 'No se pudo generar un PIN. Intenta de nuevo.');
 }
 
 async function deductInventory(session, order) {
@@ -92,6 +97,7 @@ async function createOrder(req, res) {
     discountApplied = Math.round((discountableSubtotal * promotion.discountPercentage / 100) * 100) / 100;
   }
   const totalAmount = Math.round((subtotal - discountApplied) * 100) / 100;
+  const pickupPin = await generateUniquePickupPin();
 
   const session = await mongoose.startSession();
   try {
@@ -108,7 +114,7 @@ async function createOrder(req, res) {
         status,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
-        pickupPin: generatePickupPin(),
+        pickupPin,
       }], { session });
     });
     const createdOrder = await StoreOrder.findById(order._id)

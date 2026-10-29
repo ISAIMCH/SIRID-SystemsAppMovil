@@ -10,7 +10,7 @@ import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
 type Product = { _id: string; name: string; category: string; price: number; imageUrl?: string; image?: string; stock: number };
-type Promotion = { _id: string; title: string; image: string; active: boolean };
+type Promotion = { _id: string; title: string; imageUrl?: string; image?: string; active: boolean };
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
@@ -260,7 +260,7 @@ function PromotionsSection({ promotions, setPromotions }: { promotions: Promotio
     setError('');
     setIsSaving(true);
     try {
-      const response = await api.post<{ promotion: Promotion }>('/store/promotions', { title: title.trim(), image, active: true });
+      const response = await api.post<{ promotion: Promotion }>('/store/promotions', { title: title.trim(), imageUrl: image, active: true });
       setPromotions((current) => [response.data.promotion, ...current]);
       setTitle('');
       setImage('');
@@ -307,7 +307,7 @@ function PromotionsSection({ promotions, setPromotions }: { promotions: Promotio
       {promotions.length === 0 ? <Notice>Aún no hay banners.</Notice> : null}
       {promotions.map((promotion) => (
         <FloatingCard key={promotion._id} style={styles.promo}>
-          <Image source={{ uri: promotion.image }} style={styles.banner} resizeMode="cover" />
+          <Image source={{ uri: promotion.imageUrl ?? promotion.image }} style={styles.banner} resizeMode="cover" />
           <View style={styles.promoRow}>
             <View style={styles.itemInfo}>
               <Text style={styles.itemName}>{promotion.title}</Text>
