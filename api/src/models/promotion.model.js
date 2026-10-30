@@ -10,10 +10,7 @@ const promotionSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true, index: true },
   imageUrl: { type: String },
   active: { type: Boolean, default: true, index: true },
-  gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
 }, { timestamps: true });
-
-promotionSchema.index({ gymId: 1 });
 
 promotionSchema.plugin(tenantPlugin);
 

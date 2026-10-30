@@ -9,7 +9,7 @@ clientRouter.get('/', asyncHandler(controller.getMyOrders));
 clientRouter.post('/', asyncHandler(controller.createOrder));
 
 const adminRouter = express.Router();
-adminRouter.use(authenticate, authorize('Admin'));
+adminRouter.use(authenticate, authorize('Admin', 'Recepcion'));
 adminRouter.get('/', asyncHandler(controller.getOrders));
 adminRouter.post('/', asyncHandler(controller.createOrder));
 adminRouter.patch('/redeem', asyncHandler(controller.redeemOrderByPin));

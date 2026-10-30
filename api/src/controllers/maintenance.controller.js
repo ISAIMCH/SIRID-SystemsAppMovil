@@ -3,6 +3,7 @@ const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
+const { gymFilter } = require('../utils/tenant');
 
 const reportInputSchema = z.object({
   equipmentId: z.string().regex(/^[a-f\d]{24}$/i),
@@ -11,10 +12,12 @@ const reportInputSchema = z.object({
 
 async function createReport(req, res) {
   const input = reportInputSchema.parse(req.body);
-  const equipment = await Equipment.findOne({ _id: input.equipmentId, isDeleted: { $ne: true } }).select('_id');
+  const equipment = await Equipment.findOne({ _id: input.equipmentId, ...gymFilter(req), isDeleted: { $ne: true } }).select('_id organizationId gymId');
   if (!equipment) throw new HttpError(404, 'El equipo no existe en el inventario.');
 
   const report = await MaintenanceReport.create({
+    organizationId: equipment.organizationId,
+    gymId: equipment.gymId,
     equipment: equipment.id,
     reportedBy: req.user.id,
     description: input.description,
@@ -24,7 +27,7 @@ async function createReport(req, res) {
 
 async function listReports(req, res) {
   const query = z.object({ status: z.enum(['pending', 'in_progress', 'resolved']).optional() }).parse(req.query);
-  const reports = await MaintenanceReport.find(query.status ? { status: query.status } : {})
+  const reports = await MaintenanceReport.find({ ...gymFilter(req), ...(query.status ? { status: query.status } : {}) })
     .populate('equipment', 'name zone brand status')
     .populate('reportedBy', 'name email')
     .sort({ createdAt: -1 })
@@ -44,14 +47,14 @@ async function updateReport(req, res) {
   let updatedReport;
   try {
     await session.withTransaction(async () => {
-      const report = await MaintenanceReport.findById(req.params.id).session(session);
+      const report = await MaintenanceReport.findOne({ _id: req.params.id, ...gymFilter(req) }).session(session);
       if (!report) throw new HttpError(404, 'Reporte no encontrado.');
       if (report.status === 'resolved') throw new HttpError(409, 'El reporte ya está resuelto.');
 
       const equipmentStatus = input.equipmentStatus
         ?? (input.status === 'resolved' ? 'available' : undefined);
       if (equipmentStatus) {
-        const equipment = await Equipment.findById(report.equipment).session(session);
+        const equipment = await Equipment.findOne({ _id: report.equipment, gymId: report.gymId }).session(session);
         if (equipment) {
           const delta = equipmentStatus === 'out_of_service' ? 1 : -1;
           equipment.maintenanceQuantity = Math.min(

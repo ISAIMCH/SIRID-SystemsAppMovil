@@ -3,6 +3,9 @@ const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const HttpError = require('../utils/http-error');
 const { inferEquipmentCategory } = require('../constants/equipment-families');
+const { resolveTenant, resolveTargetGym, gymFilter } = require('../utils/tenant');
+
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de sucursal inválido.');
 
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const equipmentSchema = z.object({
@@ -15,6 +18,8 @@ const equipmentSchema = z.object({
   maintenanceQuantity: z.coerce.number().int().min(0).max(500).default(0),
   status: z.enum(['available', 'out_of_service']).default('available'),
   equipmentCategory: z.string().trim().max(40).optional(),
+  // The gym the equipment is in; defaults to the selected or main gym and does not change afterwards.
+  gymId: z.union([objectIdSchema, z.literal('')]).transform((value) => value || undefined).optional(),
 });
 
 function assertId(id) {
@@ -24,6 +29,7 @@ function assertId(id) {
 function serializeEquipment(item, activeReportsCount = 0) {
   return {
     _id: item._id,
+    gymId: item.gymId,
     name: item.name,
     zone: item.zone,
     brand: item.brand,
@@ -39,9 +45,9 @@ function serializeEquipment(item, activeReportsCount = 0) {
 }
 
 async function getEquipment(req, res) {
-  const equipment = await Equipment.find({ isDeleted: { $ne: true } }).sort({ name: 1 }).lean();
+  const equipment = await Equipment.find({ ...gymFilter(req), isDeleted: { $ne: true } }).sort({ name: 1 }).lean();
   const activeReports = await MaintenanceReport.aggregate([
-    { $match: { status: { $in: ['pending', 'in_progress'] } } },
+    { $match: { ...gymFilter(req), status: { $in: ['pending', 'in_progress'] } } },
     { $group: { _id: '$equipment', activeReportsCount: { $sum: 1 } } },
   ]);
   const reportCounts = new Map(activeReports.map((item) => [item._id.toString(), item.activeReportsCount]));
@@ -54,17 +60,22 @@ async function getEquipment(req, res) {
 }
 
 async function createEquipment(req, res) {
-  const input = equipmentSchema.parse(req.body);
-  const equipment = await Equipment.create({ ...input, equipmentCategory: inferEquipmentCategory(input) });
+  const { gymId, ...input } = equipmentSchema.parse(req.body);
+  const equipment = await Equipment.create({
+    ...input,
+    organizationId: resolveTenant(req).organizationId,
+    gymId: resolveTargetGym(req, gymId),
+    equipmentCategory: inferEquipmentCategory(input),
+  });
   res.status(201).json({ equipment: serializeEquipment(equipment.toObject()) });
 }
 
 async function updateEquipment(req, res) {
   assertId(req.params.id);
-  const input = equipmentSchema.partial().parse(req.body);
+  const { gymId: _gymId, ...input } = equipmentSchema.partial().parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const equipment = await Equipment.findOneAndUpdate({ _id: req.params.id, isDeleted: { $ne: true } }, input, {
+  const equipment = await Equipment.findOneAndUpdate({ _id: req.params.id, ...gymFilter(req), isDeleted: { $ne: true } }, input, {
     new: true,
     runValidators: true,
   }).lean();
@@ -75,7 +86,7 @@ async function updateEquipment(req, res) {
 async function deleteEquipment(req, res) {
   assertId(req.params.id);
   const equipment = await Equipment.findOneAndUpdate(
-    { _id: req.params.id, isDeleted: { $ne: true } },
+    { _id: req.params.id, ...gymFilter(req), isDeleted: { $ne: true } },
     { $set: { isDeleted: true, deletedAt: new Date(), status: 'out_of_service' } },
     { new: true, runValidators: true },
   );

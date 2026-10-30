@@ -6,7 +6,7 @@ function authenticateIotDeviceOrAdmin(req, res, next) {
 
   return authenticate(req, res, (error) => {
     if (error) return next(error);
-    return authorize('Admin')(req, res, next);
+    return authorize('Admin', 'Recepcion')(req, res, next);
   });
 }
 

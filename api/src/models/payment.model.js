@@ -22,8 +22,8 @@ const paymentSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 paymentSchema.index({ user: 1, createdAt: -1 });
-// One pending payment per client, and a validation PIN that is unique among pending payments.
-paymentSchema.index({ user: 1 }, { unique: true, partialFilterExpression: { status: 'pending' }, name: 'user_pending_unique' });
+// One pending payment per client and organization, and a validation PIN that is unique among pending payments.
+paymentSchema.index({ user: 1, organizationId: 1 }, { unique: true, partialFilterExpression: { status: 'pending' }, name: 'user_org_pending_unique' });
 paymentSchema.index(
   { validationPin: 1 },
   { unique: true, partialFilterExpression: { status: 'pending', validationPin: { $exists: true } }, name: 'validationPin_pending_unique' },

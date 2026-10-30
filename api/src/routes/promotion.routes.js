@@ -5,10 +5,11 @@ const controller = require('../controllers/store.controller');
 
 const router = express.Router();
 
-router.use(authenticate, authorize('Admin'));
-router.get('/', asyncHandler(controller.listPromotions));
-router.post('/', asyncHandler(controller.createPromotion));
-router.put('/:id', asyncHandler(controller.updatePromotion));
-router.delete('/:id', asyncHandler(controller.deletePromotion));
+// Recepcion reads active promotions to apply them in sales; only Admins manage them.
+router.use(authenticate);
+router.get('/', authorize('Admin', 'Recepcion'), asyncHandler(controller.listPromotions));
+router.post('/', authorize('Admin'), asyncHandler(controller.createPromotion));
+router.put('/:id', authorize('Admin'), asyncHandler(controller.updatePromotion));
+router.delete('/:id', authorize('Admin'), asyncHandler(controller.deletePromotion));
 
 module.exports = router;

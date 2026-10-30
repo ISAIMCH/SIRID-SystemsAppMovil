@@ -1,12 +1,13 @@
 const { z } = require('zod');
 const RoutineTemplate = require('../models/routine-template.model');
 const Routine = require('../models/routine.model');
-const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
+const { resolveTenant, organizationFilter } = require('../utils/tenant');
 const {
   routineBaseSchema,
   scheduleRefinement,
   ensureEligibleBlocks,
+  findAssignableClient,
   normalizeBlocks,
   legacyExercisesFromBlocks,
 } = require('./routine.controller');
@@ -21,12 +22,12 @@ function assertId(id) {
 
 async function findOwnedTemplate(req) {
   assertId(req.params.id);
-  const template = await RoutineTemplate.findById(req.params.id)
+  const template = await RoutineTemplate.findOne({ _id: req.params.id, ...organizationFilter(req) })
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false });
   if (!template) throw new HttpError(404, 'Plantilla no encontrada.');
   if (template.isDeleted) throw new HttpError(404, 'Plantilla no encontrada.');
-  if (req.user.role !== 'Admin' && String(template.createdBy) !== req.user.id) {
+  if (resolveTenant(req).role !== 'Admin' && String(template.createdBy) !== req.user.id) {
     throw new HttpError(403, 'Solo el autor o un Admin puede usar esta plantilla.');
   }
   return template;
@@ -59,9 +60,9 @@ function cloneBlocks(blocks) {
 }
 
 async function listTemplates(req, res) {
-  const filter = req.user.role === 'Admin'
-    ? { isDeleted: { $ne: true } }
-    : { createdBy: req.user.id, isDeleted: { $ne: true } };
+  const filter = resolveTenant(req).role === 'Admin'
+    ? { ...organizationFilter(req), isDeleted: { $ne: true } }
+    : { ...organizationFilter(req), createdBy: req.user.id, isDeleted: { $ne: true } };
   const templates = await RoutineTemplate.find(filter)
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false })
@@ -77,15 +78,15 @@ async function getTemplate(req, res) {
 
 async function createTemplate(req, res) {
   const input = templateSchema.parse(req.body);
-  await ensureEligibleBlocks(input.blocks);
-  const template = await RoutineTemplate.create({ ...input, createdBy: req.user.id });
+  await ensureEligibleBlocks(input.blocks, resolveTenant(req).organizationId);
+  const template = await RoutineTemplate.create({ ...input, ...organizationFilter(req), createdBy: req.user.id });
   res.status(201).json({ template: templateResponse(template) });
 }
 
 async function updateTemplate(req, res) {
   const input = templateBaseSchema.partial().parse(req.body);
   const template = await findOwnedTemplate(req);
-  if (input.blocks) await ensureEligibleBlocks(input.blocks);
+  if (input.blocks) await ensureEligibleBlocks(input.blocks, template.organizationId);
 
   const blocks = input.blocks ?? normalizeBlocks(template.toObject());
   const scheduleDays = input.scheduleDays ?? template.scheduleDays;
@@ -115,21 +116,17 @@ async function deleteTemplate(req, res) {
 async function assignTemplate(req, res) {
   const { clientId } = z.object({ clientId: z.string().regex(/^[a-f\d]{24}$/i) }).parse(req.body);
   const template = await findOwnedTemplate(req);
-  const client = await User.findOne({ _id: clientId, role: 'Cliente', isActive: true });
-  if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
-  const isAdmin = req.user.role === 'Admin';
-  if (!isAdmin && req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
-    throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
-  }
+  const client = await findAssignableClient(req, clientId);
 
   const plain = template.toObject();
   const blocks = normalizeBlocks(plain).map((block) => ({ ...block, exercises: block.exercises.map((exercise) => ({
     ...exercise,
     equipmentId: exercise.equipmentId && String(exercise.equipmentId._id ?? exercise.equipmentId),
   })) }));
-  await ensureEligibleBlocks(blocks);
+  await ensureEligibleBlocks(blocks, template.organizationId);
 
   const routine = await Routine.create({
+    organizationId: template.organizationId,
     title: plain.title,
     description: plain.description,
     goal: plain.goal,

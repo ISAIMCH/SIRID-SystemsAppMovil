@@ -3,6 +3,7 @@ const User = require('../models/user.model');
 const env = require('../config/env');
 const HttpError = require('../utils/http-error');
 const asyncHandler = require('../utils/async-handler');
+const { ROUTE_ROLES, loadTenantContext, resolveAccess } = require('../utils/tenant');
 
 async function resolveUserFromToken(token) {
   if (!token) throw new HttpError(401, 'Se requiere autenticación.');
@@ -21,6 +22,7 @@ async function resolveUserFromToken(token) {
   return user;
 }
 
+// Besides the user, loads the organization and gyms the request works in (see utils/tenant.js).
 const authenticate = asyncHandler(async (req, res, next) => {
   const authorization = req.get('authorization');
   const [scheme, token] = authorization?.split(' ') ?? [];
@@ -30,14 +32,22 @@ const authenticate = asyncHandler(async (req, res, next) => {
   }
 
   req.user = await resolveUserFromToken(token);
+  const requestedGymId = req.get('x-gym-id') || null;
+  req.tenantContext = await loadTenantContext(req.user, requestedGymId);
+  req.tenant = req.tenantContext && resolveAccess(req.tenantContext, ROUTE_ROLES, requestedGymId);
+  if (requestedGymId && !req.tenant) throw new HttpError(403, 'No tienes acceso a esa sucursal.');
   next();
 });
 
+// Roles are checked against the user's roles in the organization and gyms of the request,
+// and the request is narrowed to the gyms where the user holds the matched role.
 function authorize(...roles) {
   return function roleAuthorization(req, res, next) {
-    if (!req.user || !roles.includes(req.user.role)) {
+    const tenant = req.tenantContext && resolveAccess(req.tenantContext, roles, req.tenantContext.requestedGymId);
+    if (!req.user || !tenant) {
       return next(new HttpError(403, 'No tienes permisos para esta operación.'));
     }
+    req.tenant = tenant;
     return next();
   };
 }

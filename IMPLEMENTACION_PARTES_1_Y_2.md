@@ -64,7 +64,7 @@ Para crear el primer Admin, configura `ENABLE_ADMIN_BOOTSTRAP=true` de forma tem
 
 No se deben copiar `MONGO_URI`, secretos, claves IoT ni tokens a la app móvil. El `.env` real no se versiona; solo se publica `.env.example` con placeholders.
 
-### Organizaciones y sucursales (etapa 1)
+### Organizaciones y sucursales (etapas 1 y 2)
 
 Los datos pertenecen a una organización (el dueño o la cadena) y, cuando son físicos, a una sucursal:
 
@@ -72,14 +72,26 @@ Los datos pertenecen a una organización (el dueño o la cadena) y, cuando son f
 |---|---|
 | Global | Usuarios (una cuenta de GymGo para todos los gimnasios), diccionario de ejercicios y grupos musculares |
 | Organización | Planes, productos, promociones, ejercicios propios, plantillas y rutinas |
-| Sucursal | Equipos, accesos, reportes de mantenimiento, pedidos de la tienda y pagos |
+| Sucursal | Equipos, stock de productos (`ProductStock`), accesos, reportes de mantenimiento, pedidos de la tienda y pagos |
 | Personal | Historial de entrenamientos |
 
 - `OrganizationMember` guarda los roles de cada persona: `Propietario` y `Cliente` valen en toda la organización; `Gerente`, `Coach` y `Recepcion` se asignan por sucursal y se pueden combinar.
 - `Membership` guarda la membresía de un cliente con cada organización. `gymAccess` define dónde es válida: `all` (todas las sucursales), `home` (la sucursal elegida al venderla, como el Plan Básico) o `list` (sucursales concretas). Se copia del plan al vender para que editar el plan no cambie las membresías ya vendidas.
 - `User.isPlatformAdmin` marca al personal de SIRID; se otorga con `npm run platform:admin correo@ejemplo.com`.
 
-En esta etapa todo pertenece a la organización predeterminada ("GymGo Demo / Sucursal Principal"). La API sigue respondiendo igual, con el mismo `role`, y los permisos todavía usan `User.role` y `User.membership`; `OrganizationMember` y `Membership` se vuelven la fuente de verdad en la etapa 2. La API no arranca si la migración no se ha ejecutado.
+**Aislamiento (etapa 2).** Cada petición trabaja dentro de una organización y de sus sucursales:
+
+- `authenticate` carga los roles de `OrganizationMember` y `authorize` decide con ellos: `Admin` equivale a Propietario (todas las sucursales) o Gerente (sus sucursales); `Coach` y `Recepcion` valen en las sucursales donde se asignaron; `Cliente`, en toda la organización.
+- El header opcional `X-Gym-Id` elige la sucursal (y con ella la organización). Si la persona no tiene acceso, responde 403. Sin header, el personal consulta todas sus sucursales con el rol que usa la ruta, y las escrituras van a la sucursal principal. Un cliente trabaja siempre con una sola sucursal, su sucursal base.
+- Las altas de personal, productos, equipos, pagos y ventas aceptan `gymId` en el cuerpo para elegir la sucursal, siempre que sea una de las del usuario.
+- `Membership` es la fuente de verdad de la membresía; `User.membership` guarda una copia para la app y el dashboard. El QR y el pago en recepción usan la membresía de la organización.
+- `GET /products` mantiene `stock` (el de la sucursal elegida o la principal) y agrega `stockByGym`. Al cobrar, el stock se descuenta en la sucursal de la venta.
+- Recepción puede cobrar pagos y ventas, canjear PIN, consultar planes, promociones y clientes, y validar accesos de su sucursal. Editar o eliminar pagos queda para Admin.
+- El login y `GET /auth/me` agregan `organization`, `gyms` y `defaultGymId`. `GET /auth/me/gyms` lista las sucursales de la persona con sus roles. `role` conserva el valor anterior (Propietario o Gerente → `Admin`).
+- Socket.IO une cada conexión a salas por organización y por sucursal (`org:<id>:owners|admins|staff`, `gym:<id>:managers|reception`, `user:<id>`). Los nombres de los eventos no cambian.
+- Los documentos ya no toman la organización predeterminada: sin organización o sucursal, no se guardan. Solo el registro público de clientes usa la organización predeterminada, hasta que en la etapa 3 los clientes se unan con código.
+
+La API no arranca si la migración no se ha ejecutado.
 
 **Migración** (desde `api/`, con `MONGO_URI` en `api/.env`):
 
@@ -92,7 +104,7 @@ En esta etapa todo pertenece a la organización predeterminada ("GymGo Demo / Su
 3. Aplicar: `npm run migrate:tenancy`
 4. Desplegar la API.
 
-El script se puede ejecutar varias veces: solo completa lo que falta. Después de `npm run seed`, ejecútalo otra vez para registrar a los usuarios nuevos en la organización.
+El script se puede ejecutar varias veces: solo completa lo que falta. En la etapa 2 además pasa el stock de cada producto a su sucursal, quita los campos de sucursal antiguos de productos, promociones y ejercicios, y reemplaza índices obsoletos. Solo agrega a la organización predeterminada a usuarios que no pertenecen a ninguna. Después de `npm run seed`, ejecútalo otra vez para registrar a los usuarios nuevos en la organización.
 
 ## Parte 2: Aplicación móvil
 

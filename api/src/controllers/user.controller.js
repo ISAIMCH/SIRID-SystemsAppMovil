@@ -1,6 +1,8 @@
 const { z } = require('zod');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
+const { resolveTenant } = require('../utils/tenant');
+const { findClientMember } = require('../utils/members');
 
 const observationsSchema = z.object({
   observations: z.string().trim().max(4000),
@@ -31,8 +33,9 @@ function serializeClient(user) {
 async function updateClientObservations(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
 
-  const filter = { _id: req.params.id, role: 'Cliente' };
-  if (req.user.role === 'Coach') filter.assignedCoach = req.user.id;
+  await findClientMember(req, req.params.id);
+  const filter = { _id: req.params.id };
+  if (resolveTenant(req).role === 'Coach') filter.assignedCoach = req.user.id;
   const input = observationsSchema.parse(req.body);
   const client = await User.findOneAndUpdate(filter, { observations: input.observations }, {
     new: true,

@@ -4,6 +4,8 @@ const User = require('../models/user.model');
 const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
+const { resolveTenant } = require('../utils/tenant');
+const { findClientMember } = require('../utils/members');
 const { normalizeBlocks } = require('./routine.controller');
 const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 
@@ -283,8 +285,9 @@ async function getMyWorkoutHistory(req, res) {
 
 async function getClientWorkoutHistory(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.clientId)) throw new HttpError(400, 'ID de cliente inválido.');
-  const client = await User.findOne({ _id: req.params.clientId, role: 'Cliente' }).select('assignedCoach');
-  if (!client || (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id)) {
+  await findClientMember(req, req.params.clientId);
+  const client = await User.findById(req.params.clientId).select('assignedCoach');
+  if (!client || (resolveTenant(req).role === 'Coach' && String(client.assignedCoach) !== req.user.id)) {
     throw new HttpError(404, 'Cliente no encontrado.');
   }
 
@@ -295,8 +298,12 @@ async function getClientWorkoutHistory(req, res) {
   res.json({ sessions: sessions.map(sessionResponse) });
 }
 
-function sessionOwnerFilter(req, id) {
-  return req.user.role === 'Admin' ? { _id: id } : { _id: id, user: req.user.id };
+// Clients reach their own sessions; Admins the sessions of the organization's clients.
+async function findManagedSession(req, id) {
+  if (resolveTenant(req).role !== 'Admin') return WorkoutSession.findOne({ _id: id, user: req.user.id });
+  const session = await WorkoutSession.findById(id);
+  if (session) await findClientMember(req, session.user, 'No se encontró el entrenamiento.');
+  return session;
 }
 
 function recalculateSession(session) {
@@ -322,7 +329,7 @@ function recalculateSession(session) {
 
 async function updateWorkoutSession(req, res) {
   const input = workoutUpdateSchema.parse(req.body);
-  const session = await WorkoutSession.findOne(sessionOwnerFilter(req, req.params.id));
+  const session = await findManagedSession(req, req.params.id);
   if (!session) throw new HttpError(404, 'No se encontró el entrenamiento.');
   if (input.durationMinutes !== undefined) session.durationMinutes = input.durationMinutes;
   if (input.perceivedExertion !== undefined) session.perceivedExertion = input.perceivedExertion;
@@ -354,8 +361,9 @@ async function updateWorkoutSession(req, res) {
 }
 
 async function deleteWorkoutSession(req, res) {
-  const result = await WorkoutSession.deleteOne(sessionOwnerFilter(req, req.params.id));
-  if (!result.deletedCount) throw new HttpError(404, 'No se encontró el entrenamiento.');
+  const session = await findManagedSession(req, req.params.id);
+  if (!session) throw new HttpError(404, 'No se encontró el entrenamiento.');
+  await session.deleteOne();
   res.status(200).json({ ok: true });
 }
 

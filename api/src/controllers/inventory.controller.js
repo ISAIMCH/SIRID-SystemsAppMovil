@@ -4,6 +4,9 @@ const Routine = require('../models/routine.model');
 const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 const { inferEquipmentCategory } = require('../constants/equipment-families');
+const { resolveTenant, resolveTargetGym, organizationFilter, gymFilter } = require('../utils/tenant');
+
+const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de sucursal inválido.');
 
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
 const equipmentSchema = z.object({
@@ -15,6 +18,8 @@ const equipmentSchema = z.object({
   totalQuantity: z.number().int().min(1).max(500),
   maintenanceQuantity: z.number().int().min(0).max(500),
   equipmentCategory: z.string().trim().max(40).optional(),
+  // The gym the equipment is in; defaults to the selected or main gym and does not change afterwards.
+  gymId: z.union([objectIdSchema, z.literal('')]).transform((value) => value || undefined).optional(),
 });
 
 // Los equipos anteriores no tienen cantidades; se completan al leerlos.
@@ -24,6 +29,7 @@ function serializeEquipment(item) {
   const maintenanceQuantity = item.maintenanceQuantity ?? (legacyOut ? 1 : 0);
   return {
     _id: item._id,
+    gymId: item.gymId,
     name: item.name,
     zone: item.zone,
     brand: item.brand,
@@ -37,7 +43,7 @@ function serializeEquipment(item) {
 }
 
 async function listEquipment(req, res) {
-  const equipment = await Equipment.find({ isDeleted: { $ne: true } }).sort({ zone: 1, name: 1 }).lean();
+  const equipment = await Equipment.find({ ...gymFilter(req), isDeleted: { $ne: true } }).sort({ zone: 1, name: 1 }).lean();
   res.json({ equipment: equipment.map(serializeEquipment) });
 }
 
@@ -84,8 +90,8 @@ async function getEquipmentTraffic(req, res) {
   startOfToday.setHours(0, 0, 0, 0);
 
   const [equipment, routines, sessions] = await Promise.all([
-    Equipment.find({ isDeleted: { $ne: true } }).sort({ zone: 1, name: 1 }).lean(),
-    Routine.find({ status: 'active', assignedTo: { $ne: null } })
+    Equipment.find({ ...gymFilter(req), isDeleted: { $ne: true } }).sort({ zone: 1, name: 1 }).lean(),
+    Routine.find({ ...organizationFilter(req), status: 'active', assignedTo: { $ne: null } })
       .populate('assignedTo', 'role isActive currentlyInside preferredTrainingTime availableTrainingDays')
       .lean(),
     WorkoutSession.find({ completedAt: { $gte: new Date(Math.max(startOfToday.getTime(), ninetyMinutesAgo.getTime())) } })
@@ -139,23 +145,28 @@ async function getEquipmentTraffic(req, res) {
 }
 
 async function createEquipment(req, res) {
-  const input = equipmentSchema.parse(req.body);
+  const { gymId, ...input } = equipmentSchema.parse(req.body);
   if (input.maintenanceQuantity > input.totalQuantity) {
     throw new HttpError(400, 'Las unidades en mantenimiento no pueden superar el total.');
   }
-  const equipment = await Equipment.create({ ...input, equipmentCategory: inferEquipmentCategory(input) });
+  const equipment = await Equipment.create({
+    ...input,
+    organizationId: resolveTenant(req).organizationId,
+    gymId: resolveTargetGym(req, gymId),
+    equipmentCategory: inferEquipmentCategory(input),
+  });
   res.status(201).json({ equipment: serializeEquipment(equipment.toObject()) });
 }
 
 async function updateEquipment(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de equipo inválido.');
-  const input = equipmentSchema.partial().parse(req.body);
+  const { gymId: _gymId, ...input } = equipmentSchema.partial().parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const equipment = await Equipment.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  const equipment = await Equipment.findOne({ _id: req.params.id, ...gymFilter(req), isDeleted: { $ne: true } });
   if (!equipment) throw new HttpError(404, 'Equipo no encontrado.');
 
-  const raw = await Equipment.findOne({ _id: req.params.id, isDeleted: { $ne: true } }).lean();
+  const raw = await Equipment.findOne({ _id: equipment._id }).lean();
   const normalized = serializeEquipment(raw);
   equipment.set({
     ...input,

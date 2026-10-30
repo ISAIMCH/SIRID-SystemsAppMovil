@@ -6,6 +6,7 @@ const connectDatabase = require('./config/database');
 const mongoose = require('mongoose');
 const { resolveUserFromToken } = require('./middlewares/auth.middleware');
 const { loadDefaultTenant } = require('./utils/tenant');
+const { realtimeRooms } = require('./utils/realtime');
 
 const httpServer = http.createServer(app);
 const allowedOrigins = app.get('allowedOrigins') ?? [];
@@ -21,11 +22,12 @@ const io = new Server(httpServer, {
   },
 });
 
-// Every socket must carry a valid JWT; events are delivered per user and per role rooms.
+// Every socket must carry a valid JWT; events are delivered per user and per organization and gym rooms.
+// Rooms cover every gym of the user, so switching gyms in the dashboard needs no reconnection.
 io.use(async (socket, next) => {
   try {
     const user = await resolveUserFromToken(socket.handshake.auth?.token);
-    socket.data.user = { id: user.id, role: user.role };
+    socket.data.rooms = await realtimeRooms(user);
     next();
   } catch (error) {
     next(new Error(error.statusCode === 401 ? error.message : 'No fue posible autenticar la conexión.'));
@@ -33,8 +35,7 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
-  const { id, role } = socket.data.user;
-  socket.join([`user:${id}`, `role:${role}`]);
+  socket.join(socket.data.rooms);
 });
 
 app.set('io', io);
