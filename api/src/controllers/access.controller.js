@@ -21,12 +21,12 @@ async function createQrToken(req, res) {
 
   const issuedAt = Math.floor(Date.now() / 1000);
   const jti = randomUUID();
-  const qrToken = jwt.sign({ typ: 'gym-access', jti, org: String(organizationId), gym: String(gymId) }, env.QR_TOKEN_SECRET, {
+  // iat is set here so exp matches the expiresAt returned. jsonwebtoken reads notBefore as seconds from now, not a timestamp.
+  const qrToken = jwt.sign({ typ: 'gym-access', jti, org: String(organizationId), gym: String(gymId), iat: issuedAt }, env.QR_TOKEN_SECRET, {
     subject: req.user.id,
     issuer: 'gymgo-api',
     audience: 'gymgo-iot',
     expiresIn: env.QR_TOKEN_TTL_SECONDS,
-    notBefore: issuedAt,
   });
 
   res.status(201).json({
