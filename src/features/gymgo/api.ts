@@ -17,9 +17,17 @@ export async function getPromotions() {
   return response.data.promotions.filter((promotion) => promotion.isActive !== false && promotion.active !== false);
 }
 
+// The gym the user is working in; the API scopes every request to it (X-Gym-Id).
+let activeGymId: string | null = null;
+
+export function setActiveGymHeader(gymId: string | null) {
+  activeGymId = gymId;
+}
+
 api.interceptors.request.use(async (config) => {
   const token = await readAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (activeGymId && !config.headers.has('X-Gym-Id')) config.headers.set('X-Gym-Id', activeGymId);
   return config;
 });
 

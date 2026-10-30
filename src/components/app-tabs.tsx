@@ -21,6 +21,8 @@ const ROLE_TABS: Record<GymGoRole, TabName[]> = {
   Cliente: ['index', 'routines', 'billing'],
   Coach: ['index', 'routines', 'directory'],
   Admin: ['index', 'inventory', 'directory'],
+  // Reception works from the web dashboard; the app only shows its home.
+  Recepcion: ['index'],
 };
 
 const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcons.glyphMap }> = {

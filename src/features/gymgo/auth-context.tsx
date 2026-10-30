@@ -1,12 +1,13 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isAxiosError } from 'axios';
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
 import { disconnectSocket } from '../../services/socket';
 import { useCartStore } from '../../store/cartStore';
-import { api, setUnauthorizedHandler } from './api';
+import { api, setActiveGymHeader, setUnauthorizedHandler } from './api';
 import { readAccessToken, removeAccessToken, writeAccessToken } from './token-storage';
 
-export type GymGoRole = 'Admin' | 'Coach' | 'Cliente';
+export type GymGoRole = 'Admin' | 'Coach' | 'Recepcion' | 'Cliente';
 export type GymGoCoach = { id?: string; name?: string; email?: string };
 
 export type GymGoUser = {
@@ -41,8 +42,25 @@ export type GymGoUser = {
   assignedCoach?: string | GymGoCoach | null;
 };
 
+// A gym the user belongs to, with their roles there (Propietario/Cliente apply to the whole organization).
+export type SessionGym = {
+  id: string;
+  name: string;
+  organization: { id: string; name: string };
+  roles: string[];
+};
+
+type SessionResponse = { user: GymGoUser; gyms?: SessionGym[]; defaultGymId?: string | null };
+type JoinGymResponse = { gym: Omit<SessionGym, 'roles'>; alreadyMember: boolean; gyms: SessionGym[] };
+
 type AuthContextValue = {
   user: GymGoUser | null;
+  gyms: SessionGym[];
+  activeGym: SessionGym | null;
+  // A client who has not joined any gym yet can only join one or sign out.
+  needsGym: boolean;
+  selectGym: (gymId: string) => Promise<void>;
+  joinGym: (code: string) => Promise<JoinGymResponse>;
   isLoading: boolean;
   sessionError: string | null;
   retrySession: () => void;
@@ -57,6 +75,7 @@ export type ClientRegistration = {
   lastName?: string;
   email: string;
   password: string;
+  joinCode?: string;
   goal?: string;
   experienceLevel?: GymGoUser['experienceLevel'];
   availableTrainingDays?: number[];
@@ -67,8 +86,18 @@ export type ClientRegistration = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+const activeGymKey = (userId: string) => `gymgo.activeGym.${userId}`;
+
+// The gym picked last time on this device, if the user still belongs to it; else the API's default.
+async function pickActiveGym(userId: string, gyms: SessionGym[], defaultGymId?: string | null) {
+  const stored = await AsyncStorage.getItem(activeGymKey(userId)).catch(() => null);
+  return [stored, defaultGymId, gyms[0]?.id].find((gymId) => gymId && gyms.some((gym) => gym.id === gymId)) ?? null;
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<GymGoUser | null>(null);
+  const [gyms, setGyms] = useState<SessionGym[]>([]);
+  const [activeGymId, setActiveGymId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
@@ -80,9 +109,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         const token = await readAccessToken();
         if (!token) return;
+        setActiveGymHeader(null);
         // Render cold starts can take close to a minute.
-        const response = await api.get<{ user: GymGoUser }>('/auth/me', { timeout: 60000 });
-        if (isCurrent) setUser(response.data.user);
+        const response = await api.get<SessionResponse>('/auth/me', { timeout: 60000 });
+        if (isCurrent) await applySession(response.data);
       } catch (error) {
         // Only a rejected token ends the session; network failures keep it so the user can retry.
         if (isAxiosError(error) && error.response?.status === 401) {
@@ -106,6 +136,50 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
+  // Loads the session for the chosen gym: the user (with that organization's membership) comes from /auth/me.
+  async function applySession(session: SessionResponse, preferredGymId?: string) {
+    const sessionGyms = session.gyms ?? [];
+    const gymId = preferredGymId && sessionGyms.some((gym) => gym.id === preferredGymId)
+      ? preferredGymId
+      : await pickActiveGym(session.user.id, sessionGyms, session.defaultGymId);
+    setActiveGymHeader(gymId);
+    let sessionUser = session.user;
+    if (gymId && gymId !== session.defaultGymId) {
+      sessionUser = (await api.get<SessionResponse>('/auth/me')).data.user;
+    }
+    setGyms(sessionGyms);
+    setActiveGymId(gymId);
+    setUser(sessionUser);
+  }
+
+  async function selectGym(gymId: string) {
+    if (!user || gymId === activeGymId) return;
+    setActiveGymHeader(gymId);
+    let response;
+    try {
+      response = await api.get<SessionResponse>('/auth/me');
+    } catch (error) {
+      setActiveGymHeader(activeGymId);
+      throw error;
+    }
+    await AsyncStorage.setItem(activeGymKey(user.id), gymId).catch(() => undefined);
+    useCartStore.getState().clearCart();
+    setActiveGymId(gymId);
+    setGyms(response.data.gyms ?? gyms);
+    setUser(response.data.user);
+  }
+
+  // Joining switches to the new gym right away.
+  async function joinGym(code: string) {
+    const { data } = await api.post<JoinGymResponse>('/gyms/join', { code });
+    if (user) await AsyncStorage.setItem(activeGymKey(user.id), data.gym.id).catch(() => undefined);
+    setActiveGymHeader(data.gym.id);
+    const response = await api.get<SessionResponse>('/auth/me');
+    useCartStore.getState().clearCart();
+    await applySession(response.data, data.gym.id);
+    return data;
+  }
+
   function retrySession() {
     setSessionError(null);
     setIsLoading(true);
@@ -113,33 +187,41 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function signIn(email: string, password: string) {
-    const response = await api.post<{ token: string; user: GymGoUser }>('/auth/login', {
+    setActiveGymHeader(null);
+    const response = await api.post<SessionResponse & { token: string }>('/auth/login', {
       email: email.trim().toLowerCase(),
       password,
     });
     await writeAccessToken(response.data.token);
-    setUser(response.data.user);
+    await applySession(response.data);
   }
 
   async function signUp(input: ClientRegistration) {
-    const response = await api.post<{ token: string; user: GymGoUser }>('/auth/register', {
+    setActiveGymHeader(null);
+    const response = await api.post<SessionResponse & { token: string }>('/auth/register', {
       ...input,
       name: input.name.trim(),
       email: input.email.trim().toLowerCase(),
     });
     await writeAccessToken(response.data.token);
-    setUser(response.data.user);
+    await applySession(response.data);
   }
 
   async function signOut() {
     disconnectSocket();
     useCartStore.getState().clearCart();
     await removeAccessToken();
+    setActiveGymHeader(null);
+    setGyms([]);
+    setActiveGymId(null);
     setUser(null);
   }
 
+  const activeGym = gyms.find((gym) => gym.id === activeGymId) ?? null;
+  const needsGym = user?.role === 'Cliente' && !gyms.some((gym) => gym.roles.includes('Cliente'));
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, sessionError, retrySession, signIn, signUp, signOut, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, isLoading, sessionError, retrySession, signIn, signUp, signOut, updateUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );

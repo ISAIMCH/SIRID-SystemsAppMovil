@@ -21,7 +21,7 @@ const {
   resolveTargetGym,
   resolveTenant,
 } = require('../utils/tenant');
-const { saveMembership } = require('../utils/membership');
+const { MIRRORED_FIELDS, saveMembership } = require('../utils/membership');
 const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
 const { isOwner, hasGymRole, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
 
@@ -113,12 +113,21 @@ async function listUserGyms(user) {
   });
 }
 
+// The membership a client has with the organization, in the shape of the legacy User.membership copy.
+async function membershipSummary(userId, organizationId) {
+  const membership = await Membership.findOne({ userId, organizationId }).lean();
+  if (!membership) return {};
+  return { membership: Object.fromEntries(MIRRORED_FIELDS.map((field) => [field, membership[field]])) };
+}
+
 // The profile plus the organization and gyms of the session; `role` keeps the legacy value (Propietario/Gerente → Admin).
-async function sessionResponse(user) {
-  const [context, gyms] = await Promise.all([loadTenantContext(user), listUserGyms(user)]);
-  const access = context && resolveAccess(context, ROUTE_ROLES);
+// With a selected gym (X-Gym-Id) the organization and the client's membership are those of that gym.
+async function sessionResponse(user, requestedGymId = null) {
+  const [context, gyms] = await Promise.all([loadTenantContext(user, requestedGymId), listUserGyms(user)]);
+  const access = context && resolveAccess(context, ROUTE_ROLES, requestedGymId);
+  const membership = context?.member.roles.includes('Cliente') ? await membershipSummary(user._id, context.organizationId) : {};
   return {
-    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}) },
+    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}), ...membership },
     organization: context ? { id: String(context.organizationId), name: context.organization.name } : null,
     gyms,
     defaultGymId: access ? String(access.gymId) : null,
@@ -563,7 +572,7 @@ async function login(req, res) {
 }
 
 async function getCurrentUser(req, res) {
-  res.json(await sessionResponse(req.user));
+  res.json(await sessionResponse(req.user, req.get('x-gym-id') || null));
 }
 
 async function getMyGyms(req, res) {

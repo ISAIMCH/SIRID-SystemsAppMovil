@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientHomeScreen from './client-home-screen';
+import GymSwitcher from './gym-switcher';
 import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
@@ -96,6 +97,7 @@ function StaffDashboard() {
         <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint, isAdmin && styles.adminTopTint]} />
         <View style={[styles.page, user?.role === 'Coach' && styles.darkPage, isAdmin && styles.adminPage]}>
         <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
+        <GymSwitcher />
 
         <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero, isAdmin && styles.adminHero]}>
           <Eyebrow>{isClient ? 'PLAN PERSONAL' : `${user?.role?.toUpperCase()} · GYMGO`}</Eyebrow>

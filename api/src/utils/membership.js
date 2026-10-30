@@ -55,4 +55,4 @@ async function activateMembership(session, payment) {
   await saveMembership(membership, { session });
 }
 
-module.exports = { hasActiveMembership, membershipCoversGym, saveMembership, activateMembership };
+module.exports = { MIRRORED_FIELDS, hasActiveMembership, membershipCoversGym, saveMembership, activateMembership };

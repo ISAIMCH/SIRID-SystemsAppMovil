@@ -9,6 +9,7 @@ import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientAccessModal from './client-access-modal';
 import { FloatingCard } from './fit-ui';
+import GymSwitcher from './gym-switcher';
 
 type Period = 'day' | 'week' | 'month';
 type Analytics = {
@@ -155,6 +156,7 @@ export default function ClientHomeScreen() {
             <Text style={styles.eyebrow}>GYMGO · CLIENTE</Text>
             <Text style={styles.greeting}>Hola, {user?.name?.split(' ')[0] ?? 'deportista'}</Text>
             <Text style={styles.subtitle}>{periodName} · {displayDate}</Text>
+            <GymSwitcher />
           </View>
         </View>
 
