@@ -22,6 +22,7 @@ const {
   resolveTenant,
 } = require('../utils/tenant');
 const { saveMembership } = require('../utils/membership');
+const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
 const { isOwner, hasGymRole, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
 
 const phoneSchema = z.string().trim()
@@ -152,13 +153,13 @@ function safeStringEqual(value, expected) {
 }
 
 async function registerClient(req, res) {
-  const input = registrationSchema.parse(req.body);
+  const { joinCode, ...input } = registrationSchema.extend({ joinCode: z.string().trim().max(20).optional() }).parse(req.body);
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
   }
 
-  // Until clients join a gym by code (etapa 3), self-registered clients join the default organization.
-  const { organizationId, gymId } = getDefaultTenant();
+  // A client signs up without a gym and joins one by code, now (joinCode) or later from the app (POST /gyms/join).
+  const gym = joinCode ? await findGymByJoinCode(joinCode) : null;
   const user = new User({
     ...input,
     role: 'Cliente',
@@ -167,8 +168,7 @@ async function registerClient(req, res) {
   await user.setPassword(input.password);
   await withTransaction(async (session) => {
     await user.save({ session });
-    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'] }], { session });
-    await Membership.create([{ userId: user._id, organizationId, homeGymId: gymId, status: 'pending' }], { session });
+    if (gym) await addClientToGym(user._id, gym, { session });
   });
 
   res.status(201).json(await authResponse(user));
@@ -608,6 +608,7 @@ module.exports = {
   login,
   getCurrentUser,
   getMyGyms,
+  listUserGyms,
   updatePhysicalProfile,
   applyLegacyRole,
 };

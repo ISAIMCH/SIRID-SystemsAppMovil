@@ -1,5 +1,5 @@
-// Etapas 1 y 2 de varios gimnasios: crea la organización y la sucursal predeterminadas, les asigna los datos existentes
-// y pasa el stock de cada producto a su sucursal (ProductStock).
+// Etapas 1 a 3 de varios gimnasios: crea la organización y la sucursal predeterminadas, les asigna los datos existentes,
+// pasa el stock de cada producto a su sucursal (ProductStock) y da a cada sucursal su código para unirse.
 // Uso: npm run migrate:tenancy --dry-run   (o: node scripts/migrate-tenancy.js --dry-run)
 // Se puede ejecutar varias veces: solo completa lo que falta y no modifica lo que ya existe.
 require('dotenv').config();
@@ -21,6 +21,8 @@ const AccessIoT = require('../src/models/access-iot.model');
 const MaintenanceReport = require('../src/models/maintenance-report.model');
 const StoreOrder = require('../src/models/store-order.model');
 const Payment = require('../src/models/payment.model');
+const AccessDevice = require('../src/models/access-device.model');
+const { generateJoinCode } = require('../src/utils/access-codes');
 
 // PowerShell drops `--` in `npm run x -- --dry-run`, so npm keeps the flag and exposes it as npm_config_dry_run.
 const DRY_RUN = process.argv.includes('--dry-run') || process.env.npm_config_dry_run === 'true';
@@ -28,7 +30,7 @@ const DEFAULT_ORGANIZATION = { name: 'GymGo Demo', slug: 'gymgo-demo' };
 const DEFAULT_GYM = { name: 'Sucursal Principal', timezone: 'America/Mexico_City' };
 // Old StoreOrder documents point to a placeholder gym id; they are moved to the default gym.
 const TENANT_MODELS = [MembershipPlan, Product, Promotion, Exercise, RoutineTemplate, Routine, Equipment, AccessIoT, MaintenanceReport, StoreOrder, Payment];
-const NEW_MODELS = [Organization, Gym, OrganizationMember, Membership, ProductStock];
+const NEW_MODELS = [Organization, Gym, OrganizationMember, Membership, ProductStock, AccessDevice];
 // Etapa 2: the catalog is shared by the organization, so these indexes on the old gymId are dropped.
 const OBSOLETE_INDEXES = [
   [Product, 'gymId_1_category_1'],
@@ -150,6 +152,22 @@ async function moveStockToGyms(tenant) {
   }
 }
 
+// Etapa 3: gyms created before join codes existed get one; codes already assigned are kept.
+async function assignJoinCodes() {
+  const gyms = await Gym.find({ joinCode: { $not: { $type: 'string' } } }).select('_id name').lean();
+  console.log(`
+Códigos para unirse: ${gyms.length} sucursal(es) sin código.`);
+  if (DRY_RUN) return;
+  const taken = new Set(await Gym.distinct('joinCode'));
+  for (const gym of gyms) {
+    let joinCode;
+    do joinCode = generateJoinCode(); while (taken.has(joinCode));
+    taken.add(joinCode);
+    await Gym.updateOne({ _id: gym._id }, { $set: { joinCode } });
+    console.log(`- ${gym.name}: ${joinCode}`);
+  }
+}
+
 async function dropObsoleteIndexes() {
   console.log('\nÍndices antiguos:');
   for (const [Model, name] of OBSOLETE_INDEXES) {
@@ -168,6 +186,7 @@ async function main() {
   await assignTenantFields(tenant);
   await createMembers(tenant);
   await moveStockToGyms(tenant);
+  await assignJoinCodes();
   await dropObsoleteIndexes();
 
   if (DRY_RUN) {
