@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 
 const orderItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
@@ -22,5 +23,7 @@ const storeOrderSchema = new mongoose.Schema({
 storeOrderSchema.index({ gymId: 1, createdAt: -1 });
 // Reception redeems by PIN, so it must be unique among pending orders.
 storeOrderSchema.index({ pickupPin: 1 }, { unique: true, partialFilterExpression: { status: 'pending' }, name: 'pickupPin_pending_unique' });
+
+storeOrderSchema.plugin(tenantPlugin, { gym: true });
 
 module.exports = mongoose.model('StoreOrder', storeOrderSchema);

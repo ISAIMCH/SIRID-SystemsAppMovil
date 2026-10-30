@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 const { blockSchema } = require('./routine-exercise.schema');
 
 const simpleExerciseSchema = new mongoose.Schema({
@@ -31,5 +32,7 @@ const routineSchema = new mongoose.Schema({
 }, { timestamps: true, strict: false });
 
 routineSchema.index({ assignedTo: 1, status: 1, updatedAt: -1 });
+
+routineSchema.plugin(tenantPlugin);
 
 module.exports = mongoose.model('Routine', routineSchema);

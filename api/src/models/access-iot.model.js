@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 
 const accessIotSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
@@ -10,5 +11,7 @@ const accessIotSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 accessIotSchema.index({ user: 1, occurredAt: -1 });
+
+accessIotSchema.plugin(tenantPlugin, { gym: true });
 
 module.exports = mongoose.model('AccessIoT', accessIotSchema);

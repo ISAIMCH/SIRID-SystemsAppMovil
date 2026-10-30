@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 const { MUSCLE_GROUPS } = require('../constants/muscle-groups');
 
 const exerciseSchema = new mongoose.Schema({
@@ -12,5 +13,7 @@ const exerciseSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 exerciseSchema.index({ gymId: 1, muscleGroup: 1, name: 1 });
+
+exerciseSchema.plugin(tenantPlugin);
 
 module.exports = mongoose.model('Exercise', exerciseSchema);

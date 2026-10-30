@@ -1,13 +1,12 @@
 const { z } = require('zod');
-const mongoose = require('mongoose');
 const Product = require('../models/product.model');
 const Promotion = require('../models/promotion.model');
 const HttpError = require('../utils/http-error');
 const parseUpdate = require('../utils/parse-update');
+const { resolveTenant } = require('../utils/tenant');
 
 // Serves both /api/store/{products,promotions} (mobile app) and /api/products, /api/promotions (Admin dashboard).
 const MAX_IMAGE_LENGTH = 4 * 1024 * 1024;
-const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de producto inválido.');
 const imageSchema = z.string().trim().max(MAX_IMAGE_LENGTH).refine(
   (value) => value === '' || /^https?:\/\/\S+$/i.test(value) || /^data:image\/(png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value),
@@ -34,11 +33,7 @@ const promotionSchema = z.object({
 });
 
 function getGymId(req) {
-  const gymId = req.user?.gymId ?? req.auth?.gymId ?? req.gymId ?? MOCK_GYM_ID;
-  if (!gymId || !mongoose.isValidObjectId(gymId)) {
-    throw new HttpError(400, 'No se pudo determinar el gimnasio autenticado.');
-  }
-  return gymId;
+  return resolveTenant(req).gymId;
 }
 
 function assertId(id) {

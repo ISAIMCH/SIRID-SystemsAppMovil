@@ -1,6 +1,9 @@
 const { z } = require('zod');
 const MembershipPlan = require('../models/membership-plan.model');
+const Gym = require('../models/gym.model');
+const { GYM_ACCESS_SCOPES } = require('../models/gym-access.schema');
 const HttpError = require('../utils/http-error');
+const { resolveTenant } = require('../utils/tenant');
 
 const booleanSchema = z.preprocess((value) => {
   if (value === 'true') return true;
@@ -12,6 +15,19 @@ const specificationsSchema = z.union([
   z.array(z.string().trim().min(1).max(120)).max(15),
   z.string().transform((value) => value.split('\n').map((item) => item.trim()).filter(Boolean)),
 ]);
+
+const gymAccessSchema = z.preprocess((value) => {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}, z.object({
+  scope: z.enum(GYM_ACCESS_SCOPES),
+  gymIds: z.array(z.string().regex(/^[a-f\d]{24}$/i, 'ID de sucursal inválido.')).max(100).default([]),
+}).refine((access) => access.scope !== 'list' || access.gymIds.length > 0, { path: ['gymIds'], message: 'Elige al menos una sucursal.' })
+  .transform((access) => ({ scope: access.scope, gymIds: access.scope === 'list' ? [...new Set(access.gymIds)] : [] })));
 
 const planInputSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -26,6 +42,7 @@ const planInputSchema = z.object({
   planType: z.enum(['standard', 'promotional']).optional(),
   isActive: booleanSchema.optional(),
   tipoCobro: z.string().trim().min(1).max(30).optional(),
+  gymAccess: gymAccessSchema.optional(),
 });
 
 function parsePlanInput(body, { partial = false } = {}) {
@@ -40,6 +57,7 @@ function parsePlanInput(body, { partial = false } = {}) {
     ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
     ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
     ...(input.planType !== undefined ? { planType: input.planType } : {}),
+    ...(input.gymAccess !== undefined ? { gymAccess: input.gymAccess } : {}),
   };
 
   if (!partial) {
@@ -52,6 +70,14 @@ function parsePlanInput(body, { partial = false } = {}) {
     if (plan.isActive === undefined) plan.isActive = true;
   }
   return plan;
+}
+
+async function assertGymsInOrganization(plan, organizationId) {
+  const gymIds = plan.gymAccess?.gymIds ?? [];
+  if (gymIds.length === 0) return;
+  if (await Gym.countDocuments({ _id: { $in: gymIds }, organizationId }) !== gymIds.length) {
+    throw new HttpError(400, 'Alguna sucursal del plan no existe.');
+  }
 }
 
 function assertId(id) {
@@ -68,7 +94,9 @@ async function listPlans(req, res) {
 }
 
 async function createPlan(req, res) {
-  const plan = await MembershipPlan.create(parsePlanInput(req.body));
+  const input = parsePlanInput(req.body);
+  await assertGymsInOrganization(input, resolveTenant(req).organizationId);
+  const plan = await MembershipPlan.create(input);
   res.status(201).json({ plan });
 }
 
@@ -76,6 +104,7 @@ async function updatePlan(req, res) {
   assertId(req.params.id);
   const input = parsePlanInput(req.body, { partial: true });
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  await assertGymsInOrganization(input, resolveTenant(req).organizationId);
   const plan = await MembershipPlan.findOneAndUpdate(
     { _id: req.params.id, isDeleted: { $ne: true } },
     input,

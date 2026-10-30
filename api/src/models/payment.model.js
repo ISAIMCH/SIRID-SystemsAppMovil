@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 
 const paymentSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
@@ -27,5 +28,7 @@ paymentSchema.index(
   { validationPin: 1 },
   { unique: true, partialFilterExpression: { status: 'pending', validationPin: { $exists: true } }, name: 'validationPin_pending_unique' },
 );
+
+paymentSchema.plugin(tenantPlugin, { gym: true });
 
 module.exports = mongoose.model('Payment', paymentSchema);

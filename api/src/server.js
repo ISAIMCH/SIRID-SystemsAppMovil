@@ -5,6 +5,7 @@ const env = require('./config/env');
 const connectDatabase = require('./config/database');
 const mongoose = require('mongoose');
 const { resolveUserFromToken } = require('./middlewares/auth.middleware');
+const { loadDefaultTenant } = require('./utils/tenant');
 
 const httpServer = http.createServer(app);
 const allowedOrigins = app.get('allowedOrigins') ?? [];
@@ -40,6 +41,7 @@ app.set('io', io);
 
 async function startServer() {
   await connectDatabase();
+  await loadDefaultTenant();
   httpServer.listen(env.PORT, '0.0.0.0', () => {
     console.log(`GymGo API escuchando en el puerto ${env.PORT}.`);
   });

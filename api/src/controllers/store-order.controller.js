@@ -6,8 +6,8 @@ const Product = require('../models/product.model');
 const Promotion = require('../models/promotion.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
+const { resolveTenant } = require('../utils/tenant');
 
-const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
 const PICKUP_PIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 const orderSchema = z.object({
@@ -25,9 +25,7 @@ const orderSchema = z.object({
 });
 
 function getGymId(req) {
-  const gymId = req.user?.gymId ?? req.auth?.gymId ?? req.gymId ?? MOCK_GYM_ID;
-  if (!mongoose.isValidObjectId(gymId)) throw new HttpError(400, 'No se pudo determinar el gimnasio autenticado.');
-  return gymId;
+  return resolveTenant(req).gymId;
 }
 
 function assertId(id) {

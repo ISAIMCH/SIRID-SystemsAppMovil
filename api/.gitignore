@@ -9,3 +9,6 @@ file.png
 
 # User uploads never belong in git
 uploads/
+
+# Local database backups (mongodump)
+backups/

@@ -38,6 +38,8 @@ const userSchema = new mongoose.Schema({
     required: true,
   },
   isActive: { type: Boolean, default: true },
+  // SIRID staff who manage every organization; granted only with scripts/set-platform-admin.js.
+  isPlatformAdmin: { type: Boolean, default: false },
   membership: { type: membershipSchema, default: () => ({}) },
   assignedCoach: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   goal: { type: String, trim: true, maxlength: 120 },
