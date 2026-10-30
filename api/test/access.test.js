@@ -12,12 +12,13 @@ const env = require('../src/config/env');
 const HttpError = require('../src/utils/http-error');
 const AccessDevice = require('../src/models/access-device.model');
 const Gym = require('../src/models/gym.model');
+const Membership = require('../src/models/membership.model');
 const { membershipCoversGym } = require('../src/utils/membership');
 const { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, generateJoinCode, normalizeJoinCode, generateDeviceKey, hashDeviceKey } = require('../src/utils/access-codes');
 const { findGymByJoinCode } = require('../src/utils/join-gym');
 const { resolveAccess } = require('../src/utils/tenant');
 const authenticateIotDevice = require('../src/middlewares/iot-device.middleware');
-const { registerQrAccess, nextAccessEvent, openCheckInElsewhere, staffAccessGym } = require('../src/controllers/access.controller');
+const { createQrToken, registerQrAccess, nextAccessEvent, openCheckInElsewhere, staffAccessGym } = require('../src/controllers/access.controller');
 
 const id = () => new mongoose.Types.ObjectId();
 const [mainGym, northGym, southGym] = [id(), id(), id()];
@@ -169,4 +170,17 @@ test('a client of two organizations is only granted the gyms of the organization
   const context = { organizationId: id(), gyms: [ownGym], homeGymId: ownGym._id, member: { roles: ['Cliente'], gyms: [] } };
   assert.equal(String(resolveAccess(context, ['Cliente']).gymId), String(ownGym._id));
   assert.equal(resolveAccess({ ...context, requestedGymId: otherGym._id }, ['Cliente'], otherGym._id), null);
+});
+
+test('the QR handed to the client is valid right away and until expiresAt', async () => {
+  const restore = stub(Membership, 'findOne', () => lean({ status: 'active' }));
+  let body;
+  try {
+    const req = { user: { _id: id(), id: String(id()) }, tenant: { role: 'Cliente', organizationId: id(), gymId: mainGym } };
+    await createQrToken(req, { status: () => ({ json: (value) => { body = value; } }) });
+  } finally {
+    restore();
+  }
+  const payload = jwt.verify(body.qrToken, env.QR_TOKEN_SECRET, { issuer: 'gymgo-api', audience: 'gymgo-iot' });
+  assert.equal(payload.exp * 1000, new Date(body.expiresAt).getTime());
 });
