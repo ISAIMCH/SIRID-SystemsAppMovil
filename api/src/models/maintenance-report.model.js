@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 
 const maintenanceReportSchema = new mongoose.Schema({
   equipment: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment', required: true, index: true },
@@ -10,5 +11,7 @@ const maintenanceReportSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 maintenanceReportSchema.index({ status: 1, createdAt: -1 });
+
+maintenanceReportSchema.plugin(tenantPlugin, { gym: true });
 
 module.exports = mongoose.model('MaintenanceReport', maintenanceReportSchema);

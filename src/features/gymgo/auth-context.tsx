@@ -1,6 +1,9 @@
+import { isAxiosError } from 'axios';
 import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 
-import { api } from './api';
+import { disconnectSocket } from '../../services/socket';
+import { useCartStore } from '../../store/cartStore';
+import { api, setUnauthorizedHandler } from './api';
 import { readAccessToken, removeAccessToken, writeAccessToken } from './token-storage';
 
 export type GymGoRole = 'Admin' | 'Coach' | 'Cliente';
@@ -41,6 +44,8 @@ export type GymGoUser = {
 type AuthContextValue = {
   user: GymGoUser | null;
   isLoading: boolean;
+  sessionError: string | null;
+  retrySession: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: ClientRegistration) => Promise<void>;
   signOut: () => Promise<void>;
@@ -65,6 +70,8 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [user, setUser] = useState<GymGoUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
 
   useEffect(() => {
     let isCurrent = true;
@@ -73,10 +80,16 @@ export function AuthProvider({ children }: PropsWithChildren) {
       try {
         const token = await readAccessToken();
         if (!token) return;
-        const response = await api.get<{ user: GymGoUser }>('/auth/me', { timeout: 12000 });
+        // Render cold starts can take close to a minute.
+        const response = await api.get<{ user: GymGoUser }>('/auth/me', { timeout: 60000 });
         if (isCurrent) setUser(response.data.user);
-      } catch {
-        await removeAccessToken();
+      } catch (error) {
+        // Only a rejected token ends the session; network failures keep it so the user can retry.
+        if (isAxiosError(error) && error.response?.status === 401) {
+          await removeAccessToken();
+        } else if (isCurrent) {
+          setSessionError('No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.');
+        }
       } finally {
         if (isCurrent) setIsLoading(false);
       }
@@ -86,7 +99,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       isCurrent = false;
     };
+  }, [restoreAttempt]);
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => { void signOut(); });
+    return () => setUnauthorizedHandler(null);
   }, []);
+
+  function retrySession() {
+    setSessionError(null);
+    setIsLoading(true);
+    setRestoreAttempt((value) => value + 1);
+  }
 
   async function signIn(email: string, password: string) {
     const response = await api.post<{ token: string; user: GymGoUser }>('/auth/login', {
@@ -108,12 +132,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }
 
   async function signOut() {
+    disconnectSocket();
+    useCartStore.getState().clearCart();
     await removeAccessToken();
     setUser(null);
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, isLoading, sessionError, retrySession, signIn, signUp, signOut, updateUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );

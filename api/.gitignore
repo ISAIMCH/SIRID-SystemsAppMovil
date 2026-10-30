@@ -3,3 +3,12 @@ node_modules/
 .env.*
 !.env.example
 npm-debug.log*
+# Large local data, not served by the API (seed scripts download the dataset)
+exercises.json
+file.png
+
+# User uploads never belong in git
+uploads/
+
+# Local database backups (mongodump)
+backups/

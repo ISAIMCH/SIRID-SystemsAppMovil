@@ -10,6 +10,7 @@ const Equipment = require('./src/models/equipment.model');
 const Product = require('./src/models/product.model');
 const MembershipPlan = require('./src/models/membership-plan.model');
 const User = require('./src/models/user.model');
+const { loadDefaultTenant } = require('./src/utils/tenant');
 
 const equipmentCatalog = [
   { name: 'Prensa de piernas', zone: 'Zona de piernas', brand: 'Life Fitness', type: 'strength', totalQuantity: 2 },
@@ -122,21 +123,27 @@ async function seed() {
   await mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 });
   const passwordHash = await bcrypt.hash(password, 12);
   const now = new Date();
+  // Upserts skip the tenant plugin, so the default organization and gym are set explicitly.
+  const { organizationId, gymId } = await loadDefaultTenant();
 
   for (const item of equipmentCatalog) {
     await Equipment.updateOne(
-      { name: item.name, zone: item.zone },
-      { $set: { ...item, status: 'available' } },
+      { name: item.name, zone: item.zone, gymId },
+      { $set: { ...item, status: 'available', organizationId, gymId } },
       { upsert: true, runValidators: true },
     );
   }
 
   for (const product of productCatalog) {
-    await Product.updateOne({ name: product.name }, { $setOnInsert: product }, { upsert: true, runValidators: true });
+    await Product.updateOne(
+      { name: product.name, organizationId },
+      { $setOnInsert: { ...product, organizationId, gymId } },
+      { upsert: true, runValidators: true },
+    );
   }
 
   for (const plan of planCatalog) {
-    await MembershipPlan.updateOne({ name: plan.name }, { $setOnInsert: plan }, { upsert: true, runValidators: true });
+    await MembershipPlan.updateOne({ name: plan.name, organizationId }, { $setOnInsert: { ...plan, organizationId } }, { upsert: true, runValidators: true });
   }
 
   const users = buildUsers(passwordHash, now);
@@ -164,6 +171,7 @@ async function seed() {
 
   console.log(`Seeder completado. Equipos: ${seededEquipmentCount}/15. Usuarios: ${seededUserCount}/3.`);
   console.log('Cuentas de prueba: coach@gymgo.test, cliente1@gymgo.test, cliente2@gymgo.test.');
+  console.log('Ejecuta npm run migrate:tenancy para registrar a los usuarios nuevos en la organización.');
 }
 
 seed()

@@ -210,32 +210,34 @@ export default function ClientHomeScreen() {
           {isLoading ? <ActivityIndicator color={dark.green} style={styles.loadingIndicator} /> : null}
           <View style={styles.chartArea}>
             {hasCalories && selectedAnalytics?.chartData.length ? (
-              <BarChart
-                key={`${period}-${selectedAnalytics.range.start}`}
-                data={chartData}
-                width={chartWidth}
-                height={166}
-                barWidth={period === 'month' ? 6 : period === 'day' ? 8 : 18}
-                spacing={period === 'month' ? 4 : period === 'day' ? 4 : 17}
-                initialSpacing={8}
-                adjustToWidth
-                frontColor={dark.green}
-                barBorderTopLeftRadius={5}
-                barBorderTopRightRadius={5}
-                noOfSections={4}
-                maxValue={chartMaximum * 4}
-                stepValue={chartMaximum}
-                yAxisTextStyle={styles.axisText}
-                xAxisLabelTextStyle={styles.axisText}
-                xAxisColor={dark.line}
-                yAxisColor={dark.line}
-                rulesColor={dark.surface}
-                rulesThickness={1}
-                hideOrigin
-                isAnimated
-                animationDuration={350}
-                disableScroll
-              />
+              <View pointerEvents="none">
+                <BarChart
+                  key={`${period}-${selectedAnalytics.range.start}`}
+                  data={chartData}
+                  width={chartWidth}
+                  height={166}
+                  barWidth={period === 'month' ? 6 : period === 'day' ? 8 : 18}
+                  spacing={period === 'month' ? 4 : period === 'day' ? 4 : 17}
+                  initialSpacing={8}
+                  adjustToWidth
+                  frontColor={dark.green}
+                  barBorderTopLeftRadius={5}
+                  barBorderTopRightRadius={5}
+                  noOfSections={4}
+                  maxValue={chartMaximum * 4}
+                  stepValue={chartMaximum}
+                  yAxisTextStyle={styles.axisText}
+                  xAxisLabelTextStyle={styles.axisText}
+                  xAxisColor={dark.line}
+                  yAxisColor={dark.line}
+                  rulesColor={dark.surface}
+                  rulesThickness={1}
+                  hideOrigin
+                  isAnimated
+                  animationDuration={350}
+                  disableScroll
+                />
+              </View>
             ) : !isLoading ? (
               <View style={styles.emptyChart}>
                 <Text style={styles.emptyChartValue}>0 <Text style={styles.emptyChartUnit}>kcal</Text></Text>

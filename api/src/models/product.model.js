@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
@@ -12,5 +13,7 @@ const productSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 productSchema.index({ gymId: 1, category: 1 });
+
+productSchema.plugin(tenantPlugin);
 
 module.exports = mongoose.model('Product', productSchema);

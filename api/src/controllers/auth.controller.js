@@ -16,6 +16,12 @@ const credentialsSchema = z.object({
   password: z.string().min(10).max(72).refine((password) => Buffer.byteLength(password, 'utf8') <= 72),
 });
 
+// On edits an empty password keeps the current one; a new one follows the registration rules.
+const optionalPasswordSchema = z.string().trim()
+  .refine((password) => password === '' || password.length >= 10, 'La contraseña debe tener al menos 10 caracteres.')
+  .refine((password) => Buffer.byteLength(password, 'utf8') <= 72, 'La contraseña es demasiado larga.')
+  .optional();
+
 const registrationSchema = credentialsSchema.extend({
   name: z.string().trim().min(2).max(100),
   lastName: z.string().trim().max(50).optional(),
@@ -277,7 +283,7 @@ async function updateDirectoryUser(req, res) {
     address: z.string().trim().max(200).optional(),
     documents: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
     isActive: z.boolean().optional(),
-    password: z.string().max(72).optional(),
+    password: optionalPasswordSchema,
     goal: z.string().trim().max(120).optional(),
     experienceLevel: z.union([z.enum(['principiante', 'intermedio', 'avanzado']), z.literal('')]).optional(),
     availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)
@@ -341,7 +347,7 @@ async function updateUser(req, res) {
     address: z.string().trim().max(200).optional(),
     documents: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
     isActive: z.boolean().optional(),
-    password: z.string().max(72).optional(),
+    password: optionalPasswordSchema,
     goal: z.string().trim().max(120).optional(),
     experienceLevel: z.union([z.enum(['principiante', 'intermedio', 'avanzado']), z.literal('')]).optional(),
     availableTrainingDays: z.array(z.number().int().min(0).max(6)).max(7)

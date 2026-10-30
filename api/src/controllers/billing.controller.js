@@ -1,8 +1,10 @@
-const { randomBytes, randomInt } = require('node:crypto');
+const { randomBytes } = require('node:crypto');
 const { z } = require('zod');
 const Payment = require('../models/payment.model');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
+const { activateMembership } = require('../utils/membership');
+const { generateUniquePaymentPin } = require('../utils/payment-pin');
 
 function serializePayment(payment, { includePin = false } = {}) {
   const user = payment.user;
@@ -26,24 +28,9 @@ function serializePayment(payment, { includePin = false } = {}) {
   };
 }
 
-async function generateUniquePin() {
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const pin = String(randomInt(0, 100000)).padStart(5, '0');
-    if (!(await Payment.exists({ validationPin: pin, status: 'pending' }))) return pin;
-  }
-  throw new HttpError(503, 'No se pudo generar un PIN. Intenta de nuevo.');
-}
-
 async function getMyBilling(req, res) {
   const user = await User.findById(req.user.id).select('membership');
   const payments = await Payment.find({ user: req.user.id }).sort({ createdAt: -1 }).lean();
-  for (const payment of payments) {
-    if (payment.status === 'pending' && (!payment.validationPin || !payment.pin)) {
-      payment.validationPin = await generateUniquePin();
-      payment.pin = payment.validationPin;
-      await Payment.updateOne({ _id: payment._id }, { $set: { validationPin: payment.validationPin, pin: payment.pin } });
-    }
-  }
   res.json({ membership: user.membership, payments: payments.map((payment) => serializePayment(payment, { includePin: true })) });
 }
 
@@ -57,7 +44,7 @@ async function requestReceptionPayment(req, res) {
   }
   const existingRequest = await Payment.findOne({ user: user.id, status: 'pending' });
   if (existingRequest) throw new HttpError(409, 'Ya tienes una solicitud de pago pendiente.');
-  const pin = await generateUniquePin();
+  const pin = await generateUniquePaymentPin();
 
   const payment = await Payment.create({
     user: user.id,
@@ -110,23 +97,7 @@ async function updatePaymentStatus(req, res) {
       payment.processedAt = new Date();
       await payment.save({ session });
 
-      if (status === 'paid') {
-        const user = await User.findOne({ _id: payment.user, role: 'Cliente' }).session(session);
-        if (!user) throw new HttpError(404, 'No se encontró el cliente del pago.');
-
-        const now = new Date();
-        const currentExpiry = user.membership.expiresAt;
-        const isMembershipCurrent = currentExpiry && currentExpiry > now;
-        const periodStartsAt = isMembershipCurrent ? currentExpiry : now;
-        user.membership.status = 'active';
-        if (!isMembershipCurrent) user.membership.startsAt = now;
-        user.membership.expiresAt = new Date(periodStartsAt.getTime() + payment.durationDays * 86400000);
-        user.membership.planName = payment.planName;
-        user.membership.price = payment.amount;
-        user.membership.currency = payment.currency;
-        user.membership.durationDays = payment.durationDays;
-        await user.save({ session });
-      }
+      if (status === 'paid') await activateMembership(session, payment);
 
       result = serializePayment(payment.toObject());
     });

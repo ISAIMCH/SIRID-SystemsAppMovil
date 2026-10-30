@@ -4,13 +4,8 @@ const env = require('../config/env');
 const HttpError = require('../utils/http-error');
 const asyncHandler = require('../utils/async-handler');
 
-const authenticate = asyncHandler(async (req, res, next) => {
-  const authorization = req.get('authorization');
-  const [scheme, token] = authorization?.split(' ') ?? [];
-
-  if (scheme !== 'Bearer' || !token) {
-    throw new HttpError(401, 'Se requiere autenticación.');
-  }
+async function resolveUserFromToken(token) {
+  if (!token) throw new HttpError(401, 'Se requiere autenticación.');
 
   let payload;
   try {
@@ -23,8 +18,18 @@ const authenticate = asyncHandler(async (req, res, next) => {
   if (!user || !user.isActive) {
     throw new HttpError(401, 'La cuenta no está disponible.');
   }
+  return user;
+}
 
-  req.user = user;
+const authenticate = asyncHandler(async (req, res, next) => {
+  const authorization = req.get('authorization');
+  const [scheme, token] = authorization?.split(' ') ?? [];
+
+  if (scheme !== 'Bearer' || !token) {
+    throw new HttpError(401, 'Se requiere autenticación.');
+  }
+
+  req.user = await resolveUserFromToken(token);
   next();
 });
 
@@ -37,4 +42,4 @@ function authorize(...roles) {
   };
 }
 
-module.exports = { authenticate, authorize };
+module.exports = { authenticate, authorize, resolveUserFromToken };

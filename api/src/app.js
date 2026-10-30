@@ -1,5 +1,4 @@
 const express = require('express');
-const path = require('node:path');
 const cors = require('cors');
 const helmet = require('helmet');
 const { rateLimit } = require('express-rate-limit');
@@ -24,11 +23,12 @@ const muscleGroupRoutes = require('./routes/muscle-group.routes');
 const exerciseDictionaryRoutes = require('./routes/exercise-dictionary.routes');
 const exerciseRoutes = require('./routes/exercise.routes');
 const userRoutes = require('./routes/user.routes');
+const documentRoutes = require('./routes/document.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
 app.set('trust proxy', 1);
-const allowedOrigins = env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean);
+const allowedOrigins = env.CORS_ORIGINS.split(',').map((origin) => origin.trim().replace(/\/+$/, '')).filter(Boolean);
 app.set('allowedOrigins', allowedOrigins);
 
 app.disable('x-powered-by');
@@ -43,15 +43,16 @@ app.use(cors({
     return callback(error);
   },
 }));
-app.use('/api/store', express.json({ limit: '6mb' }));
-app.use('/api/inventory', express.json({ limit: '6mb' }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Rate limits run before body parsing so rejected requests are never read.
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/bootstrap-admin', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false }));
+// Only routes that accept base64 images (up to 4 MB) get a larger body limit.
+app.use(['/api/store', '/api/inventory', '/api/products', '/api/promotions', '/api/equipment'], express.json({ limit: '6mb' }));
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
-app.use('/api/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/api/uploads', documentRoutes);
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);

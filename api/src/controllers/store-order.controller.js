@@ -6,8 +6,8 @@ const Product = require('../models/product.model');
 const Promotion = require('../models/promotion.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
+const { resolveTenant } = require('../utils/tenant');
 
-const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
 const PICKUP_PIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 const orderSchema = z.object({
@@ -25,17 +25,20 @@ const orderSchema = z.object({
 });
 
 function getGymId(req) {
-  const gymId = req.user?.gymId ?? req.auth?.gymId ?? req.gymId ?? MOCK_GYM_ID;
-  if (!mongoose.isValidObjectId(gymId)) throw new HttpError(400, 'No se pudo determinar el gimnasio autenticado.');
-  return gymId;
+  return resolveTenant(req).gymId;
 }
 
 function assertId(id) {
   if (!mongoose.isValidObjectId(id)) throw new HttpError(400, 'ID de pedido inválido.');
 }
 
-function generatePickupPin() {
-  return Array.from({ length: 4 }, () => PICKUP_PIN_ALPHABET[randomInt(PICKUP_PIN_ALPHABET.length)]).join('');
+// A unique partial index on pending orders backs this check against races.
+async function generateUniquePickupPin() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const pin = Array.from({ length: 4 }, () => PICKUP_PIN_ALPHABET[randomInt(PICKUP_PIN_ALPHABET.length)]).join('');
+    if (!(await StoreOrder.exists({ pickupPin: pin, status: 'pending' }))) return pin;
+  }
+  throw new HttpError(503, 'No se pudo generar un PIN. Intenta de nuevo.');
 }
 
 async function deductInventory(session, order) {
@@ -49,11 +52,16 @@ async function deductInventory(session, order) {
   }
 }
 
+// Only an Admin may create orders for another user or with a non-pending status.
+function resolveOrderOwnership(user, input) {
+  if (user.role !== 'Admin') return { userId: String(user._id), status: 'pending' };
+  return { userId: input.userId ?? String(user._id), status: input.status ?? 'paid' };
+}
+
 async function createOrder(req, res) {
   const input = orderSchema.parse(req.body);
   const gymId = getGymId(req);
-  const userId = input.userId ?? String(req.user._id);
-  const status = input.status ?? (req.user.role === 'Admin' ? 'paid' : 'pending');
+  const { userId, status } = resolveOrderOwnership(req.user, input);
   const quantities = new Map();
   for (const item of input.items) quantities.set(item.productId, (quantities.get(item.productId) ?? 0) + item.quantity);
 
@@ -87,6 +95,7 @@ async function createOrder(req, res) {
     discountApplied = Math.round((discountableSubtotal * promotion.discountPercentage / 100) * 100) / 100;
   }
   const totalAmount = Math.round((subtotal - discountApplied) * 100) / 100;
+  const pickupPin = await generateUniquePickupPin();
 
   const session = await mongoose.startSession();
   try {
@@ -103,7 +112,7 @@ async function createOrder(req, res) {
         status,
         paymentMethod: input.paymentMethod,
         reference: input.reference,
-        pickupPin: generatePickupPin(),
+        pickupPin,
       }], { session });
     });
     const createdOrder = await StoreOrder.findById(order._id)
@@ -111,7 +120,7 @@ async function createOrder(req, res) {
       .populate('items.productId', 'name imageUrl price')
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
-    emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder });
+    emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder }, [createdOrder.userId]);
     res.status(201).json({ order: createdOrder });
   } finally {
     await session.endSession();
@@ -163,7 +172,7 @@ async function updateOrderStatus(req, res) {
       .populate('items.productId', 'name imageUrl price')
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
-    emitRealtime(req, 'sale-updated', { action: 'updated', order: updatedOrder });
+    emitRealtime(req, 'sale-updated', { action: 'updated', order: updatedOrder }, [updatedOrder.userId]);
     res.json({ order: updatedOrder });
   } finally {
     await session.endSession();
@@ -189,11 +198,11 @@ async function redeemOrderByPin(req, res) {
       .populate('items.productId', 'name imageUrl price')
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
-    emitRealtime(req, 'sale-updated', { action: 'redeemed', order: updatedOrder });
+    emitRealtime(req, 'sale-updated', { action: 'redeemed', order: updatedOrder }, [updatedOrder.userId]);
     res.json({ order: updatedOrder });
   } finally {
     await session.endSession();
   }
 }
 
-module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus, redeemOrderByPin };
+module.exports = { createOrder, getOrders, getMyOrders, updateOrderStatus, redeemOrderByPin, resolveOrderOwnership };

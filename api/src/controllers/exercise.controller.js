@@ -1,10 +1,9 @@
 const { z } = require('zod');
-const mongoose = require('mongoose');
 const Exercise = require('../models/exercise.model');
 const HttpError = require('../utils/http-error');
+const { resolveTenant } = require('../utils/tenant');
 const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 
-const MOCK_GYM_ID = '60d5ecb8b392d700153ee123';
 const exerciseSchema = z.object({
   name: z.string().trim().min(1).max(120),
   muscleGroup: z.enum(MUSCLE_GROUPS),
@@ -13,9 +12,7 @@ const exerciseSchema = z.object({
 });
 
 function getGymId(req) {
-  const gymId = req.user?.gymId ?? req.auth?.gymId ?? req.gymId ?? MOCK_GYM_ID;
-  if (!mongoose.isValidObjectId(gymId)) throw new HttpError(400, 'No se pudo determinar el gimnasio autenticado.');
-  return gymId;
+  return resolveTenant(req).gymId;
 }
 
 function assertId(id) {

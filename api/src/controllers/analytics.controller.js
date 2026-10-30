@@ -4,6 +4,7 @@ const Equipment = require('../models/equipment.model');
 const User = require('../models/user.model');
 const WorkoutSession = require('../models/workout-session.model');
 const mongoose = require('mongoose');
+const HttpError = require('../utils/http-error');
 
 async function getOperationsDashboard(req, res) {
   const { period } = z.object({ period: z.enum(['day', 'week']).default('day') }).parse(req.query);

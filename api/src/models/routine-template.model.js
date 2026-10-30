@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const tenantPlugin = require('./plugins/tenant.plugin');
 const { blockSchema } = require('./routine-exercise.schema');
 
 const routineTemplateSchema = new mongoose.Schema({
@@ -14,5 +15,7 @@ const routineTemplateSchema = new mongoose.Schema({
   deletedAt: { type: Date, default: null },
   blocks: { type: [blockSchema], validate: (items) => items.length > 0 },
 }, { timestamps: true, strict: false });
+
+routineTemplateSchema.plugin(tenantPlugin);
 
 module.exports = mongoose.model('RoutineTemplate', routineTemplateSchema);

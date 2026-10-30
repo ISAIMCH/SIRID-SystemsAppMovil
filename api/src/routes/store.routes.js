@@ -14,6 +14,5 @@ router.get('/promotions', asyncHandler(controller.listPromotions));
 router.post('/promotions', authorize('Admin'), asyncHandler(controller.createPromotion));
 router.patch('/promotions/:id', authorize('Admin'), asyncHandler(controller.updatePromotion));
 router.delete('/promotions/:id', authorize('Admin'), asyncHandler(controller.deletePromotion));
-router.post('/orders', asyncHandler(controller.createOrder));
 
 module.exports = router;

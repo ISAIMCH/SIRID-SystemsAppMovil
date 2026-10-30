@@ -4,7 +4,7 @@ const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
-const { emitRealtime } = require('../utils/realtime');
+const { emitRealtime, broadcastRealtime } = require('../utils/realtime');
 const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 const exerciseSchema = z.object({
@@ -197,6 +197,19 @@ function normalizeBlocks(source) {
   });
 }
 
+// Admins manage every routine; Coaches manage the routines of their assigned clients, as in listRoutines.
+async function canManageRoutine(user, routine) {
+  if (user.role === 'Admin') return true;
+  if (user.role !== 'Coach' || !routine.assignedTo) return false;
+  return Boolean(await User.exists({ _id: routine.assignedTo, assignedCoach: user.id }));
+}
+
+// Unassigned (template) routines reach everyone; assigned ones only their client, author and Admins.
+function emitRoutineUpdate(req, payload, routine, previousAssignedTo = null) {
+  if (!routine.assignedTo) return broadcastRealtime(req, 'routine-updated', payload);
+  return emitRealtime(req, 'routine-updated', payload, [routine.assignedTo, previousAssignedTo, routine.createdBy]);
+}
+
 function routineResponse(routine) {
   const value = routine.toObject ? routine.toObject() : routine;
   const blocks = normalizeBlocks(value).map((block) => ({
@@ -297,7 +310,7 @@ async function createRoutine(req, res) {
       createdBy: req.user.id,
     });
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+    emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
     return res.status(201).json({ routine: response });
   }
 
@@ -310,7 +323,7 @@ async function createRoutine(req, res) {
       createdBy: req.user.id,
     });
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+    emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
     return res.status(201).json({ routine: response });
   }
 
@@ -323,21 +336,17 @@ async function createRoutine(req, res) {
   }
   const routine = await Routine.create({ ...input, createdBy: req.user.id });
   const response = routineResponse(routine);
-  emitRealtime(req, 'routine-updated', { action: 'created', routine: response });
+  emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
   res.status(201).json({ routine: response });
 }
 
 async function getRoutine(req, res) {
-  const routine = await Routine.findById(req.params.id)
+  const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } })
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false });
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-  const isAdmin = req.user.role === 'Admin';
   const isAssignedClient = req.user.role === 'Cliente' && String(routine.assignedTo) === req.user.id;
-  const isAssignedCoach = req.user.role === 'Coach'
-    && String(routine.createdBy) === req.user.id
-    && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
-  if (!isAdmin && !isAssignedClient && !isAssignedCoach) throw new HttpError(403, 'No tienes permisos para consultar esta rutina.');
+  if (!isAssignedClient && !await canManageRoutine(req.user, routine)) throw new HttpError(403, 'No tienes permisos para consultar esta rutina.');
   res.json({ routine: routineResponse(routine) });
 }
 
@@ -345,17 +354,15 @@ async function updateRoutine(req, res) {
   if (isAdvancedRoutinePayload(req.body)) {
     const input = advancedRoutineUpdateSchema.parse(req.body);
     if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
-    const routine = await Routine.findById(req.params.id);
+    const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-    const isAssignedCoach = req.user.role === 'Coach'
-      && String(routine.createdBy) === req.user.id
-      && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
-    if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede modificar esta rutina.');
+    if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
 
     const nextType = input.type ?? routine.type;
     const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
     if (nextType === 'custom' && !nextAssignedTo) throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
     if (input.assignedTo) await validateSimpleAssignment(input.assignedTo, req);
+    const previousAssignedTo = routine.assignedTo;
     Object.assign(routine, {
       ...input,
       objective: input.objective ?? routine.objective,
@@ -365,24 +372,22 @@ async function updateRoutine(req, res) {
     });
     await routine.save();
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+    emitRoutineUpdate(req, { action: 'updated', routine: response }, routine, previousAssignedTo);
     return res.json({ routine: response });
   }
 
   if (req.body.type || req.body.exercises) {
     const input = simpleRoutineUpdateSchema.parse(req.body);
     if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
-    const routine = await Routine.findById(req.params.id);
+    const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
     if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-    const isAssignedCoach = req.user.role === 'Coach'
-      && String(routine.createdBy) === req.user.id
-      && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
-    if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede modificar esta rutina.');
+    if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
 
     const nextType = input.type ?? routine.type;
     const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
     if (nextType === 'custom' && !nextAssignedTo) throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
     if (input.assignedTo) await validateSimpleAssignment(input.assignedTo, req);
+    const previousAssignedTo = routine.assignedTo;
     Object.assign(routine, {
       ...input,
       type: nextType,
@@ -390,17 +395,14 @@ async function updateRoutine(req, res) {
     });
     await routine.save();
     const response = routineResponse(routine);
-    emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+    emitRoutineUpdate(req, { action: 'updated', routine: response }, routine, previousAssignedTo);
     return res.json({ routine: response });
   }
 
   const input = routineBaseSchema.partial().omit({ assignedTo: true }).parse(req.body);
-  const routine = await Routine.findById(req.params.id);
+  const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-  const isAssignedCoach = req.user.role === 'Coach'
-    && String(routine.createdBy) === req.user.id
-    && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
-  if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede modificar esta rutina.');
+  if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
   if (input.blocks) await ensureEligibleBlocks(input.blocks);
 
   const blocks = input.blocks ?? normalizeBlocks(routine.toObject());
@@ -418,22 +420,19 @@ async function updateRoutine(req, res) {
   Object.assign(routine, input);
   await routine.save();
   const response = routineResponse(routine);
-  emitRealtime(req, 'routine-updated', { action: 'updated', routine: response });
+  emitRoutineUpdate(req, { action: 'updated', routine: response }, routine);
   res.json({ routine: response });
 }
 
 async function deleteRoutine(req, res) {
-  const routine = await Routine.findById(req.params.id);
+  const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-  const isAssignedCoach = req.user.role === 'Coach'
-    && String(routine.createdBy) === req.user.id
-    && await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id });
-  if (req.user.role !== 'Admin' && !isAssignedCoach) throw new HttpError(403, 'Solo el autor o un Admin puede eliminar esta rutina.');
+  if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede eliminar esta rutina.');
   routine.isDeleted = true;
   routine.deletedAt = new Date();
   routine.status = 'inactive';
   await routine.save();
-  emitRealtime(req, 'routine-updated', { action: 'deleted', routineId: req.params.id });
+  emitRoutineUpdate(req, { action: 'deleted', routineId: req.params.id }, routine);
   res.status(204).end();
 }
 

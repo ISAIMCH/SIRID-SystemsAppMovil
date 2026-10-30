@@ -58,11 +58,41 @@ Las contraseñas se guardan hasheadas con bcrypt. El login entrega un JWT firmad
 
 ### Configuración sensible y Render
 
-Las variables se describen en `api/.env.example`. En Render deben definirse, como mínimo, `MONGO_URI`, `JWT_SECRET`, `QR_TOKEN_SECRET`, `IOT_DEVICE_API_KEY`, `ADMIN_BOOTSTRAP_KEY` y `NODE_ENV=production`; los secretos JWT y QR deben ser distintos y fuertes. `CORS_ORIGINS` permite restringir orígenes web.
+Las variables se describen en `api/.env.example`. En Render deben definirse, como mínimo, `MONGO_URI`, `JWT_SECRET`, `QR_TOKEN_SECRET`, `IOT_DEVICE_API_KEY`, `ADMIN_BOOTSTRAP_KEY` y `NODE_ENV=production`; los secretos JWT y QR deben ser distintos y fuertes. En producción también es obligatorio `CORS_ORIGINS`: la lista, separada por comas, de los orígenes web permitidos (por ejemplo, la URL del dashboard de Admin). Sin esa variable, la API no arranca. La app móvil no envía `Origin`, así que no le afecta.
 
 Para crear el primer Admin, configura `ENABLE_ADMIN_BOOTSTRAP=true` de forma temporal. Envía a `/api/auth/bootstrap-admin` un JSON con `name`, `email`, `password` (mínimo 10 caracteres) y `bootstrapKey` igual a `ADMIN_BOOTSTRAP_KEY`. Después de crearlo, cambia `ENABLE_ADMIN_BOOTSTRAP=false` y elimina o rota la clave de bootstrap. Si ya existe un Admin, inicia sesión con esa cuenta; el endpoint inicial responde conflicto y no crea otro.
 
 No se deben copiar `MONGO_URI`, secretos, claves IoT ni tokens a la app móvil. El `.env` real no se versiona; solo se publica `.env.example` con placeholders.
+
+### Organizaciones y sucursales (etapa 1)
+
+Los datos pertenecen a una organización (el dueño o la cadena) y, cuando son físicos, a una sucursal:
+
+| Nivel | Modelos |
+|---|---|
+| Global | Usuarios (una cuenta de GymGo para todos los gimnasios), diccionario de ejercicios y grupos musculares |
+| Organización | Planes, productos, promociones, ejercicios propios, plantillas y rutinas |
+| Sucursal | Equipos, accesos, reportes de mantenimiento, pedidos de la tienda y pagos |
+| Personal | Historial de entrenamientos |
+
+- `OrganizationMember` guarda los roles de cada persona: `Propietario` y `Cliente` valen en toda la organización; `Gerente`, `Coach` y `Recepcion` se asignan por sucursal y se pueden combinar.
+- `Membership` guarda la membresía de un cliente con cada organización. `gymAccess` define dónde es válida: `all` (todas las sucursales), `home` (la sucursal elegida al venderla, como el Plan Básico) o `list` (sucursales concretas). Se copia del plan al vender para que editar el plan no cambie las membresías ya vendidas.
+- `User.isPlatformAdmin` marca al personal de SIRID; se otorga con `npm run platform:admin correo@ejemplo.com`.
+
+En esta etapa todo pertenece a la organización predeterminada ("GymGo Demo / Sucursal Principal"). La API sigue respondiendo igual, con el mismo `role`, y los permisos todavía usan `User.role` y `User.membership`; `OrganizationMember` y `Membership` se vuelven la fuente de verdad en la etapa 2. La API no arranca si la migración no se ha ejecutado.
+
+**Migración** (desde `api/`, con `MONGO_URI` en `api/.env`):
+
+1. Respaldo con [MongoDB Database Tools](https://www.mongodb.com/try/download/database-tools):
+   ```
+   mongodump --uri="<MONGO_URI>" --out="backups/antes-etapa-1"
+   ```
+   Para restaurarlo: `mongorestore --uri="<MONGO_URI>" --drop "backups/antes-etapa-1"`. La carpeta `backups/` no se sube al repositorio.
+2. Modo prueba, que solo cuenta lo que cambiaría: `npm run migrate:tenancy --dry-run`
+3. Aplicar: `npm run migrate:tenancy`
+4. Desplegar la API.
+
+El script se puede ejecutar varias veces: solo completa lo que falta. Después de `npm run seed`, ejecútalo otra vez para registrar a los usuarios nuevos en la organización.
 
 ## Parte 2: Aplicación móvil
 

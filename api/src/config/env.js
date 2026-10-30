@@ -15,7 +15,10 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().default('1h'),
   QR_TOKEN_TTL_SECONDS: z.coerce.number().int().min(15).max(300).default(60),
   CORS_ORIGINS: z.string().default(''),
-});
+}).refine(
+  (env) => env.NODE_ENV !== 'production' || env.CORS_ORIGINS.trim() !== '',
+  { path: ['CORS_ORIGINS'], message: 'es obligatorio en producción (orígenes web separados por comas).' },
+);
 
 const parsedEnv = envSchema.safeParse(process.env);
 

@@ -5,7 +5,7 @@ const User = require('../models/user.model');
 const AccessIoT = require('../models/access-iot.model');
 const env = require('../config/env');
 const HttpError = require('../utils/http-error');
-const hasActiveMembership = require('../utils/membership');
+const { hasActiveMembership } = require('../utils/membership');
 
 async function createQrToken(req, res) {
   if (req.user.role !== 'Cliente') throw new HttpError(403, 'El QR solo está disponible para clientes.');
