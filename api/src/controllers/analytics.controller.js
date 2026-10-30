@@ -5,6 +5,19 @@ const User = require('../models/user.model');
 const WorkoutSession = require('../models/workout-session.model');
 const mongoose = require('mongoose');
 const HttpError = require('../utils/http-error');
+const { resolveTenant, gymFilter } = require('../utils/tenant');
+const { findClientMember } = require('../utils/members');
+
+// Clients inside right now whose latest access was a check-in at one of the request's gyms.
+async function countCurrentOccupancy(req) {
+  const lastEvents = await AccessIoT.aggregate([
+    { $match: gymFilter(req) },
+    { $sort: { occurredAt: -1 } },
+    { $group: { _id: '$user', event: { $first: '$event' } } },
+    { $match: { event: 'check-in' } },
+  ]);
+  return User.countDocuments({ _id: { $in: lastEvents.map((item) => item._id) }, isActive: true, currentlyInside: true });
+}
 
 async function getOperationsDashboard(req, res) {
   const { period } = z.object({ period: z.enum(['day', 'week']).default('day') }).parse(req.query);
@@ -15,7 +28,7 @@ async function getOperationsDashboard(req, res) {
 
   const [eventsByDay, hourlyEvents, todaysCounts, currentOccupancy, equipmentByZone] = await Promise.all([
     AccessIoT.aggregate([
-      { $match: { occurredAt: { $gte: periodStart } } },
+      { $match: { ...gymFilter(req), occurredAt: { $gte: periodStart } } },
       { $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt', timezone: 'UTC' } },
         checkIns: { $sum: { $cond: [{ $eq: ['$event', 'check-in'] }, 1, 0] } },
@@ -24,19 +37,20 @@ async function getOperationsDashboard(req, res) {
       { $sort: { _id: 1 } },
     ]),
     AccessIoT.aggregate([
-      { $match: { occurredAt: { $gte: periodStart }, event: 'check-in' } },
+      { $match: { ...gymFilter(req), occurredAt: { $gte: periodStart }, event: 'check-in' } },
       { $group: { _id: { $hour: '$occurredAt' }, checkIns: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
     AccessIoT.aggregate([
-      { $match: { occurredAt: { $gte: todayStart } } },
+      { $match: { ...gymFilter(req), occurredAt: { $gte: todayStart } } },
       { $group: {
         _id: '$event',
         count: { $sum: 1 },
       } },
     ]),
-    User.countDocuments({ role: 'Cliente', isActive: true, currentlyInside: true }),
+    countCurrentOccupancy(req),
     Equipment.aggregate([
+      { $match: { ...gymFilter(req), isDeleted: { $ne: true } } },
       { $group: {
         _id: '$zone',
         total: { $sum: { $ifNull: ['$totalQuantity', 1] } },
@@ -188,13 +202,17 @@ async function getClientFitnessAnalytics(req, res) {
   }).parse(req.query);
 
   const clientId = req.params.clientId;
-  if (req.user.role === 'Cliente' && String(req.user.id) !== clientId) {
+  const { role } = resolveTenant(req);
+  if (role === 'Cliente' && String(req.user.id) !== clientId) {
     throw new HttpError(403, 'Solo puedes consultar tus propias estadísticas.');
   }
-  if (req.user.role === 'Coach') {
-    const assignedClient = await User.exists({ _id: clientId, role: 'Cliente', assignedCoach: req.user.id });
+  if (role === 'Coach') {
+    await findClientMember(req, clientId);
+    const assignedClient = await User.exists({ _id: clientId, assignedCoach: req.user.id });
     if (!assignedClient) throw new HttpError(404, 'Cliente no encontrado.');
-  } else if (!['Admin', 'Cliente'].includes(req.user.role)) {
+  } else if (role === 'Admin') {
+    await findClientMember(req, clientId);
+  } else if (role !== 'Cliente') {
     throw new HttpError(403, 'No tienes permiso para consultar estas estadísticas.');
   }
 

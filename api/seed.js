@@ -8,6 +8,7 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const Equipment = require('./src/models/equipment.model');
 const Product = require('./src/models/product.model');
+const ProductStock = require('./src/models/product-stock.model');
 const MembershipPlan = require('./src/models/membership-plan.model');
 const User = require('./src/models/user.model');
 const { loadDefaultTenant } = require('./src/utils/tenant');
@@ -134,10 +135,16 @@ async function seed() {
     );
   }
 
-  for (const product of productCatalog) {
-    await Product.updateOne(
+  // The catalog belongs to the organization; the starting stock goes to the default gym.
+  for (const { stock, ...product } of productCatalog) {
+    const seededProduct = await Product.findOneAndUpdate(
       { name: product.name, organizationId },
-      { $setOnInsert: { ...product, organizationId, gymId } },
+      { $setOnInsert: { ...product, organizationId } },
+      { upsert: true, new: true, runValidators: true },
+    );
+    await ProductStock.updateOne(
+      { productId: seededProduct._id, gymId },
+      { $setOnInsert: { quantity: stock, organizationId } },
       { upsert: true, runValidators: true },
     );
   }

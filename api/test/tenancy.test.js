@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
 const HttpError = require('../src/utils/http-error');
-const { setDefaultTenant, resolveTenant } = require('../src/utils/tenant');
+const { setDefaultTenant, getDefaultTenant } = require('../src/utils/tenant');
 const Product = require('../src/models/product.model');
 const Payment = require('../src/models/payment.model');
 const MembershipPlan = require('../src/models/membership-plan.model');
@@ -13,29 +13,27 @@ const { memberFromUser, membershipFromUser } = require('../scripts/migrate-tenan
 const tenant = { organizationId: new mongoose.Types.ObjectId(), gymId: new mongoose.Types.ObjectId() };
 const userId = new mongoose.Types.ObjectId();
 
-test('tenant resolution fails clearly until the default tenant is loaded', () => {
+test('the default organization for self-registration fails clearly until it is loaded', () => {
   setDefaultTenant(null);
-  assert.throws(() => resolveTenant({}), (error) => error instanceof HttpError && error.statusCode === 503);
+  assert.throws(() => getDefaultTenant(), (error) => error instanceof HttpError && error.statusCode === 503);
 });
 
-test('new documents get the default organization and gym', async (t) => {
+test('documents never fall back to the default organization', async (t) => {
   setDefaultTenant(tenant);
   t.after(() => setDefaultTenant(null));
 
-  const product = new Product({ name: 'Creatina', category: 'Suplementos', price: 10, gymId: tenant.gymId });
-  await product.validate();
-  assert.equal(String(product.organizationId), String(tenant.organizationId));
-
-  const payment = new Payment({ user: userId, planName: 'Mensual', amount: 500, durationDays: 30, reference: 'ref-1' });
-  await payment.validate();
-  assert.equal(String(payment.organizationId), String(tenant.organizationId));
-  assert.equal(String(payment.gymId), String(tenant.gymId));
-});
-
-test('documents without an organization are rejected when no tenant is loaded', async () => {
-  setDefaultTenant(null);
   const plan = new MembershipPlan({ name: 'Mensual', price: 500, durationInDays: 30 });
   await assert.rejects(plan.validate(), /organizationId/);
+
+  const payment = new Payment({ user: userId, planName: 'Mensual', amount: 500, durationDays: 30, reference: 'ref-1', organizationId: tenant.organizationId });
+  await assert.rejects(payment.validate(), /gymId/);
+});
+
+test('catalog products belong to the organization, not to a gym', async () => {
+  const product = new Product({ name: 'Creatina', category: 'Suplementos', price: 10, organizationId: tenant.organizationId });
+  await product.validate();
+  assert.equal(product.gymId, undefined);
+  assert.equal(product.stock, undefined);
 });
 
 test('plans default to every gym and a gym list needs at least one gym', async () => {

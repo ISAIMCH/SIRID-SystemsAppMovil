@@ -4,7 +4,9 @@ const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
-const { emitRealtime, broadcastRealtime } = require('../utils/realtime');
+const { emitRealtime, emitToStaff } = require('../utils/realtime');
+const { resolveTenant, organizationFilter } = require('../utils/tenant');
+const { findClientMember } = require('../utils/members');
 const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 const exerciseSchema = z.object({
@@ -151,17 +153,23 @@ function normalizeAdvancedBlocks(blocks) {
   }));
 }
 
+// The client must belong to the request's organization and, for a Coach, be one of their clients.
+async function findAssignableClient(req, clientId) {
+  await findClientMember(req, clientId, 'El cliente no existe o está inactivo.');
+  const client = await User.findOne({ _id: clientId, isActive: true });
+  if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
+  if (resolveTenant(req).role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
+    throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
+  }
+  return client;
+}
+
 async function validateSimpleAssignment(assignedTo, req) {
   if (!assignedTo) {
     if (req.body.type === 'custom') throw new HttpError(400, 'Una rutina custom requiere un cliente asignado.');
     return null;
   }
-  const client = await User.findOne({ _id: assignedTo, role: 'Cliente', isActive: true });
-  if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
-  if (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
-    throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
-  }
-  return client._id;
+  return (await findAssignableClient(req, assignedTo))._id;
 }
 
 function normalizeBlocks(source) {
@@ -197,16 +205,18 @@ function normalizeBlocks(source) {
   });
 }
 
-// Admins manage every routine; Coaches manage the routines of their assigned clients, as in listRoutines.
-async function canManageRoutine(user, routine) {
-  if (user.role === 'Admin') return true;
-  if (user.role !== 'Coach' || !routine.assignedTo) return false;
-  return Boolean(await User.exists({ _id: routine.assignedTo, assignedCoach: user.id }));
+// Admins manage every routine of the organization; Coaches the routines of their assigned clients, as in listRoutines.
+// Callers only pass routines already filtered by the request's organization.
+async function canManageRoutine(req, routine) {
+  const { role } = resolveTenant(req);
+  if (role === 'Admin') return true;
+  if (role !== 'Coach' || !routine.assignedTo) return false;
+  return Boolean(await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id }));
 }
 
-// Unassigned (template) routines reach everyone; assigned ones only their client, author and Admins.
+// Unassigned (template) routines reach the organization's staff; assigned ones only their client, author and Admins.
 function emitRoutineUpdate(req, payload, routine, previousAssignedTo = null) {
-  if (!routine.assignedTo) return broadcastRealtime(req, 'routine-updated', payload);
+  if (!routine.assignedTo) return emitToStaff(req, 'routine-updated', payload);
   return emitRealtime(req, 'routine-updated', payload, [routine.assignedTo, previousAssignedTo, routine.createdBy]);
 }
 
@@ -237,12 +247,14 @@ function legacyExercisesFromBlocks(blocks) {
   })));
 }
 
-async function ensureEligibleBlocks(blocks) {
+// Equipment must be in one of the organization's gyms.
+async function ensureEligibleBlocks(blocks, organizationId) {
   const exercises = blocks.flatMap((block) => block.exercises);
   const equipmentIds = [...new Set(exercises.filter((exercise) => exercise.equipmentId && !exercise.bodyweight).map((exercise) => String(exercise.equipmentId)))];
   const equipment = equipmentIds.length
     ? await Equipment.find({
       _id: { $in: equipmentIds },
+      organizationId,
       isDeleted: { $ne: true },
       status: { $ne: 'out_of_service' },
     }).select('_id type zone').lean()
@@ -278,18 +290,19 @@ async function ensureEligibleBlocks(blocks) {
 }
 
 async function listRoutines(req, res) {
+  const { role } = resolveTenant(req);
   let filter = { isDeleted: { $ne: true } };
-  if (req.user.role === 'Cliente')   filter = { assignedTo: req.user.id, isDeleted: { $ne: true } };
-  if (req.user.role === 'Coach') {
-    const clientIds = await User.find({ assignedCoach: req.user.id }).distinct('_id');
+  if (role === 'Cliente') filter = { assignedTo: req.user.id, isDeleted: { $ne: true } };
+  if (role === 'Coach' || role === 'Recepcion') {
+    const clientIds = role === 'Coach' ? await User.find({ assignedCoach: req.user.id }).distinct('_id') : [];
     filter = { assignedTo: { $in: clientIds }, isDeleted: { $ne: true } };
   }
-  if (req.user.role !== 'Cliente' && /^[a-f\d]{24}$/i.test(String(req.query.clientId ?? ''))) {
+  if (role !== 'Cliente' && /^[a-f\d]{24}$/i.test(String(req.query.clientId ?? ''))) {
     const clientId = String(req.query.clientId);
-    const isAssigned = req.user.role === 'Admin' || filter.assignedTo.$in.some((id) => String(id) === clientId);
+    const isAssigned = role === 'Admin' || filter.assignedTo.$in.some((id) => String(id) === clientId);
     filter = isAssigned ? { assignedTo: clientId, isDeleted: { $ne: true } } : { _id: null };
   }
-  const routines = await Routine.find(filter)
+  const routines = await Routine.find({ ...filter, ...organizationFilter(req) })
     .populate('assignedTo', 'name email')
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false })
@@ -304,6 +317,7 @@ async function createRoutine(req, res) {
     const assignedTo = await validateSimpleAssignment(input.assignedTo, req);
     const routine = await Routine.create({
       ...input,
+      ...organizationFilter(req),
       objective: input.objective ?? input.description,
       assignedTo: input.type === 'custom' ? assignedTo : null,
       blocks: normalizeAdvancedBlocks(input.blocks),
@@ -319,6 +333,7 @@ async function createRoutine(req, res) {
     const assignedTo = await validateSimpleAssignment(input.assignedTo, req);
     const routine = await Routine.create({
       ...input,
+      ...organizationFilter(req),
       assignedTo: input.type === 'custom' ? assignedTo : null,
       createdBy: req.user.id,
     });
@@ -328,25 +343,25 @@ async function createRoutine(req, res) {
   }
 
   const input = routineSchema.parse(req.body);
-  await ensureEligibleBlocks(input.blocks);
-  const client = await User.findOne({ _id: input.assignedTo, role: 'Cliente', isActive: true });
-  if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
-  if (req.user.role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
-    throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
-  }
-  const routine = await Routine.create({ ...input, createdBy: req.user.id });
+  await ensureEligibleBlocks(input.blocks, resolveTenant(req).organizationId);
+  await findAssignableClient(req, input.assignedTo);
+  const routine = await Routine.create({ ...input, ...organizationFilter(req), createdBy: req.user.id });
   const response = routineResponse(routine);
   emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
   res.status(201).json({ routine: response });
 }
 
+function findRoutine(req) {
+  return Routine.findOne({ _id: req.params.id, ...organizationFilter(req), isDeleted: { $ne: true } });
+}
+
 async function getRoutine(req, res) {
-  const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } })
+  const routine = await findRoutine(req)
     .populate('blocks.exercises.equipmentId', 'name zone status type')
     .populate({ path: 'exercises.equipmentId', select: 'name zone status type', strictPopulate: false });
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-  const isAssignedClient = req.user.role === 'Cliente' && String(routine.assignedTo) === req.user.id;
-  if (!isAssignedClient && !await canManageRoutine(req.user, routine)) throw new HttpError(403, 'No tienes permisos para consultar esta rutina.');
+  const isAssignedClient = resolveTenant(req).role === 'Cliente' && String(routine.assignedTo) === req.user.id;
+  if (!isAssignedClient && !await canManageRoutine(req, routine)) throw new HttpError(403, 'No tienes permisos para consultar esta rutina.');
   res.json({ routine: routineResponse(routine) });
 }
 
@@ -354,9 +369,9 @@ async function updateRoutine(req, res) {
   if (isAdvancedRoutinePayload(req.body)) {
     const input = advancedRoutineUpdateSchema.parse(req.body);
     if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
-    const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    const routine = await findRoutine(req);
     if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-    if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
+    if (!await canManageRoutine(req, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
 
     const nextType = input.type ?? routine.type;
     const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
@@ -379,9 +394,9 @@ async function updateRoutine(req, res) {
   if (req.body.type || req.body.exercises) {
     const input = simpleRoutineUpdateSchema.parse(req.body);
     if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
-    const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+    const routine = await findRoutine(req);
     if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-    if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
+    if (!await canManageRoutine(req, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
 
     const nextType = input.type ?? routine.type;
     const nextAssignedTo = input.assignedTo !== undefined ? input.assignedTo : routine.assignedTo;
@@ -400,10 +415,10 @@ async function updateRoutine(req, res) {
   }
 
   const input = routineBaseSchema.partial().omit({ assignedTo: true }).parse(req.body);
-  const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  const routine = await findRoutine(req);
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-  if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
-  if (input.blocks) await ensureEligibleBlocks(input.blocks);
+  if (!await canManageRoutine(req, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede modificar esta rutina.');
+  if (input.blocks) await ensureEligibleBlocks(input.blocks, routine.organizationId);
 
   const blocks = input.blocks ?? normalizeBlocks(routine.toObject());
   const scheduleDays = input.scheduleDays ?? routine.scheduleDays;
@@ -425,9 +440,9 @@ async function updateRoutine(req, res) {
 }
 
 async function deleteRoutine(req, res) {
-  const routine = await Routine.findOne({ _id: req.params.id, isDeleted: { $ne: true } });
+  const routine = await findRoutine(req);
   if (!routine) throw new HttpError(404, 'Rutina no encontrada.');
-  if (!await canManageRoutine(req.user, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede eliminar esta rutina.');
+  if (!await canManageRoutine(req, routine)) throw new HttpError(403, 'Solo el Coach del cliente o un Admin puede eliminar esta rutina.');
   routine.isDeleted = true;
   routine.deletedAt = new Date();
   routine.status = 'inactive';
@@ -448,6 +463,7 @@ module.exports = {
   blockSchema,
   scheduleRefinement,
   ensureEligibleBlocks,
+  findAssignableClient,
   normalizeBlocks,
   legacyExercisesFromBlocks,
   routineResponse,

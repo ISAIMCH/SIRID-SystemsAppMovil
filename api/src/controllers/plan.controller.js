@@ -3,7 +3,7 @@ const MembershipPlan = require('../models/membership-plan.model');
 const Gym = require('../models/gym.model');
 const { GYM_ACCESS_SCOPES } = require('../models/gym-access.schema');
 const HttpError = require('../utils/http-error');
-const { resolveTenant } = require('../utils/tenant');
+const { resolveTenant, organizationFilter } = require('../utils/tenant');
 
 const booleanSchema = z.preprocess((value) => {
   if (value === 'true') return true;
@@ -86,8 +86,9 @@ function assertId(id) {
 
 async function listPlans(req, res) {
   const filter = {
+    ...organizationFilter(req),
     isDeleted: { $ne: true },
-    ...(req.user.role === 'Admin' && req.query.all === 'true' ? {} : { isActive: true }),
+    ...(resolveTenant(req).role === 'Admin' && req.query.all === 'true' ? {} : { isActive: true }),
   };
   const plans = await MembershipPlan.find(filter).sort({ price: 1, name: 1 }).lean();
   res.json({ plans });
@@ -96,7 +97,7 @@ async function listPlans(req, res) {
 async function createPlan(req, res) {
   const input = parsePlanInput(req.body);
   await assertGymsInOrganization(input, resolveTenant(req).organizationId);
-  const plan = await MembershipPlan.create(input);
+  const plan = await MembershipPlan.create({ ...input, ...organizationFilter(req) });
   res.status(201).json({ plan });
 }
 
@@ -106,7 +107,7 @@ async function updatePlan(req, res) {
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
   await assertGymsInOrganization(input, resolveTenant(req).organizationId);
   const plan = await MembershipPlan.findOneAndUpdate(
-    { _id: req.params.id, isDeleted: { $ne: true } },
+    { _id: req.params.id, ...organizationFilter(req), isDeleted: { $ne: true } },
     input,
     { new: true, runValidators: true },
   );
@@ -117,7 +118,7 @@ async function updatePlan(req, res) {
 async function deletePlan(req, res) {
   assertId(req.params.id);
   const plan = await MembershipPlan.findOneAndUpdate(
-    { _id: req.params.id, isDeleted: { $ne: true } },
+    { _id: req.params.id, ...organizationFilter(req), isDeleted: { $ne: true } },
     { $set: { isDeleted: true, deletedAt: new Date(), isActive: false } },
     { new: true },
   );

@@ -9,13 +9,13 @@ const router = express.Router();
 router.use(authenticate);
 router.get('/me', authorize('Cliente'), asyncHandler(controller.getMyBilling));
 router.post('/payments', authorize('Cliente'), asyncHandler(controller.requestReceptionPayment));
-router.get('/payments', authorize('Admin'), asyncHandler(controller.listPayments));
+router.get('/payments', authorize('Admin', 'Recepcion'), asyncHandler(controller.listPayments));
 router.get(
   '/payments/pin/:pin',
-  authorize('Admin'),
+  authorize('Admin', 'Recepcion'),
   rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }),
   asyncHandler(controller.findPendingPaymentByPin),
 );
-router.patch('/payments/:id/status', authorize('Admin'), asyncHandler(controller.updatePaymentStatus));
+router.patch('/payments/:id/status', authorize('Admin', 'Recepcion'), asyncHandler(controller.updatePaymentStatus));
 
 module.exports = router;

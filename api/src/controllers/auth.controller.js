@@ -4,8 +4,25 @@ const { timingSafeEqual } = require('node:crypto');
 const { z } = require('zod');
 const User = require('../models/user.model');
 const MembershipPlan = require('../models/membership-plan.model');
+const Membership = require('../models/membership.model');
+const OrganizationMember = require('../models/organization-member.model');
+const Gym = require('../models/gym.model');
+const Organization = require('../models/organization.model');
 const env = require('../config/env');
 const HttpError = require('../utils/http-error');
+const withTransaction = require('../utils/transaction');
+const {
+  ROUTE_ROLES,
+  getDefaultTenant,
+  legacyRole,
+  loadTenantContext,
+  platformMember,
+  resolveAccess,
+  resolveTargetGym,
+  resolveTenant,
+} = require('../utils/tenant');
+const { saveMembership } = require('../utils/membership');
+const { isOwner, hasGymRole, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
 
 const phoneSchema = z.string().trim()
   .transform((value) => value.replace(/[\s()+-]/g, ''))
@@ -75,8 +92,56 @@ function createUserToken(user) {
   });
 }
 
-function authResponse(user) {
-  return { token: createUserToken(user), user: user.toSafeJSON() };
+// Every gym the user works in, across organizations, for the gym switchers of the dashboard and the app.
+// SIRID staff get every gym of every organization.
+async function listUserGyms(user) {
+  const members = user.isPlatformAdmin
+    ? (await Organization.find().select('name status').lean()).map((organization) => ({ ...platformMember(user, organization._id), organizationId: organization }))
+    : (await OrganizationMember.find({ userId: user._id, isActive: true }).populate('organizationId', 'name status').lean())
+      .filter((member) => member.organizationId?.status === 'active');
+  const gyms = await Gym.find({ organizationId: { $in: members.map((member) => member.organizationId._id) }, isActive: true })
+    .sort({ createdAt: 1 })
+    .select('_id name organizationId')
+    .lean();
+  return gyms.flatMap((gym) => {
+    const member = members.find((item) => String(item.organizationId._id) === String(gym.organizationId));
+    const gymRoles = member.gyms.find((assignment) => String(assignment.gymId) === String(gym._id))?.roles ?? [];
+    const roles = [...member.roles, ...gymRoles];
+    if (roles.length === 0) return [];
+    return [{ id: String(gym._id), name: gym.name, organization: { id: String(member.organizationId._id), name: member.organizationId.name }, roles }];
+  });
+}
+
+// The profile plus the organization and gyms of the session; `role` keeps the legacy value (Propietario/Gerente → Admin).
+async function sessionResponse(user) {
+  const [context, gyms] = await Promise.all([loadTenantContext(user), listUserGyms(user)]);
+  const access = context && resolveAccess(context, ROUTE_ROLES);
+  return {
+    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}) },
+    organization: context ? { id: String(context.organizationId), name: context.organization.name } : null,
+    gyms,
+    defaultGymId: access ? String(access.gymId) : null,
+  };
+}
+
+async function authResponse(user) {
+  return { token: createUserToken(user), ...(await sessionResponse(user)) };
+}
+
+
+// The legacy role edits the member's roles in one gym: Admin is Gerente there, Coach is Coach; Cliente leaves staff.
+function applyLegacyRole(member, role, gymId) {
+  if (isOwner(member)) throw new HttpError(409, 'El rol del propietario no se cambia desde aquí.');
+  if (role === 'Cliente') {
+    member.roles = ['Cliente'];
+    member.gyms = [];
+    return;
+  }
+  member.roles = member.roles.filter((item) => item !== 'Cliente');
+  member.gyms = [
+    ...member.gyms.filter((assignment) => String(assignment.gymId) !== String(gymId)),
+    { gymId, roles: [role === 'Admin' ? 'Gerente' : 'Coach'] },
+  ];
 }
 
 function safeStringEqual(value, expected) {
@@ -92,15 +157,21 @@ async function registerClient(req, res) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
   }
 
+  // Until clients join a gym by code (etapa 3), self-registered clients join the default organization.
+  const { organizationId, gymId } = getDefaultTenant();
   const user = new User({
     ...input,
     role: 'Cliente',
     membership: { status: 'pending' },
   });
   await user.setPassword(input.password);
-  await user.save();
+  await withTransaction(async (session) => {
+    await user.save({ session });
+    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'] }], { session });
+    await Membership.create([{ userId: user._id, organizationId, homeGymId: gymId, status: 'pending' }], { session });
+  });
 
-  res.status(201).json(authResponse(user));
+  res.status(201).json(await authResponse(user));
 }
 
 async function bootstrapAdmin(req, res) {
@@ -131,9 +202,13 @@ async function bootstrapAdmin(req, res) {
     membership: { status: 'active' },
   });
   await user.setPassword(input.password);
-  await user.save();
+  const { organizationId } = getDefaultTenant();
+  await withTransaction(async (session) => {
+    await user.save({ session });
+    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Propietario'] }], { session });
+  });
 
-  res.status(201).json(authResponse(user));
+  res.status(201).json(await authResponse(user));
 }
 
 async function createManagedUser(req, res) {
@@ -149,6 +224,8 @@ async function createManagedUser(req, res) {
     membershipPrice: z.coerce.number().min(0).max(1000000).optional(),
     membershipDurationDays: z.coerce.number().int().min(1).max(730).default(30),
     assignedCoach: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || null).optional(),
+    // The gym the new Coach works in or the client's home gym; defaults to the selected or main gym.
+    gymId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || undefined).optional(),
   }).superRefine((data, context) => {
     if (data.membershipStatus === 'active' && !data.membershipExpiresAt) {
       context.addIssue({ code: 'custom', path: ['membershipExpiresAt'], message: 'La membresía activa requiere vencimiento.' });
@@ -159,6 +236,8 @@ async function createManagedUser(req, res) {
   }).parse(normalizeMultipartBody(req));
 
   if (input.planId && !input.membershipPlanId) input.membershipPlanId = input.planId;
+  const { organizationId } = resolveTenant(req);
+  const gymId = resolveTargetGym(req, input.gymId);
 
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
@@ -169,17 +248,15 @@ async function createManagedUser(req, res) {
   if (input.role === 'Cliente' && input.address) {
     throw new HttpError(400, 'La dirección solo aplica a Coaches.');
   }
+  let plan = null;
   if (input.role === 'Cliente' && input.membershipPlanId) {
-    const plan = await MembershipPlan.findOne({ _id: input.membershipPlanId, isActive: true, isDeleted: { $ne: true } });
+    plan = await MembershipPlan.findOne({ _id: input.membershipPlanId, organizationId, isActive: true, isDeleted: { $ne: true } });
     if (!plan) throw new HttpError(400, 'El plan seleccionado no existe o está inactivo.');
     input.membershipPlanName = plan.name;
     input.membershipPrice = plan.price;
     input.membershipDurationDays = plan.durationInDays;
   }
-  if (input.assignedCoach) {
-    const coach = await User.findOne({ _id: input.assignedCoach, role: 'Coach', isActive: true });
-    if (!coach) throw new HttpError(400, 'El Coach asignado no existe o está inactivo.');
-  }
+  if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
 
   const assignedCoach = input.assignedCoach ?? null;
   const availableTrainingDays = input.availableTrainingDays ?? [];
@@ -210,12 +287,27 @@ async function createManagedUser(req, res) {
     },
   });
   await user.setPassword(input.password);
-  await user.save();
+  await withTransaction(async (session) => {
+    await user.save({ session });
+    if (input.role === 'Coach') {
+      await OrganizationMember.create([{ userId: user._id, organizationId, gyms: [{ gymId, roles: ['Coach'] }] }], { session });
+      return;
+    }
+    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'] }], { session });
+    await Membership.create([{
+      ...user.membership.toObject(),
+      userId: user._id,
+      organizationId,
+      homeGymId: gymId,
+      planId: plan?._id ?? null,
+      ...(plan ? { gymAccess: plan.gymAccess } : {}),
+    }], { session });
+  });
 
   res.status(201).json({ user: user.toSafeJSON() });
 }
 
-function serializeDirectoryUser(user) {
+function serializeDirectoryUser(user, member) {
   const coach = user.assignedCoach;
   return {
     id: String(user._id),
@@ -225,7 +317,7 @@ function serializeDirectoryUser(user) {
     phone: user.phone,
     address: user.address,
     documents: user.documents,
-    role: user.role,
+    role: member ? legacyRole(member) : user.role,
     isActive: user.isActive,
     goal: user.goal,
     experienceLevel: user.experienceLevel,
@@ -240,37 +332,50 @@ function serializeDirectoryUser(user) {
   };
 }
 
+const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach';
+
+// Admins see the organization's clients and the staff of their gyms; Coach and Recepcion see clients only.
 async function listDirectoryUsers(req, res) {
   const input = z.object({ role: z.enum(['Cliente', 'Coach']).optional() }).parse(req.query);
-  if (input.role === 'Coach' && req.user.role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
-  const filter = {};
-  if (input.role) filter.role = input.role;
-  if (req.user.role === 'Coach') {
-    filter.role = 'Cliente';
-    filter.assignedCoach = req.user.id;
-  }
+  const { organizationId, role, gymIds } = resolveTenant(req);
+  if (input.role === 'Coach' && role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
+
+  const members = (await OrganizationMember.find({ organizationId, isActive: true }).lean())
+    .filter((member) => canSeeMember(req, member))
+    .filter((member) => {
+      if (role !== 'Admin' || input.role === 'Cliente') return member.roles.includes('Cliente');
+      if (input.role === 'Coach') return hasGymRole(member, 'Coach', gymIds);
+      return true;
+    });
+  const filter = { _id: { $in: members.map((member) => member.userId) } };
+  if (role === 'Coach') filter.assignedCoach = req.user.id;
 
   const users = await User.find(filter)
-    .select('_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select(DIRECTORY_FIELDS)
     .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
+  const memberByUser = new Map(members.map((member) => [String(member.userId), member]));
 
-  res.json({ users: users.map(serializeDirectoryUser) });
+  res.json({ users: users.map((user) => serializeDirectoryUser(user, memberByUser.get(String(user._id)))) });
 }
 
 async function getDirectoryUser(req, res) {
+  if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
+  const { role } = resolveTenant(req);
+  const member = await findVisibleMember(req, req.params.id);
   const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
-    .select('_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select(DIRECTORY_FIELDS)
     .populate('assignedCoach', 'name email')
     .lean();
 
   if (!client) throw new HttpError(404, 'Usuario no encontrado.');
-  if (req.user.role === 'Coach' && (client.role !== 'Cliente' || String(client.assignedCoach?._id) !== req.user.id)) {
+  if (role !== 'Admin' && !member.roles.includes('Cliente')) throw new HttpError(404, 'Usuario no encontrado.');
+  if (role === 'Coach' && String(client.assignedCoach?._id) !== req.user.id) {
     throw new HttpError(404, 'Usuario no encontrado.');
   }
 
-  res.json({ user: serializeDirectoryUser(client) });
+  res.json({ user: serializeDirectoryUser(client, member) });
 }
 
 async function updateDirectoryUser(req, res) {
@@ -296,6 +401,7 @@ async function updateDirectoryUser(req, res) {
   }).parse(normalizeMultipartBody(req));
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
+  const member = await findVisibleMember(req, req.params.id);
   const user = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } });
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
 
@@ -321,19 +427,16 @@ async function updateDirectoryUser(req, res) {
   }
   if (input.assignedCoach !== undefined) {
     if (user.role !== 'Cliente') throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
-    if (input.assignedCoach) {
-      const coach = await User.findOne({ _id: input.assignedCoach, role: 'Coach', isActive: true });
-      if (!coach) throw new HttpError(400, 'El Coach asignado no existe o está inactivo.');
-    }
+    if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
     user.assignedCoach = input.assignedCoach;
   }
   await user.save();
 
   const updated = await User.findById(user._id)
-    .select('_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+    .select(DIRECTORY_FIELDS)
     .populate('assignedCoach', 'name email')
     .lean();
-  res.json({ user: serializeDirectoryUser(updated) });
+  res.json({ user: serializeDirectoryUser(updated, member) });
 }
 
 async function updateUser(req, res) {
@@ -357,9 +460,13 @@ async function updateUser(req, res) {
       .transform((value) => value || null)
       .optional(),
     observations: z.string().trim().max(4000).optional(),
+    // The gym a new staff role applies to; defaults to the selected or main gym.
+    gymId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || undefined).optional(),
   }).parse(normalizeMultipartBody(req));
-  if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  const { gymId: requestedGymId, ...changes } = input;
+  if (Object.keys(changes).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
+  const member = await findVisibleMember(req, req.params.id);
   const user = await User.findById(req.params.id);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
 
@@ -378,7 +485,18 @@ async function updateUser(req, res) {
     user.name = [firstName, lastName].filter(Boolean).join(' ').slice(0, 100);
     user.lastName = lastName;
   }
-  if (input.role !== undefined) user.role = input.role;
+  if (input.role !== undefined && input.role !== legacyRole(member)) {
+    const gymId = resolveTargetGym(req, requestedGymId);
+    applyLegacyRole(member, input.role, gymId);
+    user.role = legacyRole(member);
+    if (input.role === 'Cliente') {
+      await Membership.updateOne(
+        { userId: user._id, organizationId: member.organizationId },
+        { $setOnInsert: { homeGymId: gymId, status: 'pending' } },
+        { upsert: true },
+      );
+    }
+  }
   if (input.phone !== undefined) user.phone = input.phone || undefined;
   if (input.address !== undefined) user.address = input.address || undefined;
   if (input.documents !== undefined) user.documents = input.documents;
@@ -389,14 +507,14 @@ async function updateUser(req, res) {
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
   if (input.assignedCoach !== undefined) {
     if (user.role !== 'Cliente') throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
-    if (input.assignedCoach) {
-      const coach = await User.findOne({ _id: input.assignedCoach, role: 'Coach', isActive: true });
-      if (!coach) throw new HttpError(400, 'El Coach asignado no existe o está inactivo.');
-    }
+    if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
     user.assignedCoach = input.assignedCoach;
   }
   if (input.observations !== undefined) user.observations = input.observations;
-  await user.save();
+  await withTransaction(async (session) => {
+    await user.save({ session });
+    if (member.isModified()) await member.save({ session });
+  });
 
   res.json({ user: user.toSafeJSON() });
 }
@@ -411,11 +529,12 @@ async function updateMembership(req, res) {
     durationDays: z.number().int().min(1).max(730).optional(),
     autoRenew: z.boolean().optional(),
   }).parse(req.body);
-  const user = await User.findOne({ _id: req.params.id, role: 'Cliente' });
-  if (!user) throw new HttpError(404, 'Cliente no encontrado.');
+  const member = await findClientMember(req, req.params.id);
+  const membership = await Membership.findOne({ userId: member.userId, organizationId: member.organizationId });
+  if (!membership) throw new HttpError(404, 'Cliente no encontrado.');
 
-  const startsAt = input.startsAt ?? user.membership.startsAt;
-  const expiresAt = input.expiresAt ?? user.membership.expiresAt;
+  const startsAt = input.startsAt ?? membership.startsAt;
+  const expiresAt = input.expiresAt ?? membership.expiresAt;
   if (input.status === 'active' && !expiresAt) {
     throw new HttpError(400, 'Una membresía activa requiere fecha de vencimiento.');
   }
@@ -423,14 +542,9 @@ async function updateMembership(req, res) {
     throw new HttpError(400, 'El vencimiento debe ser posterior al inicio.');
   }
 
-  user.membership = {
-    ...user.membership.toObject(),
-    status: input.status,
-    startsAt,
-    expiresAt,
-    ...input,
-  };
-  await user.save();
+  membership.set({ ...input, startsAt, expiresAt });
+  await saveMembership(membership);
+  const user = await User.findById(member.userId);
   res.json({ user: user.toSafeJSON() });
 }
 
@@ -445,11 +559,15 @@ async function login(req, res) {
     throw new HttpError(401, 'Correo o contraseña incorrectos.');
   }
 
-  res.json(authResponse(user));
+  res.json(await authResponse(user));
 }
 
 async function getCurrentUser(req, res) {
-  res.json({ user: req.user.toSafeJSON() });
+  res.json(await sessionResponse(req.user));
+}
+
+async function getMyGyms(req, res) {
+  res.json({ gyms: await listUserGyms(req.user), defaultGymId: req.tenant ? String(req.tenant.gymId) : null });
 }
 
 async function updatePhysicalProfile(req, res) {
@@ -489,5 +607,7 @@ module.exports = {
   updateMembership,
   login,
   getCurrentUser,
+  getMyGyms,
   updatePhysicalProfile,
+  applyLegacyRole,
 };

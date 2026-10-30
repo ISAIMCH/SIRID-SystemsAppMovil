@@ -6,13 +6,12 @@ const productSchema = new mongoose.Schema({
   category: { type: String, required: true, trim: true, maxlength: 80 },
   price: { type: Number, required: true, min: 0, max: 1000000 },
   imageUrl: { type: String, default: '' },
-  stock: { type: Number, required: true, min: 0, max: 100000, default: 0 },
-  gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
   isDeleted: { type: Boolean, default: false, index: true },
   deletedAt: { type: Date, default: null },
 }, { timestamps: true });
 
-productSchema.index({ gymId: 1, category: 1 });
+// The catalog is shared by the organization; each gym keeps its own stock in ProductStock.
+productSchema.index({ organizationId: 1, category: 1 });
 
 productSchema.plugin(tenantPlugin);
 

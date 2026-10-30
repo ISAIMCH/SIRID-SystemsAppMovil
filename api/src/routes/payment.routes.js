@@ -5,11 +5,12 @@ const controller = require('../controllers/payment.controller');
 
 const router = express.Router();
 
-router.use(authenticate, authorize('Admin'));
-router.get('/', asyncHandler(controller.getPayments));
-router.post('/', asyncHandler(controller.createPayment));
-router.patch('/redeem', asyncHandler(controller.redeemPaymentByPin));
-router.put('/:id', asyncHandler(controller.updatePayment));
-router.delete('/:id', asyncHandler(controller.deletePayment));
+// Recepcion charges and redeems PINs; only Admins edit or delete payments.
+router.use(authenticate);
+router.get('/', authorize('Admin', 'Recepcion'), asyncHandler(controller.getPayments));
+router.post('/', authorize('Admin', 'Recepcion'), asyncHandler(controller.createPayment));
+router.patch('/redeem', authorize('Admin', 'Recepcion'), asyncHandler(controller.redeemPaymentByPin));
+router.put('/:id', authorize('Admin'), asyncHandler(controller.updatePayment));
+router.delete('/:id', authorize('Admin'), asyncHandler(controller.deletePayment));
 
 module.exports = router;

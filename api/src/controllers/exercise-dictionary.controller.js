@@ -3,6 +3,7 @@ const ExerciseDictionary = require('../models/exercise-dictionary.model');
 const Equipment = require('../models/equipment.model');
 const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 const { inferEquipmentCategory } = require('../constants/equipment-families');
+const { gymFilter } = require('../utils/tenant');
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -18,7 +19,8 @@ async function searchExercises(req, res) {
   const query = {};
   if (q.length >= 2) query.name = new RegExp(escapeRegex(q), 'i');
   if (muscleGroup) query.targetMuscle = new RegExp(`^${escapeRegex(muscleGroup)}$`, 'i');
-  const inventory = await Equipment.find({ isDeleted: { $ne: true }, status: { $ne: 'out_of_service' } }).lean();
+  // Exercises are suggested from the equipment of the request's gyms.
+  const inventory = await Equipment.find({ ...gymFilter(req), isDeleted: { $ne: true }, status: { $ne: 'out_of_service' } }).lean();
   const availableEquipmentCategories = [...new Set(inventory.map(inferEquipmentCategory)), 'Sin equipo'];
   const shouldFilter = availableOnly !== false && inventory.length > 0;
   if (shouldFilter) query.equipment = { $in: availableEquipmentCategories };
