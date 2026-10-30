@@ -58,14 +58,14 @@ export default function CartModal({ visible, onClose }: { visible: boolean; onCl
     setError('');
     setIsSubmitting(true);
     try {
-      await api.post('/store/orders', {
+      const { data } = await api.post<{ promotionWarning?: string }>('/store/orders', {
         items: items.map(({ id, quantity, price }) => ({ productId: id, quantity, price })),
         ...(promotionId ? { promotionId } : {}),
       });
       clearCart();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onClose();
-      Alert.alert('Pedido generado', 'Pasa a recepción a pagar y recoger tus productos.');
+      Alert.alert('Pedido generado', [data.promotionWarning, 'Pasa a recepción a pagar y recoger tus productos.'].filter(Boolean).join('\n\n'));
     } catch (requestError: unknown) {
       setError(getApiErrorMessage(requestError, 'No se pudo generar el pedido.'));
     } finally {

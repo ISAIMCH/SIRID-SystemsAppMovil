@@ -83,11 +83,14 @@ async function createOrder(req, res) {
   const subtotal = items.reduce((total, item) => total + item.price * item.quantity, 0);
   let promotionId = null;
   let discountApplied = 0;
-  if (input.promotionId) {
-    const promotion = await Promotion.findOne({ _id: input.promotionId, ...organizationFilter(req) }).lean();
-    if (!promotion || promotion.isActive !== true || (promotion.validUntil && promotion.validUntil <= new Date())) {
-      throw new HttpError(400, 'La promoción no existe, está inactiva o ha expirado.');
-    }
+  let promotionWarning;
+  const promotion = input.promotionId
+    ? await Promotion.findOne({ _id: input.promotionId, ...organizationFilter(req) }).lean()
+    : null;
+  // An invalid promotion never blocks a sale: the order goes through at regular price with a notice.
+  if (input.promotionId && (!promotion || promotion.isActive !== true || (promotion.validUntil && promotion.validUntil <= new Date()))) {
+    promotionWarning = 'La promoción ya no está disponible; el pedido se generó a precio regular.';
+  } else if (promotion) {
     promotionId = promotion._id;
     const applicableProductIds = new Set((promotion.applicableProducts ?? []).map((productId) => String(productId)));
     const discountableSubtotal = applicableProductIds.size === 0
@@ -127,7 +130,7 @@ async function createOrder(req, res) {
       .populate('promotionId', 'title discountPercentage validUntil')
       .lean();
     emitRealtime(req, 'sale-updated', { action: 'created', order: createdOrder }, [createdOrder.userId], { gymId });
-    res.status(201).json({ order: createdOrder });
+    res.status(201).json({ order: createdOrder, ...(promotionWarning && { promotionWarning }) });
   } finally {
     await session.endSession();
   }
