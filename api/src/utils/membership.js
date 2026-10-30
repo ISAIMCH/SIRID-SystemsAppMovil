@@ -11,6 +11,14 @@ function hasActiveMembership(membership, now = new Date()) {
     && (!membership.expiresAt || membership.expiresAt >= now);
 }
 
+// Whether the plan sold lets the client in at that gym (see gym-access.schema.js).
+function membershipCoversGym(membership, gymId) {
+  const { scope = 'all', gymIds = [] } = membership?.gymAccess ?? {};
+  if (scope === 'home') return Boolean(membership.homeGymId) && String(membership.homeGymId) === String(gymId);
+  if (scope === 'list') return gymIds.some((id) => String(id) === String(gymId));
+  return true;
+}
+
 // Membership is the source of truth; User.membership keeps a copy for the app and dashboard that still read it.
 async function saveMembership(membership, { session } = {}) {
   await membership.save({ session });
@@ -47,4 +55,4 @@ async function activateMembership(session, payment) {
   await saveMembership(membership, { session });
 }
 
-module.exports = { hasActiveMembership, saveMembership, activateMembership };
+module.exports = { MIRRORED_FIELDS, hasActiveMembership, membershipCoversGym, saveMembership, activateMembership };

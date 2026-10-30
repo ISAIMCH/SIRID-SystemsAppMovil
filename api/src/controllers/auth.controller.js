@@ -21,7 +21,8 @@ const {
   resolveTargetGym,
   resolveTenant,
 } = require('../utils/tenant');
-const { saveMembership } = require('../utils/membership');
+const { MIRRORED_FIELDS, saveMembership } = require('../utils/membership');
+const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
 const { isOwner, hasGymRole, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
 
 const phoneSchema = z.string().trim()
@@ -112,12 +113,21 @@ async function listUserGyms(user) {
   });
 }
 
+// The membership a client has with the organization, in the shape of the legacy User.membership copy.
+async function membershipSummary(userId, organizationId) {
+  const membership = await Membership.findOne({ userId, organizationId }).lean();
+  if (!membership) return {};
+  return { membership: Object.fromEntries(MIRRORED_FIELDS.map((field) => [field, membership[field]])) };
+}
+
 // The profile plus the organization and gyms of the session; `role` keeps the legacy value (Propietario/Gerente → Admin).
-async function sessionResponse(user) {
-  const [context, gyms] = await Promise.all([loadTenantContext(user), listUserGyms(user)]);
-  const access = context && resolveAccess(context, ROUTE_ROLES);
+// With a selected gym (X-Gym-Id) the organization and the client's membership are those of that gym.
+async function sessionResponse(user, requestedGymId = null) {
+  const [context, gyms] = await Promise.all([loadTenantContext(user, requestedGymId), listUserGyms(user)]);
+  const access = context && resolveAccess(context, ROUTE_ROLES, requestedGymId);
+  const membership = context?.member.roles.includes('Cliente') ? await membershipSummary(user._id, context.organizationId) : {};
   return {
-    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}) },
+    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}), ...membership },
     organization: context ? { id: String(context.organizationId), name: context.organization.name } : null,
     gyms,
     defaultGymId: access ? String(access.gymId) : null,
@@ -152,13 +162,13 @@ function safeStringEqual(value, expected) {
 }
 
 async function registerClient(req, res) {
-  const input = registrationSchema.parse(req.body);
+  const { joinCode, ...input } = registrationSchema.extend({ joinCode: z.string().trim().max(20).optional() }).parse(req.body);
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
   }
 
-  // Until clients join a gym by code (etapa 3), self-registered clients join the default organization.
-  const { organizationId, gymId } = getDefaultTenant();
+  // A client signs up without a gym and joins one by code, now (joinCode) or later from the app (POST /gyms/join).
+  const gym = joinCode ? await findGymByJoinCode(joinCode) : null;
   const user = new User({
     ...input,
     role: 'Cliente',
@@ -167,8 +177,7 @@ async function registerClient(req, res) {
   await user.setPassword(input.password);
   await withTransaction(async (session) => {
     await user.save({ session });
-    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'] }], { session });
-    await Membership.create([{ userId: user._id, organizationId, homeGymId: gymId, status: 'pending' }], { session });
+    if (gym) await addClientToGym(user._id, gym, { session });
   });
 
   res.status(201).json(await authResponse(user));
@@ -563,7 +572,7 @@ async function login(req, res) {
 }
 
 async function getCurrentUser(req, res) {
-  res.json(await sessionResponse(req.user));
+  res.json(await sessionResponse(req.user, req.get('x-gym-id') || null));
 }
 
 async function getMyGyms(req, res) {
@@ -608,6 +617,7 @@ module.exports = {
   login,
   getCurrentUser,
   getMyGyms,
+  listUserGyms,
   updatePhysicalProfile,
   applyLegacyRole,
 };
