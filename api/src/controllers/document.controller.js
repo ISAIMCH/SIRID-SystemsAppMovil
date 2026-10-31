@@ -5,7 +5,6 @@ const OrganizationMember = require('../models/organization-member.model');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
 const storage = require('../utils/storage');
-const { emitRealtime } = require('../utils/realtime');
 const { resolveTenant, organizationFilter } = require('../utils/tenant');
 const { isOwner, findOrganizationMember } = require('../utils/members');
 const {
@@ -75,15 +74,22 @@ function serializeDocument(document) {
   };
 }
 
-// Owners and the gym's staff who may review see client documents live; staff files only reach owners.
-function notifyDocument(req, document, action) {
-  const payload = { action, document: serializeDocument(document) };
-  if (document.kind === 'client') {
-    emitRealtime(req, 'document-updated', payload, [document.ownerId], { gymId: resolveTenant(req).gymId });
-    return;
-  }
+// Owners and the gym's staff who may review see client documents live; staff files reach the owners
+// and the managers of the employee's gyms, the same people who may open them.
+// Rooms come from the document's organization: a client's purge spans every organization they belong to.
+async function notifyDocument(req, document, action, ownerMember) {
   const io = req.app?.get('io');
-  io?.to([`user:${document.ownerId}`, `org:${document.organizationId}:owners`]).emit('document-updated', payload);
+  if (!io) return;
+  const organization = `org:${document.organizationId}`;
+  let staffRooms;
+  if (document.kind === 'client') {
+    const gymId = String(req.tenant?.organizationId) === String(document.organizationId) ? req.tenant.gymId : null;
+    staffRooms = gymId ? [`${organization}:owners`, `gym:${gymId}:managers`, `gym:${gymId}:reception`] : [`${organization}:admins`];
+  } else {
+    const member = ownerMember ?? await findOwnerMember(document);
+    staffRooms = [`${organization}:owners`, ...(member?.gyms ?? []).map((gym) => `gym:${gym.gymId}:managers`)];
+  }
+  io.to([`user:${document.ownerId}`, ...staffRooms]).emit('document-updated', { action, document: serializeDocument(document) });
 }
 
 function findOwnerMember(document) {
@@ -109,7 +115,7 @@ async function uploadDocument(req, res) {
     throw new HttpError(403, 'No tienes permiso para subir documentos de este usuario.');
   }
   const document = await storeDocument(req, { ownerMember, file: req.file, category: input.category });
-  notifyDocument(req, document, 'created');
+  await notifyDocument(req, document, 'created', ownerMember);
   res.status(201).json({ document: serializeDocument(document) });
 }
 
@@ -169,7 +175,7 @@ async function reviewDocument(req, res) {
   if (input.validUntil !== undefined) document.validUntil = input.validUntil;
   await document.save();
   await logDocumentAction(req, document, input.status === 'verified' ? 'verify' : 'reject');
-  notifyDocument(req, document, 'reviewed');
+  await notifyDocument(req, document, 'reviewed', ownerMember);
   res.json({ document: serializeDocument(document) });
 }
 
@@ -195,13 +201,16 @@ async function deleteDocument(req, res) {
     if (document.legacyPath) await User.updateOne({ _id: document.ownerId }, { $pull: { documents: document.legacyPath } });
     await logDocumentAction(req, document, 'delete');
   }
-  notifyDocument(req, document, 'deleted');
+  await notifyDocument(req, document, 'deleted', ownerMember);
   res.json({ document: serializeDocument(document) });
 }
 
 async function purgeAll(req, filter) {
   const documents = await Document.find({ ...filter, purgedAt: null });
-  for (const document of documents) await purgeDocument(req, document);
+  for (const document of documents) {
+    await purgeDocument(req, document);
+    await notifyDocument(req, document, 'purged');
+  }
   return documents.length;
 }
 
@@ -265,6 +274,7 @@ async function getLegacyDocument(req, res) {
 
 module.exports = {
   serializeDocument,
+  notifyDocument,
   uploadDocument,
   listMyDocuments,
   listDocuments,

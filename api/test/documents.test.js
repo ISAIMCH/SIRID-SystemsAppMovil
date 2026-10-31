@@ -163,3 +163,25 @@ test('the dashboard can drop legacy document paths but never add new ones', asyn
   assert.ok(hidden.deletedAt instanceof Date);
   assert.equal(elsewhere.deletedAt, null);
 });
+
+// The rooms an event goes to, from a fake Socket.IO server.
+async function notifiedRooms(req, document, ownerMember) {
+  const { notifyDocument } = require('../src/controllers/document.controller');
+  let rooms = [];
+  const io = { to: (target) => { rooms = target; return { emit: () => {} }; } };
+  await notifyDocument({ ...req, app: { get: () => io } }, { createdAt: new Date(), ...document }, 'created', ownerMember);
+  return rooms;
+}
+
+test('staff file events reach the managers of the employee\'s gyms live, not only the owners', async () => {
+  const northCoach = staffMember(northGym, ['Coach']);
+  const rooms = await notifiedRooms(owner, documentOf(northCoach, 'staff'), northCoach);
+  assert.deepEqual(rooms, [`user:${northCoach.userId}`, `org:${organizationId}:owners`, `gym:${northGym}:managers`]);
+  assert.equal(rooms.includes(`gym:${mainGym}:managers`), false);
+});
+
+test('a client purge in another organization never notifies the request\'s organization', async () => {
+  const client = { ...clientMember(), organizationId: otherOrganizationId };
+  const rooms = await notifiedRooms(mainReception, documentOf(client, 'client'), client);
+  assert.deepEqual(rooms, [`user:${client.userId}`, `org:${otherOrganizationId}:admins`]);
+});
