@@ -132,6 +132,7 @@ export default function StoreScreen() {
                 <Text style={styles.bannerText}>{promotion.title}</Text>
                 {promotion.description ? <Text numberOfLines={2} style={styles.bannerDescription}>{promotion.description}</Text> : null}
                 {typeof promotion.discountPercentage === 'number' ? <Text style={styles.bannerDiscount}>{promotion.discountPercentage}% de descuento</Text> : null}
+                {promotion.requiredDocument ? <Text style={styles.bannerRequirement}>Requiere credencial de estudiante verificada</Text> : null}
                 <Pressable accessibilityRole="button" onPress={() => handlePromotion(promotion)} style={styles.bannerButton}>
                   <Text style={styles.bannerButtonText}>{promotion.applicableProducts?.length ? 'Aprovechar' : 'Ver Membresías'}</Text>
                 </Pressable>
@@ -226,6 +227,7 @@ const styles = StyleSheet.create({
   bannerText: { color: palette.white, fontSize: 13, fontWeight: '800' },
   bannerDescription: { color: '#DCE8E0', fontSize: 12, lineHeight: 16 },
   bannerDiscount: { color: palette.neon, fontSize: 18, fontWeight: '900' },
+  bannerRequirement: { color: '#FFD54F', fontSize: 12, fontWeight: '700' },
   bannerButton: { alignSelf: 'flex-start', minHeight: 38, justifyContent: 'center', borderRadius: 999, backgroundColor: '#10FF85', paddingHorizontal: 14 },
   bannerButtonText: { color: '#081009', fontSize: 12, fontWeight: '900' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
