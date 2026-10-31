@@ -71,16 +71,37 @@ function platformMember(user, organizationId) {
   return { userId: user._id, organizationId, roles: ['Propietario'], gyms: [], isActive: true };
 }
 
+// Without a selected organization, the user's first one that is active (an owner whose own organization
+// is still pending keeps working as a client or staff of other gyms).
 async function findMember(user, organizationId) {
   if (!user.isPlatformAdmin) {
-    return OrganizationMember.findOne({ userId: user._id, isActive: true, ...(organizationId ? { organizationId } : {}) })
+    const members = await OrganizationMember.find({ userId: user._id, isActive: true, ...(organizationId ? { organizationId } : {}) })
       .sort({ createdAt: 1 })
       .lean();
+    if (members.length <= 1) return members[0] ?? null;
+    const active = await Organization.find({ _id: { $in: members.map((member) => member.organizationId) }, status: 'active' }).select('_id').lean();
+    const activeIds = new Set(active.map((organization) => String(organization._id)));
+    return members.find((member) => activeIds.has(String(member.organizationId))) ?? members[0];
   }
   const organization = organizationId
     ? { _id: organizationId }
     : await Organization.findOne().sort({ createdAt: 1 }).select('_id').lean();
   return organization && platformMember(user, organization._id);
+}
+
+const INACTIVE_MESSAGES = {
+  pending: 'Tu organización está en revisión. Podrás entrar cuando SIRID la apruebe.',
+  rejected: 'SIRID rechazó la solicitud de tu organización.',
+  suspended: 'La organización de tu cuenta está suspendida. Contacta a SIRID.',
+};
+
+// Nobody but SIRID works in an organization that is not active; the body tells the login screen why.
+function organizationInactiveError(organization) {
+  const status = organization?.status ?? 'suspended';
+  return new HttpError(403, INACTIVE_MESSAGES[status] ?? INACTIVE_MESSAGES.suspended, {
+    code: `organization_${status}`,
+    organization: organization && { id: String(organization._id), name: organization.name, status, reason: organization.statusReason ?? null },
+  });
 }
 
 // Loads the organization the request works in: the one of the X-Gym-Id gym, or the user's first one
@@ -101,13 +122,13 @@ async function loadTenantContext(user, requestedGymId = null) {
   }
 
   const [organization, gyms, membership] = await Promise.all([
-    Organization.findById(member.organizationId).select('name status').lean(),
+    Organization.findById(member.organizationId).select('name status statusReason').lean(),
     Gym.find({ organizationId: member.organizationId, isActive: true }).sort({ createdAt: 1 }).select('_id name').lean(),
     member.roles.includes('Cliente')
       ? Membership.findOne({ userId: user._id, organizationId: member.organizationId }).select('homeGymId').lean()
       : null,
   ]);
-  if (organization?.status !== 'active' && !user.isPlatformAdmin) throw new HttpError(403, 'La organización de tu cuenta no está activa.');
+  if (organization?.status !== 'active' && !user.isPlatformAdmin) throw organizationInactiveError(organization);
 
   return { organizationId: member.organizationId, organization, member, gyms, homeGymId: membership?.homeGymId ?? null, requestedGymId };
 }
@@ -145,6 +166,7 @@ module.exports = {
   legacyRole,
   platformMember,
   resolveAccess,
+  organizationInactiveError,
   loadTenantContext,
   resolveTenant,
   resolveTargetGym,

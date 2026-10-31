@@ -52,4 +52,10 @@ function authorize(...roles) {
   };
 }
 
-module.exports = { authenticate, authorize, resolveUserFromToken };
+// SIRID staff only (User.isPlatformAdmin, granted by scripts/set-platform-admin.js).
+function requirePlatformAdmin(req, res, next) {
+  if (!req.user?.isPlatformAdmin) return next(new HttpError(403, 'No tienes permisos para esta operación.'));
+  return next();
+}
+
+module.exports = { authenticate, authorize, requirePlatformAdmin, resolveUserFromToken };

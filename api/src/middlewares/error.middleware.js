@@ -48,6 +48,7 @@ function errorHandler(error, req, res, next) {
   if (details !== undefined) console.error('Validation Error:', error);
   res.status(statusCode).json({
     error: message,
+    ...(statusCode < 500 && error.extra ? error.extra : {}),
     ...(details !== undefined ? { details } : {}),
   });
 }
