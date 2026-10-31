@@ -2,6 +2,7 @@ const { z } = require('zod');
 const Product = require('../models/product.model');
 const ProductStock = require('../models/product-stock.model');
 const Promotion = require('../models/promotion.model');
+const { CLIENT_CATEGORIES } = require('../models/document.model');
 const HttpError = require('../utils/http-error');
 const parseUpdate = require('../utils/parse-update');
 const withTransaction = require('../utils/transaction');
@@ -32,6 +33,7 @@ const promotionSchema = z.object({
   discountPercentage: z.coerce.number().min(0).max(100).default(0),
   applicableProducts: z.array(objectIdSchema).default([]),
   validUntil: z.coerce.date().optional(),
+  requiredDocument: z.union([z.enum(CLIENT_CATEGORIES), z.literal(''), z.null()]).transform((value) => value || null).optional(),
   isActive: z.boolean().optional(),
   active: z.boolean().optional(),
 });

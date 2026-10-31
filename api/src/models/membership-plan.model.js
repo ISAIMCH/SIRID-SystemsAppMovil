@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const tenantPlugin = require('./plugins/tenant.plugin');
 const { gymAccessSchema } = require('./gym-access.schema');
+const { CLIENT_CATEGORIES } = require('./document.model');
 
 const membershipPlanSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 80 },
@@ -11,6 +12,8 @@ const membershipPlanSchema = new mongoose.Schema({
   planType: { type: String, enum: ['standard', 'promotional'], default: 'standard' },
   // Which gyms of the organization the plan opens; a Plan Básico uses 'home'.
   gymAccess: { type: gymAccessSchema, default: () => ({}) },
+  // A verified document the client must hold to be sold the plan (e.g. 'student_id' for a student plan).
+  requiredDocument: { type: String, enum: [...CLIENT_CATEGORIES, null], default: null },
   isActive: { type: Boolean, default: true, index: true },
   isDeleted: { type: Boolean, default: false, index: true },
   deletedAt: { type: Date, default: null },

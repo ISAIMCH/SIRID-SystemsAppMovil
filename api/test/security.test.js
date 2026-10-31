@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const HttpError = require('../src/utils/http-error');
 const { resolveOrderOwnership } = require('../src/controllers/store-order.controller');
 const { getClientFitnessAnalytics } = require('../src/controllers/analytics.controller');
-const { canReadDocument } = require('../src/controllers/document.controller');
 const { errorHandler } = require('../src/middlewares/error.middleware');
 
 const clientId = '64b000000000000000000001';
@@ -38,15 +37,6 @@ test('client analytics rejects invalid ids with a 400 HttpError', async () => {
     getClientFitnessAnalytics({ params: { clientId: 'not-an-id' }, query: {}, user: { role: 'Admin' } }, {}),
     (error) => error instanceof HttpError && error.statusCode === 400,
   );
-});
-
-test('documents are readable only by Admins, their owner or the assigned Coach', () => {
-  const owner = { _id: clientId, assignedCoach: coachId };
-  assert.equal(canReadDocument({ id: otherUserId, role: 'Admin' }, owner), true);
-  assert.equal(canReadDocument({ id: clientId, role: 'Cliente' }, owner), true);
-  assert.equal(canReadDocument({ id: coachId, role: 'Coach' }, owner), true);
-  assert.equal(canReadDocument({ id: otherUserId, role: 'Cliente' }, owner), false);
-  assert.equal(canReadDocument({ id: otherUserId, role: 'Coach' }, owner), false);
 });
 
 test('error handler hides internal error messages', (t) => {

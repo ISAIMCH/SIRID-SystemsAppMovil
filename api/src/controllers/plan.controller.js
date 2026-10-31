@@ -2,6 +2,7 @@ const { z } = require('zod');
 const MembershipPlan = require('../models/membership-plan.model');
 const Gym = require('../models/gym.model');
 const { GYM_ACCESS_SCOPES } = require('../models/gym-access.schema');
+const { CLIENT_CATEGORIES } = require('../models/document.model');
 const HttpError = require('../utils/http-error');
 const { resolveTenant, organizationFilter } = require('../utils/tenant');
 
@@ -43,6 +44,7 @@ const planInputSchema = z.object({
   isActive: booleanSchema.optional(),
   tipoCobro: z.string().trim().min(1).max(30).optional(),
   gymAccess: gymAccessSchema.optional(),
+  requiredDocument: z.union([z.enum(CLIENT_CATEGORIES), z.literal(''), z.null()]).transform((value) => value || null).optional(),
 });
 
 function parsePlanInput(body, { partial = false } = {}) {
@@ -58,6 +60,7 @@ function parsePlanInput(body, { partial = false } = {}) {
     ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
     ...(input.planType !== undefined ? { planType: input.planType } : {}),
     ...(input.gymAccess !== undefined ? { gymAccess: input.gymAccess } : {}),
+    ...(input.requiredDocument !== undefined ? { requiredDocument: input.requiredDocument } : {}),
   };
 
   if (!partial) {

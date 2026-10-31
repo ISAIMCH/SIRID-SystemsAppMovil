@@ -23,7 +23,7 @@ const muscleGroupRoutes = require('./routes/muscle-group.routes');
 const exerciseDictionaryRoutes = require('./routes/exercise-dictionary.routes');
 const exerciseRoutes = require('./routes/exercise.routes');
 const userRoutes = require('./routes/user.routes');
-const documentRoutes = require('./routes/document.routes');
+const { legacyRouter: legacyDocumentRoutes, router: documentRoutes } = require('./routes/document.routes');
 const gymRoutes = require('./routes/gym.routes');
 const accessDeviceRoutes = require('./routes/access-device.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
@@ -56,7 +56,7 @@ app.use(['/api/store', '/api/inventory', '/api/products', '/api/promotions', '/a
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ limit: '1mb', extended: true }));
 
-app.use('/api/uploads', documentRoutes);
+app.use('/api/uploads', legacyDocumentRoutes);
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/auth', authRoutes);
 app.use('/api/routines', routineRoutes);
@@ -78,6 +78,7 @@ app.use('/api/muscle-groups', muscleGroupRoutes);
 app.use('/api/dictionary', exerciseDictionaryRoutes);
 app.use('/api/exercises', exerciseRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/documents', documentRoutes);
 app.use('/api/gyms', gymRoutes);
 app.use('/api/access-devices', accessDeviceRoutes);
 app.use('/api', accessRoutes);

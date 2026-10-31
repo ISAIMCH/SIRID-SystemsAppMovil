@@ -24,6 +24,7 @@ const {
 const { MIRRORED_FIELDS, saveMembership } = require('../utils/membership');
 const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
 const { isOwner, hasGymRole, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
+const { storeLegacyUploads, applyLegacyDocumentList } = require('../utils/documents');
 
 const phoneSchema = z.string().trim()
   .transform((value) => value.replace(/[\s()+-]/g, ''))
@@ -77,11 +78,6 @@ function normalizeMultipartBody(req) {
   }
   if (body.isActive === 'true') body.isActive = true;
   if (body.isActive === 'false') body.isActive = false;
-
-  const uploadedDocuments = (req.files ?? []).map((file) => `/uploads/documents/${file.filename}`);
-  if (uploadedDocuments.length > 0) {
-    body.documents = [...(body.documents ?? []), ...uploadedDocuments];
-  }
   return body;
 }
 
@@ -280,7 +276,6 @@ async function createManagedUser(req, res) {
     availableTrainingDays,
     assignedCoach,
     observations: input.observations,
-    documents: input.documents,
     preferredTrainingTime: input.preferredTrainingTime,
     restrictions: input.restrictions,
     preferredZones: input.preferredZones,
@@ -312,6 +307,11 @@ async function createManagedUser(req, res) {
       ...(plan ? { gymAccess: plan.gymAccess } : {}),
     }], { session });
   });
+  if (req.files?.length) {
+    const ownerMember = await OrganizationMember.findOne({ userId: user._id, organizationId }).lean();
+    user.documents.push(...await storeLegacyUploads(req, ownerMember));
+    await user.save();
+  }
 
   res.status(201).json({ user: user.toSafeJSON() });
 }
@@ -408,7 +408,7 @@ async function updateDirectoryUser(req, res) {
       .optional(),
     observations: z.string().trim().max(4000).optional(),
   }).parse(normalizeMultipartBody(req));
-  if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  if (Object.keys(input).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const member = await findVisibleMember(req, req.params.id);
   const user = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } });
@@ -423,7 +423,8 @@ async function updateDirectoryUser(req, res) {
   if (input.name) user.name = input.name;
   if (input.lastName !== undefined) user.lastName = input.lastName;
   if (input.phone !== undefined) user.phone = input.phone || undefined;
-  if (input.documents !== undefined) user.documents = input.documents;
+  if (input.documents !== undefined) await applyLegacyDocumentList(req, user, input.documents);
+  if (req.files?.length) user.documents.push(...await storeLegacyUploads(req, member));
   if (input.isActive !== undefined) user.isActive = input.isActive;
   if (input.password?.trim()) await user.setPassword(input.password.trim());
   if (input.goal !== undefined) user.goal = input.goal;
@@ -473,7 +474,7 @@ async function updateUser(req, res) {
     gymId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || undefined).optional(),
   }).parse(normalizeMultipartBody(req));
   const { gymId: requestedGymId, ...changes } = input;
-  if (Object.keys(changes).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  if (Object.keys(changes).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const member = await findVisibleMember(req, req.params.id);
   const user = await User.findById(req.params.id);
@@ -508,7 +509,8 @@ async function updateUser(req, res) {
   }
   if (input.phone !== undefined) user.phone = input.phone || undefined;
   if (input.address !== undefined) user.address = input.address || undefined;
-  if (input.documents !== undefined) user.documents = input.documents;
+  if (input.documents !== undefined) await applyLegacyDocumentList(req, user, input.documents);
+  if (req.files?.length) user.documents.push(...await storeLegacyUploads(req, member));
   if (input.isActive !== undefined) user.isActive = input.isActive;
   if (input.password?.trim()) await user.setPassword(input.password.trim());
   if (input.goal !== undefined) user.goal = input.goal;

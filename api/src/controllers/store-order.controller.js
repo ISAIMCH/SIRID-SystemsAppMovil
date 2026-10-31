@@ -9,6 +9,7 @@ const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
 const { resolveTenant, resolveTargetGym, organizationFilter, gymFilter } = require('../utils/tenant');
 const { findClientMember } = require('../utils/members');
+const { hasVerifiedDocument } = require('../utils/documents');
 
 const PICKUP_PIN_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
@@ -90,6 +91,8 @@ async function createOrder(req, res) {
   // An invalid promotion never blocks a sale: the order goes through at regular price with a notice.
   if (input.promotionId && (!promotion || promotion.isActive !== true || (promotion.validUntil && promotion.validUntil <= new Date()))) {
     promotionWarning = 'La promoción ya no está disponible; el pedido se generó a precio regular.';
+  } else if (promotion?.requiredDocument && !(await hasVerifiedDocument(userId, tenant.organizationId, promotion.requiredDocument))) {
+    promotionWarning = 'La promoción requiere un documento verificado; el pedido se generó a precio regular.';
   } else if (promotion) {
     promotionId = promotion._id;
     const applicableProductIds = new Set((promotion.applicableProducts ?? []).map((productId) => String(productId)));
