@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
@@ -13,9 +14,11 @@ const baseEnv = {
 Object.assign(process.env, baseEnv, { NODE_ENV: 'test' });
 const app = require('../src/app');
 
+// Runs outside the project so dotenv does not fill the gaps from the developer's local .env.
 function loadEnvIn(overrides) {
   const envPath = path.join(__dirname, '../src/config/env.js');
   return spawnSync(process.execPath, ['-e', `require(${JSON.stringify(envPath)})`], {
+    cwd: os.tmpdir(),
     env: { PATH: process.env.PATH, ...baseEnv, ...overrides },
     encoding: 'utf8',
   });
