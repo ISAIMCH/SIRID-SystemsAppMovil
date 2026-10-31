@@ -31,19 +31,36 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// The organization of a 403 that says SIRID suspended it; the reason only ever reaches its owner.
+export type SuspendedOrganization = { id: string; name: string };
+
+export function getSuspendedOrganization(error: unknown): SuspendedOrganization | null {
+  if (!isAxiosError<{ code?: string; organization?: SuspendedOrganization }>(error) || error.response?.status !== 403) return null;
+  const data = error.response.data;
+  return data?.code === 'organization_suspended' && data.organization ? data.organization : null;
+}
+
 let handleUnauthorized: (() => void) | null = null;
+let handleSuspended: ((organization: SuspendedOrganization) => void) | null = null;
+
+export function setSuspendedHandler(handler: ((organization: SuspendedOrganization) => void) | null) {
+  handleSuspended = handler;
+}
 
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   handleUnauthorized = handler;
 }
 
 // An expired or revoked session ends here; requests sent with an older token are ignored.
+// A gym whose organization was suspended mid-session is reported once per request sent to it (X-Gym-Id).
 api.interceptors.response.use(undefined, async (error: unknown) => {
   if (isAxiosError(error) && error.response?.status === 401) {
     const sentAuthorization = error.config?.headers?.Authorization;
     const token = await readAccessToken();
     if (token && sentAuthorization === `Bearer ${token}`) handleUnauthorized?.();
   }
+  const suspended = getSuspendedOrganization(error);
+  if (suspended && isAxiosError(error) && error.config?.headers?.has('X-Gym-Id')) handleSuspended?.(suspended);
   return Promise.reject(error);
 });
 

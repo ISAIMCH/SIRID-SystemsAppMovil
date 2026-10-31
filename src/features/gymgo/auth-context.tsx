@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { isAxiosError } from 'axios';
-import { createContext, useContext, useEffect, useState, type PropsWithChildren } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
+import { Alert } from 'react-native';
 
 import { disconnectSocket } from '../../services/socket';
 import { useCartStore } from '../../store/cartStore';
-import { api, setActiveGymHeader, setUnauthorizedHandler } from './api';
+import { api, getSuspendedOrganization, setActiveGymHeader, setSuspendedHandler, setUnauthorizedHandler, type SuspendedOrganization } from './api';
 import { readAccessToken, removeAccessToken, writeAccessToken } from './token-storage';
 
 export type GymGoRole = 'Admin' | 'Coach' | 'Recepcion' | 'Cliente';
@@ -64,6 +65,9 @@ type AuthContextValue = {
   isLoading: boolean;
   sessionError: string | null;
   retrySession: () => void;
+  // Set when SIRID suspended the only organization the user can work in; the app shows a notice instead.
+  suspendedOrganization: SuspendedOrganization | null;
+  dismissSuspension: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: ClientRegistration) => Promise<void>;
   signOut: () => Promise<void>;
@@ -101,6 +105,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [isLoading, setIsLoading] = useState(true);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
+  const [suspendedOrganization, setSuspendedOrganization] = useState<SuspendedOrganization | null>(null);
+  // Several requests can fail at once when the gym is suspended; only the first one recovers.
+  const isRecovering = useRef(false);
 
   useEffect(() => {
     let isCurrent = true;
@@ -115,8 +122,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         if (isCurrent) await applySession(response.data);
       } catch (error) {
         // Only a rejected token ends the session; network failures keep it so the user can retry.
+        const suspended = getSuspendedOrganization(error);
         if (isAxiosError(error) && error.response?.status === 401) {
           await removeAccessToken();
+        } else if (suspended) {
+          if (isCurrent) setSuspendedOrganization(suspended);
         } else if (isCurrent) {
           setSessionError('No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.');
         }
@@ -136,6 +146,41 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => setUnauthorizedHandler(null);
   }, []);
 
+  // Re-registered on every render so the handler always sees the current session.
+  useEffect(() => {
+    setSuspendedHandler((organization) => { void leaveSuspendedGym(organization); });
+    return () => setSuspendedHandler(null);
+  });
+
+  // The active gym's organization was suspended: move to another gym the user still has, so their
+  // training elsewhere is not interrupted, or show the notice when there is none.
+  async function leaveSuspendedGym(organization: SuspendedOrganization) {
+    if (isRecovering.current) return;
+    isRecovering.current = true;
+    try {
+      setActiveGymHeader(null);
+      const { data } = await api.get<SessionResponse>('/auth/me');
+      const gymId = await applySession(data);
+      const nextGym = data.gyms?.find((gym) => gym.id === gymId);
+      if (nextGym && data.user.id) await AsyncStorage.setItem(activeGymKey(data.user.id), nextGym.id).catch(() => undefined);
+      useCartStore.getState().clearCart();
+      Alert.alert(
+        'Gimnasio suspendido',
+        `${organization.name} está suspendido temporalmente.${nextGym ? ` Te cambiamos a ${nextGym.name} para que sigas entrenando.` : ''}`,
+      );
+    } catch (error) {
+      const suspended = getSuspendedOrganization(error);
+      if (suspended) setSuspendedOrganization(suspended);
+    } finally {
+      isRecovering.current = false;
+    }
+  }
+
+  async function dismissSuspension() {
+    setSuspendedOrganization(null);
+    await signOut();
+  }
+
   // Loads the session for the chosen gym: the user (with that organization's membership) comes from /auth/me.
   async function applySession(session: SessionResponse, preferredGymId?: string) {
     const sessionGyms = session.gyms ?? [];
@@ -150,6 +195,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setGyms(sessionGyms);
     setActiveGymId(gymId);
     setUser(sessionUser);
+    return gymId;
   }
 
   async function selectGym(gymId: string) {
@@ -188,10 +234,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   async function signIn(email: string, password: string) {
     setActiveGymHeader(null);
-    const response = await api.post<SessionResponse & { token: string }>('/auth/login', {
-      email: email.trim().toLowerCase(),
-      password,
-    });
+    let response;
+    try {
+      response = await api.post<SessionResponse & { token: string }>('/auth/login', {
+        email: email.trim().toLowerCase(),
+        password,
+      });
+    } catch (error) {
+      const suspended = getSuspendedOrganization(error);
+      if (suspended) setSuspendedOrganization(suspended);
+      throw error;
+    }
     await writeAccessToken(response.data.token);
     await applySession(response.data);
   }
@@ -221,7 +274,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const needsGym = user?.role === 'Cliente' && !gyms.some((gym) => gym.roles.includes('Cliente'));
 
   return (
-    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, isLoading, sessionError, retrySession, signIn, signUp, signOut, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension, signIn, signUp, signOut, updateUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );
