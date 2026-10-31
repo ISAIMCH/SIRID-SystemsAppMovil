@@ -1,6 +1,14 @@
 const OrganizationMember = require('../models/organization-member.model');
 const Organization = require('../models/organization.model');
 
+// Organizations that are pending, rejected or suspended get no events.
+async function activeOrganizationMembers(userId) {
+  const members = await OrganizationMember.find({ userId, isActive: true }).select('organizationId roles gyms').lean();
+  const active = await Organization.find({ _id: { $in: members.map((member) => member.organizationId) }, status: 'active' }).select('_id').lean();
+  const activeIds = new Set(active.map((organization) => String(organization._id)));
+  return members.filter((member) => activeIds.has(String(member.organizationId)));
+}
+
 // Rooms a socket joins, from the user's roles in every organization:
 // org:<id>:owners, org:<id>:admins (owners and managers), org:<id>:staff (anyone working there),
 // gym:<id>:managers and gym:<id>:reception. Every socket also joins user:<id>.
@@ -8,7 +16,7 @@ const Organization = require('../models/organization.model');
 async function realtimeRooms(user) {
   const members = user.isPlatformAdmin
     ? (await Organization.distinct('_id')).map((organizationId) => ({ organizationId, roles: ['Propietario'], gyms: [] }))
-    : await OrganizationMember.find({ userId: user._id, isActive: true }).select('organizationId roles gyms').lean();
+    : await activeOrganizationMembers(user._id);
   const rooms = new Set([`user:${user._id}`]);
   for (const member of members) {
     const organization = `org:${member.organizationId}`;

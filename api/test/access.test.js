@@ -12,6 +12,7 @@ const env = require('../src/config/env');
 const HttpError = require('../src/utils/http-error');
 const AccessDevice = require('../src/models/access-device.model');
 const Gym = require('../src/models/gym.model');
+const Organization = require('../src/models/organization.model');
 const Membership = require('../src/models/membership.model');
 const { membershipCoversGym } = require('../src/utils/membership');
 const { JOIN_CODE_ALPHABET, JOIN_CODE_LENGTH, generateJoinCode, normalizeJoinCode, generateDeviceKey, hashDeviceKey } = require('../src/utils/access-codes');
@@ -118,12 +119,29 @@ test('a registered device enters at its own gym', async () => {
     stub(AccessDevice, 'findOne', (filter) => lean(filter.keyHash === hashDeviceKey(key) && filter.revokedAt === null ? device : null)),
     stub(AccessDevice, 'updateOne', async () => ({})),
     stub(Gym, 'exists', async () => ({ _id: northGym })),
+    stub(Organization, 'exists', async (filter) => (filter.status === 'active' ? { _id: organizationId } : null)),
   ];
   try {
     const req = deviceRequest(key);
     assert.equal(await run(authenticateIotDevice, req), undefined);
     assert.equal(req.accessPoint.gymId, northGym);
     assert.equal(req.accessPoint.legacy, false);
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+});
+
+test('a device of an organization that is not active is rejected', async () => {
+  const key = generateDeviceKey();
+  const device = { _id: id(), name: 'Torniquete', organizationId: id(), gymId: northGym };
+  const restore = [
+    stub(AccessDevice, 'findOne', () => lean(device)),
+    stub(Gym, 'exists', async () => ({ _id: northGym })),
+    stub(Organization, 'exists', async () => null),
+  ];
+  try {
+    const error = await run(authenticateIotDevice, deviceRequest(key));
+    assert.equal(error.statusCode, 401);
   } finally {
     restore.forEach((undo) => undo());
   }

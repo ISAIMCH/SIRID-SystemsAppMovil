@@ -116,10 +116,32 @@ async function membershipSummary(userId, organizationId) {
   return { membership: Object.fromEntries(MIRRORED_FIELDS.map((field) => [field, membership[field]])) };
 }
 
+// Organizations the user owns that SIRID has not approved yet (or rejected/suspended), for a status banner.
+async function listOwnerApplications(user) {
+  if (user.isPlatformAdmin) return [];
+  const members = await OrganizationMember.find({ userId: user._id, isActive: true, roles: 'Propietario' })
+    .populate('organizationId', 'name status statusReason createdAt')
+    .lean();
+  return members
+    .map((member) => member.organizationId)
+    .filter((organization) => organization && organization.status !== 'active')
+    .map((organization) => ({
+      id: String(organization._id),
+      name: organization.name,
+      status: organization.status,
+      reason: organization.statusReason ?? null,
+      createdAt: organization.createdAt,
+    }));
+}
+
 // The profile plus the organization and gyms of the session; `role` keeps the legacy value (Propietario/Gerente → Admin).
 // With a selected gym (X-Gym-Id) the organization and the client's membership are those of that gym.
 async function sessionResponse(user, requestedGymId = null) {
-  const [context, gyms] = await Promise.all([loadTenantContext(user, requestedGymId), listUserGyms(user)]);
+  const [context, gyms, organizationApplications] = await Promise.all([
+    loadTenantContext(user, requestedGymId),
+    listUserGyms(user),
+    listOwnerApplications(user),
+  ]);
   const access = context && resolveAccess(context, ROUTE_ROLES, requestedGymId);
   const membership = context?.member.roles.includes('Cliente') ? await membershipSummary(user._id, context.organizationId) : {};
   return {
@@ -127,6 +149,7 @@ async function sessionResponse(user, requestedGymId = null) {
     organization: context ? { id: String(context.organizationId), name: context.organization.name } : null,
     gyms,
     defaultGymId: access ? String(access.gymId) : null,
+    organizationApplications,
   };
 }
 
@@ -608,6 +631,9 @@ async function updatePhysicalProfile(req, res) {
 }
 
 module.exports = {
+  credentialsSchema,
+  registrationSchema,
+  authResponse,
   registerClient,
   bootstrapAdmin,
   createManagedUser,

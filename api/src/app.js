@@ -26,6 +26,8 @@ const userRoutes = require('./routes/user.routes');
 const { legacyRouter: legacyDocumentRoutes, router: documentRoutes } = require('./routes/document.routes');
 const gymRoutes = require('./routes/gym.routes');
 const accessDeviceRoutes = require('./routes/access-device.routes');
+const organizationRoutes = require('./routes/organization.routes');
+const platformRoutes = require('./routes/platform.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -49,6 +51,7 @@ app.use(cors({
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/bootstrap-admin', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false }));
+app.use('/api/organizations/signup', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false }));
 // Join codes are short, so guessing them is rate limited like the login.
 app.use('/api/gyms/join', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 // Only routes that accept base64 images (up to 4 MB) get a larger body limit.
@@ -81,6 +84,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/gyms', gymRoutes);
 app.use('/api/access-devices', accessDeviceRoutes);
+app.use('/api/organizations', organizationRoutes);
+app.use('/api/platform', platformRoutes);
 app.use('/api', accessRoutes);
 app.use(notFound);
 app.use(errorHandler);
