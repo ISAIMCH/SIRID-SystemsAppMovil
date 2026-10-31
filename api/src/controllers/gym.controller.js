@@ -40,10 +40,19 @@ async function joinGym(req, res) {
   });
 }
 
-// The request's gyms with their join codes, for reception to show or print.
+// The request's gyms with their join codes, for reception to show or print,
+// plus how many gyms the organization has open out of its limit.
 async function listGyms(req, res) {
-  const gyms = await Gym.find({ _id: { $in: resolveTenant(req).gymIds }, isActive: true }).sort({ createdAt: 1 }).lean();
-  res.json({ gyms: gyms.map(serializeGym) });
+  const { organizationId, gymIds } = resolveTenant(req);
+  const [gyms, organization, activeGyms] = await Promise.all([
+    Gym.find({ _id: { $in: gymIds }, isActive: true }).sort({ createdAt: 1 }).lean(),
+    Organization.findById(organizationId).select('gymLimit').lean(),
+    Gym.countDocuments({ organizationId, isActive: true }),
+  ]);
+  res.json({
+    gyms: gyms.map(serializeGym),
+    limits: { activeGyms, gymLimit: organization?.gymLimit ?? Organization.DEFAULT_GYM_LIMIT },
+  });
 }
 
 // Only the owner opens gyms, up to the limit SIRID set for the organization.
