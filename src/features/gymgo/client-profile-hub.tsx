@@ -65,6 +65,7 @@ export default function ClientProfileHub() {
         <MenuRow icon="person-outline" title="Datos personales y físicos" onPress={() => router.push('/(main)/profile')} />
         <MenuRow icon="lock-outline" title="Seguridad y contraseña" onPress={() => setActiveModal('security')} />
         <MenuRow icon="credit-card" title="Membresía y pagos" onPress={() => router.push('/(main)/client-billing' as Href)} />
+        <MenuRow icon="folder-shared" title="Mis documentos" onPress={() => router.push('/(main)/documents' as Href)} />
         <MenuRow icon="logout" title="Cerrar sesión" warning onPress={() => void signOut()} />
       </View>
 

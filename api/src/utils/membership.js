@@ -2,6 +2,7 @@ const User = require('../models/user.model');
 const Membership = require('../models/membership.model');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('./http-error');
+const { hasVerifiedDocument } = require('./documents');
 
 const MIRRORED_FIELDS = ['status', 'startsAt', 'expiresAt', 'planName', 'price', 'currency', 'durationDays', 'autoRenew'];
 
@@ -35,6 +36,9 @@ async function activateMembership(session, payment) {
 
   // Selling a plan copies where it is valid, so editing the plan later does not change it.
   const plan = payment.planId && await MembershipPlan.findOne({ _id: payment.planId, organizationId: payment.organizationId }).session(session);
+  if (plan?.requiredDocument && !(await hasVerifiedDocument(userId, payment.organizationId, plan.requiredDocument, { session }))) {
+    throw new HttpError(409, 'Este plan requiere un documento verificado del cliente (por ejemplo, su credencial de estudiante).');
+  }
   if (plan) {
     membership.planId = plan._id;
     membership.gymAccess = plan.gymAccess;

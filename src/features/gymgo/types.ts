@@ -145,6 +145,8 @@ export type Promotion = {
   isActive?: boolean;
   active?: boolean;
   imageUrl?: string;
+  // A verified document the client needs for the discount (uploaded in Mis documentos).
+  requiredDocument?: 'student_id' | null;
 };
 
 export type Order = {

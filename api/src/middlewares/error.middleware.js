@@ -1,5 +1,12 @@
 const mongoose = require('mongoose');
 const { ZodError } = require('zod');
+const multer = require('multer');
+
+const UPLOAD_ERRORS = {
+  LIMIT_FILE_SIZE: 'El archivo supera el tamaño máximo de 10 MB.',
+  LIMIT_FILE_COUNT: 'Enviaste demasiados archivos.',
+  LIMIT_UNEXPECTED_FILE: 'Enviaste demasiados archivos o un campo de archivo inesperado.',
+};
 
 function notFound(req, res) {
   res.status(404).json({ error: 'Ruta no encontrada.' });
@@ -22,6 +29,9 @@ function errorHandler(error, req, res, next) {
   } else if (error instanceof mongoose.Error.CastError) {
     statusCode = 400;
     message = 'El identificador o valor enviado no es válido.';
+  } else if (error instanceof multer.MulterError) {
+    statusCode = 400;
+    message = UPLOAD_ERRORS[error.code] ?? 'El archivo enviado no es válido.';
   } else if (error.type === 'entity.too.large') {
     message = 'El contenido enviado es demasiado grande.';
   } else if (error.type === 'entity.parse.failed') {

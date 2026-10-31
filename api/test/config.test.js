@@ -25,7 +25,16 @@ test('production refuses to start without CORS_ORIGINS', () => {
   const result = loadEnvIn({ NODE_ENV: 'production', CORS_ORIGINS: '' });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /CORS_ORIGINS/);
-  assert.equal(loadEnvIn({ NODE_ENV: 'production', CORS_ORIGINS: 'https://admin.example.com' }).status, 0);
+  assert.match(loadEnvIn({ NODE_ENV: 'production', CORS_ORIGINS: 'https://admin.example.com' }).stderr, /R2_/);
+});
+
+test('R2 variables go together and are required in production', () => {
+  const r2 = { R2_ACCOUNT_ID: 'account', R2_ACCESS_KEY_ID: 'key', R2_SECRET_ACCESS_KEY: 'secret', R2_BUCKET: 'gymgo-docs' };
+  const production = { NODE_ENV: 'production', CORS_ORIGINS: 'https://admin.example.com' };
+  assert.equal(loadEnvIn({ NODE_ENV: 'development' }).status, 0);
+  assert.match(loadEnvIn({ NODE_ENV: 'development', R2_BUCKET: 'gymgo-docs' }).stderr, /R2_ACCOUNT_ID/);
+  assert.match(loadEnvIn(production).stderr, /R2_BUCKET/);
+  assert.equal(loadEnvIn({ ...production, ...r2 }).status, 0);
 });
 
 test('body limit is 1 MB except on routes that accept images', async (t) => {

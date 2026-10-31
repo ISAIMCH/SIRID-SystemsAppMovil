@@ -17,9 +17,12 @@
     "translate:exercises": "node scripts/translate-dictionary.js",
     "migrate:payments": "node scripts/migrate-payment-statuses.js",
     "migrate:tenancy": "node scripts/migrate-tenancy.js",
+    "migrate:documents": "node scripts/migrate-documents.js",
     "platform:admin": "node scripts/set-platform-admin.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1161.0",
+    "@aws-sdk/s3-request-presigner": "^3.1161.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
