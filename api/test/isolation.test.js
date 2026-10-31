@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 
 // auth.controller reads the environment when it loads.
 const placeholder = 'x'.repeat(40);
-for (const key of ['JWT_SECRET', 'QR_TOKEN_SECRET', 'IOT_DEVICE_API_KEY', 'ADMIN_BOOTSTRAP_KEY']) process.env[key] ??= `${placeholder}${key}`;
+for (const key of ['JWT_SECRET', 'QR_TOKEN_SECRET', 'ADMIN_BOOTSTRAP_KEY']) process.env[key] ??= `${placeholder}${key}`;
 process.env.MONGO_URI ??= 'mongodb://localhost/test';
 
 const HttpError = require('../src/utils/http-error');
