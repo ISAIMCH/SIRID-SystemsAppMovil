@@ -1,9 +1,12 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, type Href } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Animated, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { connectSocket } from '@/services/socket';
+
+import { api } from './api';
 import { useAuth } from './auth-context';
 import { FloatingCard } from './fit-ui';
 import { Page } from './ui';
@@ -34,6 +37,7 @@ export default function ClientProfileHub() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const pendingRequests = usePendingHistoryRequests();
   const initials = user?.name.split(' ').map((name) => name[0]).slice(0, 2).join('').toUpperCase() ?? 'GG';
 
   return (
@@ -66,6 +70,7 @@ export default function ClientProfileHub() {
         <MenuRow icon="lock-outline" title="Seguridad y contraseña" onPress={() => setActiveModal('security')} />
         <MenuRow icon="credit-card" title="Membresía y pagos" onPress={() => router.push('/(main)/client-billing' as Href)} />
         <MenuRow icon="folder-shared" title="Mis documentos" onPress={() => router.push('/(main)/documents' as Href)} />
+        <MenuRow icon="shield" title="Privacidad e historial" badge={pendingRequests} onPress={() => router.push('/(main)/privacy' as Href)} />
         <MenuRow icon="logout" title="Cerrar sesión" warning onPress={() => void signOut()} />
       </View>
 
@@ -121,7 +126,32 @@ function AnimatedCompetitionCard({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MenuRow({ icon, title, onPress, warning = false }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; onPress: () => void; warning?: boolean }) {
+// How many gyms are waiting for the client to answer a history request.
+function usePendingHistoryRequests() {
+  const [count, setCount] = useState(0);
+  const [reloadNumber, setReloadNumber] = useState(0);
+
+  useEffect(() => {
+    let isCurrent = true;
+    api.get<{ shares: { status: string }[] }>('/history-shares/me')
+      .then((response) => {
+        if (isCurrent) setCount(response.data.shares.filter((share) => share.status === 'pending').length);
+      })
+      .catch(() => undefined);
+    return () => { isCurrent = false; };
+  }, [reloadNumber]);
+
+  useEffect(() => {
+    const socket = connectSocket();
+    const refresh = () => setReloadNumber((value) => value + 1);
+    socket.on('history-share:updated', refresh);
+    return () => { socket.off('history-share:updated', refresh); };
+  }, []);
+
+  return count;
+}
+
+function MenuRow({ icon, title, onPress, warning = false, badge = 0 }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; onPress: () => void; warning?: boolean; badge?: number }) {
   const scale = useRef(new Animated.Value(1)).current;
   return (
     <AnimatedPressable
@@ -135,6 +165,7 @@ function MenuRow({ icon, title, onPress, warning = false }: { icon: keyof typeof
       style={[styles.menuRow, { transform: [{ scale }] }]}>
       <MaterialIcons name={icon} size={22} color={warning ? '#A1A1AA' : '#10FF85'} />
       <Text style={[styles.menuTitle, warning && styles.warning]}>{title}</Text>
+      {badge > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
       {!warning ? <MaterialIcons name="chevron-right" size={22} color="#91A098" /> : null}
     </AnimatedPressable>
   );
@@ -168,6 +199,8 @@ const styles = StyleSheet.create({
   menuList: { gap: 10 },
   menuRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#1E1E1E' },
   menuTitle: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  badge: { minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#10FF85', paddingHorizontal: 6 },
+  badgeText: { color: '#070B09', fontSize: 12, fontWeight: '800' },
   warning: { color: '#A1A1AA' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#000000B8' },
   modalCard: { gap: 16, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#1E1E1E', padding: 22 },

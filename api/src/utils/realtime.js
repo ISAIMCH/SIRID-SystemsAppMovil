@@ -55,4 +55,11 @@ function emitToStaff(req, event, payload) {
   if (io && req.tenant) io.to(`org:${req.tenant.organizationId}:staff`).emit(event, payload);
 }
 
-module.exports = { realtimeRooms, emitRealtime, emitToStaff };
+// Sends the event to everyone working in the given organization and to the given users, whatever organization
+// the request works in (e.g. a client answering a gym's request); only for non-sensitive payloads.
+function emitToOrganizationStaff(req, organizationId, event, payload, users = []) {
+  const io = req.app?.get('io');
+  if (io) io.to([`org:${organizationId}:staff`, ...users.map(toUserRoom).filter(Boolean)]).emit(event, payload);
+}
+
+module.exports = { realtimeRooms, emitRealtime, emitToStaff, emitToOrganizationStaff };

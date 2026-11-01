@@ -423,4 +423,5 @@ module.exports = {
   deleteWorkoutSession,
   workoutSchema,
   calculateCaloriesBurned,
+  sessionResponse,
 };
