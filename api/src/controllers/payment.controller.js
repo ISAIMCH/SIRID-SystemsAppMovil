@@ -3,7 +3,7 @@ const Payment = require('../models/payment.model');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
-const { activateMembership } = require('../utils/membership');
+const { activateMembership, revertPaidPayment } = require('../utils/membership');
 const { priceMembership, quoteMembership } = require('../utils/membership-pricing');
 const { generateUniquePaymentPin } = require('../utils/payment-pin');
 const parseUpdate = require('../utils/parse-update');
@@ -206,10 +206,21 @@ async function redeemPaymentByPin(req, res) {
   res.json({ payment });
 }
 
+// A paid payment takes its unused membership time with it (see revertPaidPayment).
 async function deletePayment(req, res) {
   assertId(req.params.id);
-  const payment = await Payment.findOneAndDelete({ _id: req.params.id, ...gymFilter(req) });
-  if (!payment) throw new HttpError(404, 'Pago no encontrado.');
+  const session = await Payment.startSession();
+  let payment;
+  try {
+    await session.withTransaction(async () => {
+      payment = await Payment.findOne({ _id: req.params.id, ...gymFilter(req) }).session(session);
+      if (!payment) throw new HttpError(404, 'Pago no encontrado.');
+      if (payment.status === 'paid') await revertPaidPayment(session, payment);
+      await Payment.deleteOne({ _id: payment._id }, { session });
+    });
+  } finally {
+    await session.endSession();
+  }
   emitRealtime(req, 'payment-updated', { action: 'deleted', paymentId: req.params.id }, [payment.user], { gymId: payment.gymId });
   res.status(204).end();
 }

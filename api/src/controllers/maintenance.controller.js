@@ -51,18 +51,20 @@ async function updateReport(req, res) {
       if (!report) throw new HttpError(404, 'Reporte no encontrado.');
       if (report.status === 'resolved') throw new HttpError(409, 'El reporte ya está resuelto.');
 
-      const equipmentStatus = input.equipmentStatus
-        ?? (input.status === 'resolved' ? 'available' : undefined);
-      if (equipmentStatus) {
+      // Each report takes one unit out of service at most and gives back only the unit it took; resolving
+      // always gives it back.
+      const equipmentStatus = input.status === 'resolved' ? 'available' : input.equipmentStatus;
+      const outOfService = equipmentStatus ? equipmentStatus === 'out_of_service' : report.equipmentOutOfService;
+      if (outOfService !== report.equipmentOutOfService) {
         const equipment = await Equipment.findOne({ _id: report.equipment, gymId: report.gymId }).session(session);
         if (equipment) {
-          const delta = equipmentStatus === 'out_of_service' ? 1 : -1;
           equipment.maintenanceQuantity = Math.min(
             equipment.totalQuantity,
-            Math.max(0, equipment.maintenanceQuantity + delta),
+            Math.max(0, equipment.maintenanceQuantity + (outOfService ? 1 : -1)),
           );
           await equipment.save({ session });
         }
+        report.equipmentOutOfService = outOfService;
       }
 
       report.status = input.status;
