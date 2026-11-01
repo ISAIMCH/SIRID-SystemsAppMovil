@@ -71,7 +71,7 @@ test('organizations allow 3 gyms unless SIRID changes the limit', () => {
 
 test('an organization that is not active tells the login screen why, with no data of its own', () => {
   const organization = { _id: id(), name: 'Fuerza Total', status: 'rejected', statusReason: 'Datos incompletos' };
-  const error = organizationInactiveError(organization);
+  const error = organizationInactiveError(organization, { includeReason: true });
   assert.equal(error.statusCode, 403);
   assert.equal(error.extra.code, 'organization_rejected');
   assert.deepEqual(error.extra.organization, { id: String(organization._id), name: 'Fuerza Total', status: 'rejected', reason: 'Datos incompletos' });
@@ -82,6 +82,12 @@ test('an organization that is not active tells the login screen why, with no dat
   errorHandler(error, {}, res, () => {});
   assert.equal(body.code, 'organization_rejected');
   assert.match(body.error, /rechazó/);
+});
+
+test("SIRID's reason reaches the owner, never the organization's clients or staff", () => {
+  const organization = { _id: id(), name: 'Fuerza Total', status: 'suspended', statusReason: 'Falta de pago' };
+  assert.equal(organizationInactiveError(organization).extra.organization.reason, null);
+  assert.equal(organizationInactiveError(organization, { includeReason: true }).extra.organization.reason, 'Falta de pago');
 });
 
 test('only SIRID staff reach the platform panel', async () => {

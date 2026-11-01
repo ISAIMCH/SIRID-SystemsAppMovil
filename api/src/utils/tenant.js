@@ -96,11 +96,17 @@ const INACTIVE_MESSAGES = {
 };
 
 // Nobody but SIRID works in an organization that is not active; the body tells the login screen why.
-function organizationInactiveError(organization) {
+// SIRID's reason is administrative: only the owner gets it, never the organization's clients or staff.
+function organizationInactiveError(organization, { includeReason = false } = {}) {
   const status = organization?.status ?? 'suspended';
   return new HttpError(403, INACTIVE_MESSAGES[status] ?? INACTIVE_MESSAGES.suspended, {
     code: `organization_${status}`,
-    organization: organization && { id: String(organization._id), name: organization.name, status, reason: organization.statusReason ?? null },
+    organization: organization && {
+      id: String(organization._id),
+      name: organization.name,
+      status,
+      reason: includeReason ? organization.statusReason ?? null : null,
+    },
   });
 }
 
@@ -128,7 +134,7 @@ async function loadTenantContext(user, requestedGymId = null) {
       ? Membership.findOne({ userId: user._id, organizationId: member.organizationId }).select('homeGymId').lean()
       : null,
   ]);
-  if (organization?.status !== 'active' && !user.isPlatformAdmin) throw organizationInactiveError(organization);
+  if (organization?.status !== 'active' && !user.isPlatformAdmin) throw organizationInactiveError(organization, { includeReason: member.roles.includes('Propietario') });
 
   return { organizationId: member.organizationId, organization, member, gyms, homeGymId: membership?.homeGymId ?? null, requestedGymId };
 }
