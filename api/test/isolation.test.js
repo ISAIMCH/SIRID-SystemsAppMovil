@@ -12,7 +12,7 @@ const { resolveAccess, legacyRole, platformMember, resolveTargetGym, gymFilter, 
 const { canSeeMember } = require('../src/utils/members');
 const { emitRealtime, emitToStaff } = require('../src/utils/realtime');
 const { authorize } = require('../src/middlewares/auth.middleware');
-const { applyLegacyRole } = require('../src/controllers/auth.controller');
+const { applyLegacyRole, applyRoles, assertCanManage, assignableRolesSchema, serializeDirectoryUser } = require('../src/controllers/auth.controller');
 const { withStock } = require('../src/controllers/store.controller');
 const { resolveOrderOwnership } = require('../src/controllers/store-order.controller');
 const ProductStock = require('../src/models/product-stock.model');
@@ -129,6 +129,53 @@ test('legacy role changes edit the member in one gym and never touch owners', ()
   assert.deepEqual(member, { roles: ['Cliente'], gyms: [] });
 
   assert.throws(() => applyLegacyRole({ roles: ['Propietario'], gyms: [] }, 'Coach', mainGym._id), (error) => error.statusCode === 409);
+});
+
+test('staff roles combine in one gym and Cliente replaces them all', () => {
+  const member = { roles: ['Cliente'], gyms: [{ gymId: northGym._id, roles: ['Coach'] }] };
+  applyRoles(member, ['Coach', 'Recepcion'], mainGym._id);
+  assert.deepEqual(member.roles, []);
+  assert.deepEqual(member.gyms.map((gym) => [String(gym.gymId), gym.roles]), [
+    [String(northGym._id), ['Coach']],
+    [String(mainGym._id), ['Coach', 'Recepcion']],
+  ]);
+  assert.equal(legacyRole(member), 'Coach');
+
+  applyRoles(member, ['Cliente'], mainGym._id);
+  assert.deepEqual(member, { roles: ['Cliente'], gyms: [] });
+});
+
+test('assignable roles keep Cliente alone', () => {
+  assert.deepEqual(assignableRolesSchema.parse(['Gerente', 'Coach', 'Recepcion']), ['Gerente', 'Coach', 'Recepcion']);
+  assert.throws(() => assignableRolesSchema.parse(['Cliente', 'Coach']));
+  assert.throws(() => assignableRolesSchema.parse(['Propietario']));
+  assert.throws(() => assignableRolesSchema.parse(['Coach', 'Coach']));
+  assert.throws(() => assignableRolesSchema.parse([]));
+});
+
+test('only owners manage managers', () => {
+  const managerId = id();
+  const request = (member) => ({ tenantContext: { member }, user: { id: String(managerId) } });
+  const asManager = request({ roles: [], gyms: [{ gymId: mainGym._id, roles: ['Gerente'] }] });
+  const otherManager = { userId: id(), roles: [], gyms: [{ gymId: mainGym._id, roles: ['Gerente'] }] };
+  const coach = { userId: id(), roles: [], gyms: [{ gymId: mainGym._id, roles: ['Coach'] }] };
+  const forbidden = (error) => error.statusCode === 403;
+
+  assert.doesNotThrow(() => assertCanManage(asManager, coach, ['Coach', 'Recepcion']));
+  assert.doesNotThrow(() => assertCanManage(asManager, null, ['Recepcion']));
+  assert.doesNotThrow(() => assertCanManage(asManager, { ...otherManager, userId: managerId }, undefined));
+  assert.throws(() => assertCanManage(asManager, coach, ['Gerente']), forbidden);
+  assert.throws(() => assertCanManage(asManager, otherManager, undefined), forbidden);
+  assert.throws(() => assertCanManage(asManager, { ...otherManager, userId: managerId }, ['Coach']), forbidden);
+  assert.doesNotThrow(() => assertCanManage(request({ roles: ['Propietario'], gyms: [] }), otherManager, ['Gerente']));
+});
+
+test('the directory lists roles of the gyms the request sees', () => {
+  const member = { roles: [], gyms: [{ gymId: mainGym._id, roles: ['Gerente', 'Coach'] }, { gymId: northGym._id, roles: ['Recepcion'] }] };
+  const serialized = serializeDirectoryUser({ _id: id(), name: 'Ana', role: 'Admin' }, member, [mainGym._id]);
+  assert.equal(serialized.role, 'Admin');
+  assert.deepEqual(serialized.roles, ['Gerente', 'Coach']);
+  assert.deepEqual(serialized.gymRoles, [{ gymId: String(mainGym._id), roles: ['Gerente', 'Coach'] }]);
 });
 
 test('product stock is reported for the request gym and for every visible gym', () => {

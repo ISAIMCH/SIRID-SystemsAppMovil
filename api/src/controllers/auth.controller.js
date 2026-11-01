@@ -6,6 +6,7 @@ const User = require('../models/user.model');
 const MembershipPlan = require('../models/membership-plan.model');
 const Membership = require('../models/membership.model');
 const OrganizationMember = require('../models/organization-member.model');
+const { GYM_ROLES } = require('../models/organization-member.model');
 const Gym = require('../models/gym.model');
 const Organization = require('../models/organization.model');
 const env = require('../config/env');
@@ -57,6 +58,14 @@ const registrationSchema = credentialsSchema.extend({
   preferredZones: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
 });
 
+// Cliente stands alone for the whole organization; staff roles combine freely in one gym.
+const assignableRolesSchema = z.array(z.enum(['Cliente', ...GYM_ROLES])).min(1)
+  .refine((roles) => new Set(roles).size === roles.length, 'No repitas roles.')
+  .refine((roles) => !roles.includes('Cliente') || roles.length === 1, 'El rol Cliente no se combina con roles del staff.');
+
+// The single role older clients send, as roles.
+const LEGACY_ROLES = { Admin: ['Gerente'], Coach: ['Coach'], Cliente: ['Cliente'] };
+
 function parseJsonArrayField(value) {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return [];
@@ -76,6 +85,7 @@ function normalizeMultipartBody(req) {
   if (Object.prototype.hasOwnProperty.call(body, 'documents')) {
     body.documents = parseJsonArrayField(body.documents);
   }
+  if (typeof body.roles === 'string') body.roles = parseJsonArrayField(body.roles);
   if (body.isActive === 'true') body.isActive = true;
   if (body.isActive === 'false') body.isActive = false;
   return body;
@@ -160,10 +170,10 @@ async function authResponse(user) {
 }
 
 
-// The legacy role edits the member's roles in one gym: Admin is Gerente there, Coach is Coach; Cliente leaves staff.
-function applyLegacyRole(member, role, gymId) {
+// Staff roles replace the member's roles in one gym; Cliente leaves the staff of every gym.
+function applyRoles(member, roles, gymId) {
   if (isOwner(member)) throw new HttpError(409, 'El rol del propietario no se cambia desde aquí.');
-  if (role === 'Cliente') {
+  if (roles.includes('Cliente')) {
     member.roles = ['Cliente'];
     member.gyms = [];
     return;
@@ -171,8 +181,36 @@ function applyLegacyRole(member, role, gymId) {
   member.roles = member.roles.filter((item) => item !== 'Cliente');
   member.gyms = [
     ...member.gyms.filter((assignment) => String(assignment.gymId) !== String(gymId)),
-    { gymId, roles: [role === 'Admin' ? 'Gerente' : 'Coach'] },
+    { gymId, roles },
   ];
+}
+
+// The legacy role edits the member's roles in one gym: Admin is Gerente there, Coach is Coach; Cliente leaves staff.
+function applyLegacyRole(member, role, gymId) {
+  applyRoles(member, LEGACY_ROLES[role], gymId);
+}
+
+// Managers are handled by the owner: a Gerente can't grant Gerente, change a manager's roles or edit another manager.
+function assertCanManage(req, member, roles) {
+  if (isOwner(req.tenantContext.member)) return;
+  const isManager = member?.gyms.some((assignment) => assignment.roles.includes('Gerente'));
+  const isSelf = member && String(member.userId) === String(req.user.id);
+  if (roles?.includes('Gerente') || (isManager && (roles || !isSelf))) {
+    throw new HttpError(403, 'Solo el propietario gestiona a los gerentes.');
+  }
+}
+
+async function changeRoles(req, user, member, roles, requestedGymId) {
+  const gymId = resolveTargetGym(req, requestedGymId);
+  applyRoles(member, roles, gymId);
+  user.role = legacyRole(member);
+  if (roles.includes('Cliente')) {
+    await Membership.updateOne(
+      { userId: user._id, organizationId: member.organizationId },
+      { $setOnInsert: { homeGymId: gymId, status: 'pending' } },
+      { upsert: true },
+    );
+  }
 }
 
 function safeStringEqual(value, expected) {
@@ -244,7 +282,8 @@ async function bootstrapAdmin(req, res) {
 
 async function createManagedUser(req, res) {
   const input = registrationSchema.extend({
-    role: z.enum(['Coach', 'Cliente']),
+    role: z.enum(['Coach', 'Cliente']).optional(),
+    roles: assignableRolesSchema.optional(),
     address: z.string().trim().min(1).max(200).optional(),
     membershipPlanId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
     planId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).optional(),
@@ -258,6 +297,9 @@ async function createManagedUser(req, res) {
     // The gym the new Coach works in or the client's home gym; defaults to the selected or main gym.
     gymId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || undefined).optional(),
   }).superRefine((data, context) => {
+    if (!data.role && !data.roles) {
+      context.addIssue({ code: 'custom', path: ['roles'], message: 'Selecciona al menos un rol.' });
+    }
     if (data.membershipStatus === 'active' && !data.membershipExpiresAt) {
       context.addIssue({ code: 'custom', path: ['membershipExpiresAt'], message: 'La membresía activa requiere vencimiento.' });
     }
@@ -269,18 +311,21 @@ async function createManagedUser(req, res) {
   if (input.planId && !input.membershipPlanId) input.membershipPlanId = input.planId;
   const { organizationId } = resolveTenant(req);
   const gymId = resolveTargetGym(req, input.gymId);
+  const roles = input.roles ?? LEGACY_ROLES[input.role];
+  const isClient = roles.includes('Cliente');
+  assertCanManage(req, null, roles);
 
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
   }
-  if (input.role === 'Coach' && input.assignedCoach) {
-    throw new HttpError(400, 'No se puede asignar un Coach a otro Coach.');
+  if (!isClient && input.assignedCoach) {
+    throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
   }
-  if (input.role === 'Cliente' && input.address) {
-    throw new HttpError(400, 'La dirección solo aplica a Coaches.');
+  if (isClient && input.address) {
+    throw new HttpError(400, 'La dirección solo aplica al staff.');
   }
   let plan = null;
-  if (input.role === 'Cliente' && input.membershipPlanId) {
+  if (isClient && input.membershipPlanId) {
     plan = await MembershipPlan.findOne({ _id: input.membershipPlanId, organizationId, isActive: true, isDeleted: { $ne: true } });
     if (!plan) throw new HttpError(400, 'El plan seleccionado no existe o está inactivo.');
     input.membershipPlanName = plan.name;
@@ -289,14 +334,15 @@ async function createManagedUser(req, res) {
   }
   if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
 
-  const assignedCoach = input.role === 'Cliente' ? input.assignedCoach ?? null : null;
+  const assignedCoach = isClient ? input.assignedCoach ?? null : null;
   const availableTrainingDays = input.availableTrainingDays ?? [];
+  const memberRoles = isClient ? { roles: ['Cliente'], gyms: [] } : { roles: [], gyms: [{ gymId, roles }] };
 
   const user = new User({
     name: input.name,
     email: input.email,
     phone: input.phone,
-    role: input.role,
+    role: legacyRole(memberRoles),
     goal: input.goal,
     experienceLevel: input.experienceLevel,
     availableTrainingDays,
@@ -317,11 +363,8 @@ async function createManagedUser(req, res) {
   await user.setPassword(input.password);
   await withTransaction(async (session) => {
     await user.save({ session });
-    if (input.role === 'Coach') {
-      await OrganizationMember.create([{ userId: user._id, organizationId, gyms: [{ gymId, roles: ['Coach'] }], observations: input.observations }], { session });
-      return;
-    }
-    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'], assignedCoach, observations: input.observations }], { session });
+    await OrganizationMember.create([{ userId: user._id, organizationId, ...memberRoles, assignedCoach, observations: input.observations }], { session });
+    if (!isClient) return;
     await Membership.create([{
       ...user.membership.toObject(),
       userId: user._id,
@@ -341,8 +384,13 @@ async function createManagedUser(req, res) {
 }
 
 // `member` is the user's OrganizationMember in the request's organization, with assignedCoach populated.
-function serializeDirectoryUser(user, member) {
+// `roles` adds the staff roles held in the gyms of the request (`gymIds`) to the organization roles.
+function serializeDirectoryUser(user, member, gymIds) {
   const coach = member?.assignedCoach?.name ? member.assignedCoach : null;
+  const visibleGyms = new Set(gymIds.map(String));
+  const gymRoles = (member?.gyms ?? [])
+    .filter((assignment) => visibleGyms.has(String(assignment.gymId)))
+    .map((assignment) => ({ gymId: String(assignment.gymId), roles: [...assignment.roles] }));
   return {
     id: String(user._id),
     name: user.name,
@@ -352,6 +400,8 @@ function serializeDirectoryUser(user, member) {
     address: user.address,
     documents: user.documents,
     role: member ? legacyRole(member) : user.role,
+    roles: [...new Set([...(member?.roles ?? []), ...gymRoles.flatMap((assignment) => assignment.roles)])],
+    gymRoles,
     isActive: user.isActive,
     goal: user.goal,
     experienceLevel: user.experienceLevel,
@@ -388,14 +438,14 @@ async function listDirectoryUsers(req, res) {
     .lean();
   const memberByUser = new Map(members.map((member) => [String(member.userId), member]));
 
-  res.json({ users: users.map((user) => serializeDirectoryUser(user, memberByUser.get(String(user._id)))) });
+  res.json({ users: users.map((user) => serializeDirectoryUser(user, memberByUser.get(String(user._id)), gymIds)) });
 }
 
 async function getDirectoryUser(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
-  const { role } = resolveTenant(req);
+  const { role, gymIds } = resolveTenant(req);
   const member = await findVisibleMember(req, req.params.id);
-  const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
+  const client = await User.findById(req.params.id)
     .select(DIRECTORY_FIELDS)
     .lean();
 
@@ -406,7 +456,7 @@ async function getDirectoryUser(req, res) {
   }
 
   await member.populate('assignedCoach', 'name email');
-  res.json({ user: serializeDirectoryUser(client, member) });
+  res.json({ user: serializeDirectoryUser(client, member, gymIds) });
 }
 
 async function updateDirectoryUser(req, res) {
@@ -429,12 +479,18 @@ async function updateDirectoryUser(req, res) {
       .transform((value) => value || null)
       .optional(),
     observations: z.string().trim().max(4000).optional(),
+    roles: assignableRolesSchema.optional(),
+    // The gym whose staff roles `roles` replaces; defaults to the selected or main gym.
+    gymId: z.union([z.string().regex(/^[a-f\d]{24}$/i), z.literal('')]).transform((value) => value || undefined).optional(),
   }).parse(normalizeMultipartBody(req));
-  if (Object.keys(input).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  const { gymId: requestedGymId, ...changes } = input;
+  if (Object.keys(changes).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const member = await findVisibleMember(req, req.params.id);
-  const user = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } });
+  assertCanManage(req, member, input.roles);
+  const user = await User.findById(req.params.id);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
+  if (input.roles) await changeRoles(req, user, member, input.roles, requestedGymId);
 
   if (input.email && input.email !== user.email) {
     if (await User.exists({ email: input.email, _id: { $ne: user._id } })) {
@@ -454,7 +510,7 @@ async function updateDirectoryUser(req, res) {
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
   if (input.observations !== undefined) member.observations = input.observations;
   if (input.address !== undefined) {
-    if (user.role !== 'Coach') throw new HttpError(400, 'La dirección solo aplica a Coaches.');
+    if (member.roles.includes('Cliente')) throw new HttpError(400, 'La dirección solo aplica al staff.');
     user.address = input.address || undefined;
   }
   if (input.assignedCoach !== undefined) {
@@ -471,7 +527,7 @@ async function updateDirectoryUser(req, res) {
     .select(DIRECTORY_FIELDS)
     .lean();
   await member.populate('assignedCoach', 'name email');
-  res.json({ user: serializeDirectoryUser(updated, member) });
+  res.json({ user: serializeDirectoryUser(updated, member, resolveTenant(req).gymIds) });
 }
 
 async function updateUser(req, res) {
@@ -481,6 +537,7 @@ async function updateUser(req, res) {
     lastName: z.string().trim().max(50).optional(),
     email: z.string().email().max(254).transform((email) => email.toLowerCase().trim()).optional(),
     role: z.enum(['Admin', 'Coach', 'Cliente']).optional(),
+    roles: assignableRolesSchema.optional(),
     phone: z.union([phoneSchema, z.literal('')]).optional(),
     address: z.string().trim().max(200).optional(),
     documents: z.array(z.string().trim().min(1).max(500)).max(50).optional(),
@@ -502,6 +559,8 @@ async function updateUser(req, res) {
   if (Object.keys(changes).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
   const member = await findVisibleMember(req, req.params.id);
+  const roles = input.roles ?? (input.role !== undefined && input.role !== legacyRole(member) ? LEGACY_ROLES[input.role] : undefined);
+  assertCanManage(req, member, roles);
   const user = await User.findById(req.params.id);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
 
@@ -520,18 +579,7 @@ async function updateUser(req, res) {
     user.name = [firstName, lastName].filter(Boolean).join(' ').slice(0, 100);
     user.lastName = lastName;
   }
-  if (input.role !== undefined && input.role !== legacyRole(member)) {
-    const gymId = resolveTargetGym(req, requestedGymId);
-    applyLegacyRole(member, input.role, gymId);
-    user.role = legacyRole(member);
-    if (input.role === 'Cliente') {
-      await Membership.updateOne(
-        { userId: user._id, organizationId: member.organizationId },
-        { $setOnInsert: { homeGymId: gymId, status: 'pending' } },
-        { upsert: true },
-      );
-    }
-  }
+  if (roles) await changeRoles(req, user, member, roles, requestedGymId);
   if (input.phone !== undefined) user.phone = input.phone || undefined;
   if (input.address !== undefined) user.address = input.address || undefined;
   if (input.documents !== undefined) await applyLegacyDocumentList(req, user, input.documents);
@@ -649,5 +697,9 @@ module.exports = {
   getMyGyms,
   listUserGyms,
   updatePhysicalProfile,
+  assignableRolesSchema,
+  applyRoles,
   applyLegacyRole,
+  assertCanManage,
+  serializeDirectoryUser,
 };
