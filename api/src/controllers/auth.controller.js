@@ -24,7 +24,18 @@ const {
 } = require('../utils/tenant');
 const { MIRRORED_FIELDS, saveMembership } = require('../utils/membership');
 const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
-const { isOwner, hasGymRole, isAssignedCoach, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
+const {
+  applyRoles,
+  assertCanManage,
+  belongsOnlyTo,
+  setMemberActive,
+  hasGymRole,
+  isAssignedCoach,
+  canSeeMember,
+  findVisibleMember,
+  findClientMember,
+  assertCoachInGyms,
+} = require('../utils/members');
 const { storeLegacyUploads, applyLegacyDocumentList } = require('../utils/documents');
 
 const phoneSchema = z.string().trim()
@@ -170,33 +181,16 @@ async function authResponse(user) {
 }
 
 
-// Staff roles replace the member's roles in one gym; Cliente leaves the staff of every gym.
-function applyRoles(member, roles, gymId) {
-  if (isOwner(member)) throw new HttpError(409, 'El rol del propietario no se cambia desde aquí.');
-  if (roles.includes('Cliente')) {
-    member.roles = ['Cliente'];
-    member.gyms = [];
-    return;
-  }
-  member.roles = member.roles.filter((item) => item !== 'Cliente');
-  member.gyms = [
-    ...member.gyms.filter((assignment) => String(assignment.gymId) !== String(gymId)),
-    { gymId, roles },
-  ];
-}
-
 // The legacy role edits the member's roles in one gym: Admin is Gerente there, Coach is Coach; Cliente leaves staff.
 function applyLegacyRole(member, role, gymId) {
   applyRoles(member, LEGACY_ROLES[role], gymId);
 }
 
-// Managers are handled by the owner: a Gerente can't grant Gerente, change a manager's roles or edit another manager.
-function assertCanManage(req, member, roles) {
-  if (isOwner(req.tenantContext.member)) return;
-  const isManager = member?.gyms.some((assignment) => assignment.roles.includes('Gerente'));
-  const isSelf = member && String(member.userId) === String(req.user.id);
-  if (roles?.includes('Gerente') || (isManager && (roles || !isSelf))) {
-    throw new HttpError(403, 'Solo el propietario gestiona a los gerentes.');
+// The holder of an account shared with other organizations is the only one who changes its email or password.
+async function assertCredentialsEditable(user, member, input) {
+  const changesEmail = input.email && input.email !== user.email;
+  if ((changesEmail || input.password?.trim()) && !await belongsOnlyTo(user, member.organizationId)) {
+    throw new HttpError(403, 'Esta cuenta también se usa en otro gimnasio: solo su titular puede cambiar el correo o la contraseña.');
   }
 }
 
@@ -385,7 +379,8 @@ async function createManagedUser(req, res) {
 
 // `member` is the user's OrganizationMember in the request's organization, with assignedCoach populated.
 // `roles` adds the staff roles held in the gyms of the request (`gymIds`) to the organization roles.
-function serializeDirectoryUser(user, member, gymIds) {
+// `isActive` is the person's status in this organization; `canEditCredentials` is false for accounts other organizations use.
+function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = true } = {}) {
   const coach = member?.assignedCoach?.name ? member.assignedCoach : null;
   const visibleGyms = new Set(gymIds.map(String));
   const gymRoles = (member?.gyms ?? [])
@@ -402,7 +397,8 @@ function serializeDirectoryUser(user, member, gymIds) {
     role: member ? legacyRole(member) : user.role,
     roles: [...new Set([...(member?.roles ?? []), ...gymRoles.flatMap((assignment) => assignment.roles)])],
     gymRoles,
-    isActive: user.isActive,
+    isActive: user.isActive && (member?.isActive ?? true),
+    canEditCredentials,
     goal: user.goal,
     experienceLevel: user.experienceLevel,
     availableTrainingDays: user.availableTrainingDays,
@@ -424,7 +420,9 @@ async function listDirectoryUsers(req, res) {
   const { organizationId, role, gymIds } = resolveTenant(req);
   if (input.role === 'Coach' && role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
 
-  const members = (await OrganizationMember.find({ organizationId, isActive: true }).populate('assignedCoach', 'name email').lean())
+  // Former staff stay in the full list for owners and managers, so they can be reactivated.
+  const members = (await OrganizationMember.find({ organizationId }).populate('assignedCoach', 'name email').lean())
+    .filter((member) => member.isActive || (role === 'Admin' && !input.role && !member.roles.includes('Cliente')))
     .filter((member) => canSeeMember(req, member))
     .filter((member) => role !== 'Coach' || isAssignedCoach(member, req.user.id))
     .filter((member) => {
@@ -437,14 +435,24 @@ async function listDirectoryUsers(req, res) {
     .sort({ name: 1 })
     .lean();
   const memberByUser = new Map(members.map((member) => [String(member.userId), member]));
+  // Only owners and managers edit users, so only they need to know which accounts other organizations use.
+  const sharedIds = new Set(role !== 'Admin' ? [] : (await OrganizationMember.distinct('userId', {
+    userId: { $in: users.map((user) => user._id) },
+    organizationId: { $ne: organizationId },
+    isActive: true,
+  })).map(String));
 
-  res.json({ users: users.map((user) => serializeDirectoryUser(user, memberByUser.get(String(user._id)), gymIds)) });
+  res.json({
+    users: users.map((user) => serializeDirectoryUser(user, memberByUser.get(String(user._id)), gymIds, {
+      canEditCredentials: !sharedIds.has(String(user._id)),
+    })),
+  });
 }
 
 async function getDirectoryUser(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
   const { role, gymIds } = resolveTenant(req);
-  const member = await findVisibleMember(req, req.params.id);
+  const member = await findVisibleMember(req, req.params.id, undefined, { includeInactive: role === 'Admin' });
   const client = await User.findById(req.params.id)
     .select(DIRECTORY_FIELDS)
     .lean();
@@ -456,7 +464,7 @@ async function getDirectoryUser(req, res) {
   }
 
   await member.populate('assignedCoach', 'name email');
-  res.json({ user: serializeDirectoryUser(client, member, gymIds) });
+  res.json({ user: serializeDirectoryUser(client, member, gymIds, { canEditCredentials: await belongsOnlyTo(client, member.organizationId) }) });
 }
 
 async function updateDirectoryUser(req, res) {
@@ -486,10 +494,11 @@ async function updateDirectoryUser(req, res) {
   const { gymId: requestedGymId, ...changes } = input;
   if (Object.keys(changes).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const member = await findVisibleMember(req, req.params.id);
+  const member = await findVisibleMember(req, req.params.id, undefined, { includeInactive: true });
   assertCanManage(req, member, input.roles);
   const user = await User.findById(req.params.id);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
+  await assertCredentialsEditable(user, member, input);
   if (input.roles) await changeRoles(req, user, member, input.roles, requestedGymId);
 
   if (input.email && input.email !== user.email) {
@@ -503,7 +512,7 @@ async function updateDirectoryUser(req, res) {
   if (input.phone !== undefined) user.phone = input.phone || undefined;
   if (input.documents !== undefined) await applyLegacyDocumentList(req, user, input.documents);
   if (req.files?.length) user.documents.push(...await storeLegacyUploads(req, member));
-  if (input.isActive !== undefined) user.isActive = input.isActive;
+  if (input.isActive !== undefined && input.isActive !== (user.isActive && member.isActive)) await setMemberActive(user, member, input.isActive);
   if (input.password?.trim()) await user.setPassword(input.password.trim());
   if (input.goal !== undefined) user.goal = input.goal;
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
@@ -527,7 +536,7 @@ async function updateDirectoryUser(req, res) {
     .select(DIRECTORY_FIELDS)
     .lean();
   await member.populate('assignedCoach', 'name email');
-  res.json({ user: serializeDirectoryUser(updated, member, resolveTenant(req).gymIds) });
+  res.json({ user: serializeDirectoryUser(updated, member, resolveTenant(req).gymIds, { canEditCredentials: await belongsOnlyTo(updated, member.organizationId) }) });
 }
 
 async function updateUser(req, res) {
@@ -558,11 +567,12 @@ async function updateUser(req, res) {
   const { gymId: requestedGymId, ...changes } = input;
   if (Object.keys(changes).length === 0 && !req.files?.length) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
 
-  const member = await findVisibleMember(req, req.params.id);
+  const member = await findVisibleMember(req, req.params.id, undefined, { includeInactive: true });
   const roles = input.roles ?? (input.role !== undefined && input.role !== legacyRole(member) ? LEGACY_ROLES[input.role] : undefined);
   assertCanManage(req, member, roles);
   const user = await User.findById(req.params.id);
   if (!user) throw new HttpError(404, 'Usuario no encontrado.');
+  await assertCredentialsEditable(user, member, input);
 
   if (input.email && input.email !== user.email) {
     if (await User.exists({ email: input.email, _id: { $ne: user._id } })) {
@@ -584,7 +594,7 @@ async function updateUser(req, res) {
   if (input.address !== undefined) user.address = input.address || undefined;
   if (input.documents !== undefined) await applyLegacyDocumentList(req, user, input.documents);
   if (req.files?.length) user.documents.push(...await storeLegacyUploads(req, member));
-  if (input.isActive !== undefined) user.isActive = input.isActive;
+  if (input.isActive !== undefined && input.isActive !== (user.isActive && member.isActive)) await setMemberActive(user, member, input.isActive);
   if (input.password?.trim()) await user.setPassword(input.password.trim());
   if (input.goal !== undefined) user.goal = input.goal;
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
@@ -698,8 +708,6 @@ module.exports = {
   listUserGyms,
   updatePhysicalProfile,
   assignableRolesSchema,
-  applyRoles,
   applyLegacyRole,
-  assertCanManage,
   serializeDirectoryUser,
 };

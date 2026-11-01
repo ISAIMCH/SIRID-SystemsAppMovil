@@ -106,8 +106,8 @@ test('a Coach only lists the clients assigned to them in their organization', as
   const coachId = id();
   const [mine, notMine] = [id(), id()];
   const members = [
-    { userId: mine, organizationId, roles: ['Cliente'], gyms: [], assignedCoach: { _id: coachId, name: 'Luis', email: 'luis@ejemplo.com' } },
-    { userId: notMine, organizationId, roles: ['Cliente'], gyms: [], assignedCoach: { _id: id(), name: 'Otro', email: 'otro@ejemplo.com' } },
+    { userId: mine, organizationId, isActive: true, roles: ['Cliente'], gyms: [], assignedCoach: { _id: coachId, name: 'Luis', email: 'luis@ejemplo.com' } },
+    { userId: notMine, organizationId, isActive: true, roles: ['Cliente'], gyms: [], assignedCoach: { _id: id(), name: 'Otro', email: 'otro@ejemplo.com' } },
   ];
   let userFilter;
   const restore = [
