@@ -2,7 +2,6 @@ const User = require('../models/user.model');
 const Membership = require('../models/membership.model');
 const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('./http-error');
-const { hasVerifiedDocument } = require('./documents');
 
 const MIRRORED_FIELDS = ['status', 'startsAt', 'expiresAt', 'planName', 'price', 'currency', 'durationDays', 'autoRenew'];
 
@@ -20,6 +19,11 @@ function membershipCoversGym(membership, gymId) {
   return true;
 }
 
+// The rules a membership copies from its plan when sold.
+function planAccessRules(plan) {
+  return { gymAccess: plan.gymAccess, schedule: plan.schedule ?? null, requiredDocument: plan.requiredDocument ?? null };
+}
+
 // Membership is the source of truth; User.membership keeps a copy for the app and dashboard that still read it.
 async function saveMembership(membership, { session } = {}) {
   await membership.save({ session });
@@ -34,14 +38,12 @@ async function activateMembership(session, payment) {
   const membership = await Membership.findOne({ userId, organizationId: payment.organizationId }).session(session);
   if (!membership) throw new HttpError(404, 'El cliente no tiene membresía en este gimnasio.');
 
-  // Selling a plan copies where it is valid, so editing the plan later does not change it.
+  // Selling a plan copies its access rules, so editing the plan later does not change it. A plan that requires a
+  // document can be sold before the document is verified: access is what checks it (see access-rules.js).
   const plan = payment.planId && await MembershipPlan.findOne({ _id: payment.planId, organizationId: payment.organizationId }).session(session);
-  if (plan?.requiredDocument && !(await hasVerifiedDocument(userId, payment.organizationId, plan.requiredDocument, { session }))) {
-    throw new HttpError(409, 'Este plan requiere un documento verificado del cliente (por ejemplo, su credencial de estudiante).');
-  }
   if (plan) {
     membership.planId = plan._id;
-    membership.gymAccess = plan.gymAccess;
+    Object.assign(membership, planAccessRules(plan));
     if (!membership.homeGymId) membership.homeGymId = payment.gymId;
   }
 
@@ -59,4 +61,4 @@ async function activateMembership(session, payment) {
   await saveMembership(membership, { session });
 }
 
-module.exports = { MIRRORED_FIELDS, hasActiveMembership, membershipCoversGym, saveMembership, activateMembership };
+module.exports = { MIRRORED_FIELDS, hasActiveMembership, membershipCoversGym, planAccessRules, saveMembership, activateMembership };

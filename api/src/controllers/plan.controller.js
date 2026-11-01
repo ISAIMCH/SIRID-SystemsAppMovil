@@ -2,6 +2,7 @@ const { z } = require('zod');
 const MembershipPlan = require('../models/membership-plan.model');
 const Gym = require('../models/gym.model');
 const { GYM_ACCESS_SCOPES } = require('../models/gym-access.schema');
+const { TIME_PATTERN, PLAN_TYPES } = require('../models/access-schedule.schema');
 const { CLIENT_CATEGORIES } = require('../models/document.model');
 const HttpError = require('../utils/http-error');
 const { resolveTenant, organizationFilter } = require('../utils/tenant');
@@ -17,18 +18,28 @@ const specificationsSchema = z.union([
   z.string().transform((value) => value.split('\n').map((item) => item.trim()).filter(Boolean)),
 ]);
 
-const gymAccessSchema = z.preprocess((value) => {
+// Multipart forms send objects as JSON text.
+function parseJsonText(value) {
   if (typeof value !== 'string') return value;
   try {
     return JSON.parse(value);
   } catch {
     return value;
   }
-}, z.object({
+}
+
+const gymAccessSchema = z.preprocess(parseJsonText, z.object({
   scope: z.enum(GYM_ACCESS_SCOPES),
   gymIds: z.array(z.string().regex(/^[a-f\d]{24}$/i, 'ID de sucursal inválido.')).max(100).default([]),
 }).refine((access) => access.scope !== 'list' || access.gymIds.length > 0, { path: ['gymIds'], message: 'Elige al menos una sucursal.' })
   .transform((access) => ({ scope: access.scope, gymIds: access.scope === 'list' ? [...new Set(access.gymIds)] : [] })));
+
+// null or '' removes the schedule (any time).
+const scheduleSchema = z.preprocess((value) => (value === '' ? null : parseJsonText(value)), z.object({
+  startTime: z.string().regex(TIME_PATTERN, 'Usa el formato HH:mm.'),
+  endTime: z.string().regex(TIME_PATTERN, 'Usa el formato HH:mm.'),
+}).refine((schedule) => schedule.startTime !== schedule.endTime, { path: ['endTime'], message: 'La hora de salida debe ser distinta a la de entrada.' })
+  .nullable());
 
 const planInputSchema = z.object({
   name: z.string().trim().min(1).max(80).optional(),
@@ -40,10 +51,11 @@ const planInputSchema = z.object({
   specifications: specificationsSchema.optional(),
   especificaciones: specificationsSchema.optional(),
   autoRenew: booleanSchema.optional(),
-  planType: z.enum(['standard', 'promotional']).optional(),
+  planType: z.enum(PLAN_TYPES).optional(),
   isActive: booleanSchema.optional(),
   tipoCobro: z.string().trim().min(1).max(30).optional(),
   gymAccess: gymAccessSchema.optional(),
+  schedule: scheduleSchema.optional(),
   requiredDocument: z.union([z.enum(CLIENT_CATEGORIES), z.literal(''), z.null()]).transform((value) => value || null).optional(),
 });
 
@@ -60,6 +72,7 @@ function parsePlanInput(body, { partial = false } = {}) {
     ...(input.autoRenew !== undefined ? { autoRenew: input.autoRenew } : {}),
     ...(input.planType !== undefined ? { planType: input.planType } : {}),
     ...(input.gymAccess !== undefined ? { gymAccess: input.gymAccess } : {}),
+    ...(input.schedule !== undefined ? { schedule: input.schedule } : {}),
     ...(input.requiredDocument !== undefined ? { requiredDocument: input.requiredDocument } : {}),
   };
 

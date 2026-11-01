@@ -7,16 +7,19 @@ const Membership = require('../models/membership.model');
 const OrganizationMember = require('../models/organization-member.model');
 const env = require('../config/env');
 const HttpError = require('../utils/http-error');
-const { hasActiveMembership, membershipCoversGym } = require('../utils/membership');
+const { hasActiveMembership } = require('../utils/membership');
+const { evaluateAccess } = require('../utils/access-rules');
 const { resolveTenant } = require('../utils/tenant');
 
-// The QR names the client and the organization; the gym comes from the device or the staff member who scans it.
 // The QR names the client and the organization; the gym comes from the device or the staff member who scans it.
 async function createQrToken(req, res) {
   const { role, organizationId } = resolveTenant(req);
   if (role !== 'Cliente') throw new HttpError(403, 'El QR solo está disponible para clientes.');
   const membership = await Membership.findOne({ userId: req.user._id, organizationId }).lean();
-  if (!hasActiveMembership(membership)) throw new HttpError(403, 'Tu membresía no está activa.');
+  // A client still inside gets a QR to leave even if the membership ran out meanwhile.
+  if (!hasActiveMembership(membership) && !(await isInsideOrganization(req.user._id, organizationId))) {
+    throw new HttpError(403, 'Tu membresía no está activa.');
+  }
 
   const issuedAt = Math.floor(Date.now() / 1000);
   const jti = randomUUID();
@@ -32,6 +35,11 @@ async function createQrToken(req, res) {
     qrToken,
     expiresAt: new Date((issuedAt + env.QR_TOKEN_TTL_SECONDS) * 1000).toISOString(),
   });
+}
+
+async function isInsideOrganization(userId, organizationId) {
+  const lastAccess = await AccessIoT.findOne({ user: userId }).sort({ occurredAt: -1 }).select('event organizationId').lean();
+  return lastAccess?.event === 'check-in' && String(lastAccess.organizationId) === String(organizationId);
 }
 
 // The entry toggles only at the same gym: arriving at another gym is always a check-in.
@@ -95,15 +103,19 @@ async function registerQrAccess(req, res) {
       }
 
       // Operations in one transaction run one after another.
-      const user = await User.findOne({ _id: payload.sub, isActive: true }).session(session);
-      const member = await OrganizationMember.exists({ userId: payload.sub, organizationId: payload.org, roles: 'Cliente', isActive: true }).session(session);
-      const membership = await Membership.findOne({ userId: payload.sub, organizationId: payload.org }).session(session);
-      if (!user || !member) throw new HttpError(403, 'La cuenta no está habilitada para ingresar.');
-      if (!hasActiveMembership(membership)) throw new HttpError(403, 'La membresía no está vigente.');
-      if (!membershipCoversGym(membership, accessPoint.gymId)) throw new HttpError(403, 'El plan del cliente no incluye esta sucursal.');
-
+      const user = await User.findById(payload.sub).session(session);
+      if (!user) throw new HttpError(403, 'La cuenta no está habilitada para ingresar.', { code: 'account_disabled' });
       const lastAccess = await AccessIoT.findOne({ user: user._id }).sort({ occurredAt: -1 }).select('event organizationId gymId').session(session).lean();
       const event = nextAccessEvent(lastAccess, accessPoint.gymId);
+
+      // Leaving is always allowed, so nobody is locked in when their hours or membership run out inside.
+      if (event === 'check-in') {
+        const isMember = await OrganizationMember.exists({ userId: payload.sub, organizationId: payload.org, roles: 'Cliente', isActive: true }).session(session);
+        const membership = await Membership.findOne({ userId: payload.sub, organizationId: payload.org }).session(session).lean();
+        const decision = await evaluateAccess({ user, isMember, membership, gymId: accessPoint.gymId }, { session });
+        if (!decision.allowed) throw new HttpError(403, decision.message, { code: decision.code });
+      }
+
       const openCheckIn = openCheckInElsewhere(lastAccess, accessPoint.gymId);
       if (openCheckIn) {
         await AccessIoT.create([{

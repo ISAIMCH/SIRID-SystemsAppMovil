@@ -22,7 +22,7 @@ const {
   resolveTargetGym,
   resolveTenant,
 } = require('../utils/tenant');
-const { MIRRORED_FIELDS, saveMembership } = require('../utils/membership');
+const { MIRRORED_FIELDS, planAccessRules, saveMembership } = require('../utils/membership');
 const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
 const {
   applyRoles,
@@ -365,7 +365,7 @@ async function createManagedUser(req, res) {
       organizationId,
       homeGymId: gymId,
       planId: plan?._id ?? null,
-      ...(plan ? { gymAccess: plan.gymAccess } : {}),
+      ...(plan ? planAccessRules(plan) : {}),
     }], { session });
   });
   if (req.files?.length) {

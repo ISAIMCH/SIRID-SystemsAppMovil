@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 const { gymAccessSchema } = require('./gym-access.schema');
+const { accessScheduleSchema } = require('./access-schedule.schema');
+const { CLIENT_CATEGORIES } = require('./document.model');
 
 // A client's membership with one organization; renewals extend this same document.
 const membershipSchema = new mongoose.Schema({
@@ -9,6 +11,8 @@ const membershipSchema = new mongoose.Schema({
   homeGymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', default: null },
   // Copied from the plan when sold, so editing the plan later does not change memberships already sold.
   gymAccess: { type: gymAccessSchema, default: () => ({}) },
+  schedule: { type: accessScheduleSchema, default: null },
+  requiredDocument: { type: String, enum: [...CLIENT_CATEGORIES, null], default: null },
   status: { type: String, enum: ['pending', 'active', 'suspended', 'expired'], default: 'pending', index: true },
   startsAt: Date,
   expiresAt: Date,
