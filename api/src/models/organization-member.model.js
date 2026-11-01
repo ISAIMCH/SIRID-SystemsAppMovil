@@ -30,6 +30,15 @@ const organizationMemberSchema = new mongoose.Schema({
   // Staff notes about this person; each organization keeps its own.
   observations: { type: String, trim: true, maxlength: 4000, default: '' },
   isActive: { type: Boolean, default: true },
+  // Set when reception added an existing account as a client, so the app tells its holder; seenAt once they read it.
+  enrollmentNotice: {
+    type: new mongoose.Schema({
+      gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', required: true },
+      createdAt: { type: Date, required: true },
+      seenAt: { type: Date, default: null },
+    }, { _id: false }),
+    default: null,
+  },
 }, { timestamps: true });
 
 organizationMemberSchema.pre('validate', function requireSomeRole() {
