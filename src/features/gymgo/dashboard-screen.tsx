@@ -8,6 +8,7 @@ import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientHomeScreen from './client-home-screen';
 import GymSwitcher from './gym-switcher';
+import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
@@ -42,6 +43,7 @@ function StaffDashboard() {
   const { user } = useAuth();
   const isClient = user?.role === 'Cliente';
   const isAdmin = user?.role === 'Admin';
+  const pendingInvitations = usePendingStaffInvitations();
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [routineError, setRoutineError] = useState('');
@@ -98,6 +100,11 @@ function StaffDashboard() {
         <View style={[styles.page, user?.role === 'Coach' && styles.darkPage, isAdmin && styles.adminPage]}>
         <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
         <GymSwitcher />
+        {pendingInvitations > 0 ? (
+          <ActionButton secondary onPress={() => router.push('/staff-invitations' as Href)}>
+            {pendingInvitations === 1 ? 'Tienes 1 invitación al staff' : `Tienes ${pendingInvitations} invitaciones al staff`}
+          </ActionButton>
+        ) : null}
 
         <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero, isAdmin && styles.adminHero]}>
           <Eyebrow>{isClient ? 'PLAN PERSONAL' : `${user?.role?.toUpperCase()} · GYMGO`}</Eyebrow>

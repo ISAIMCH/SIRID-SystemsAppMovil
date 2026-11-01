@@ -62,6 +62,8 @@ type AuthContextValue = {
   needsGym: boolean;
   selectGym: (gymId: string) => Promise<void>;
   joinGym: (code: string) => Promise<JoinGymResponse>;
+  // Reloads gyms and roles, e.g. after joining a gym's staff; keeps the active gym when it is still there.
+  refreshSession: () => Promise<void>;
   isLoading: boolean;
   sessionError: string | null;
   retrySession: () => void;
@@ -226,6 +228,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return data;
   }
 
+  async function refreshSession() {
+    const { data } = await api.get<SessionResponse>('/auth/me');
+    await applySession(data, activeGymId ?? undefined);
+  }
+
   function retrySession() {
     setSessionError(null);
     setIsLoading(true);
@@ -274,7 +281,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const needsGym = user?.role === 'Cliente' && !gyms.some((gym) => gym.roles.includes('Cliente'));
 
   return (
-    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension, signIn, signUp, signOut, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, refreshSession, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension, signIn, signUp, signOut, updateUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );

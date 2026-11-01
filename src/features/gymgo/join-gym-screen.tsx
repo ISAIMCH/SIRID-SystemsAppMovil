@@ -1,11 +1,12 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, router, useLocalSearchParams, type Href } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
+import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import { ActionButton, Eyebrow, Field, Heading, Notice, Page } from './ui';
 
 // Same alphabet and length as the API (api/src/utils/access-codes.js).
@@ -30,6 +31,7 @@ export default function JoinGymScreen() {
   const [error, setError] = useState('');
   const [permission, requestPermission] = useCameraPermissions();
   const scanLocked = useRef(false);
+  const pendingInvitations = usePendingStaffInvitations();
 
   if (!user) return <Redirect href="/(auth)/login" />;
 
@@ -98,6 +100,13 @@ export default function JoinGymScreen() {
       <Heading detail="Escanea el QR que está en la recepción o escribe el código que te den ahí.">
         Únete a tu gimnasio
       </Heading>
+
+      {/* Someone invited to a gym's staff joins it by accepting, without a code. */}
+      {pendingInvitations > 0 ? (
+        <ActionButton secondary onPress={() => router.push('/staff-invitations' as Href)}>
+          {pendingInvitations === 1 ? 'Tienes 1 invitación al staff' : `Tienes ${pendingInvitations} invitaciones al staff`}
+        </ActionButton>
+      ) : null}
 
       {isScanning ? (
         <View style={styles.cameraBox}>

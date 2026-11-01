@@ -9,6 +9,7 @@ import { connectSocket } from '@/services/socket';
 import { api } from './api';
 import { useAuth } from './auth-context';
 import { FloatingCard } from './fit-ui';
+import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import { Page } from './ui';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -38,6 +39,7 @@ export default function ClientProfileHub() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const pendingRequests = usePendingHistoryRequests();
+  const pendingInvitations = usePendingStaffInvitations();
   const initials = user?.name.split(' ').map((name) => name[0]).slice(0, 2).join('').toUpperCase() ?? 'GG';
 
   return (
@@ -71,6 +73,9 @@ export default function ClientProfileHub() {
         <MenuRow icon="credit-card" title="Membresía y pagos" onPress={() => router.push('/(main)/client-billing' as Href)} />
         <MenuRow icon="folder-shared" title="Mis documentos" onPress={() => router.push('/(main)/documents' as Href)} />
         <MenuRow icon="shield" title="Privacidad e historial" badge={pendingRequests} onPress={() => router.push('/(main)/privacy' as Href)} />
+        {pendingInvitations > 0 ? (
+          <MenuRow icon="badge" title="Invitaciones al staff" badge={pendingInvitations} onPress={() => router.push('/staff-invitations' as Href)} />
+        ) : null}
         <MenuRow icon="logout" title="Cerrar sesión" warning onPress={() => void signOut()} />
       </View>
 
