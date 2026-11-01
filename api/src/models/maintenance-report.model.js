@@ -7,6 +7,8 @@ const maintenanceReportSchema = new mongoose.Schema({
   description: { type: String, required: true, trim: true, maxlength: 1500 },
   status: { type: String, enum: ['pending', 'in_progress', 'resolved'], default: 'pending', index: true },
   adminNote: { type: String, trim: true, maxlength: 1000 },
+  // Whether this report holds one unit of the equipment out of service (Equipment.maintenanceQuantity).
+  equipmentOutOfService: { type: Boolean, default: false },
   resolvedAt: Date,
 }, { timestamps: true });
 

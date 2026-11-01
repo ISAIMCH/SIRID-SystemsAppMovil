@@ -23,6 +23,11 @@ const paymentSchema = new mongoose.Schema({
   validationPin: { type: String, match: /^\d{5}$/ },
   processedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   processedAt: Date,
+  // The membership time this payment added when it was paid; deleting the payment takes back the unused part.
+  membershipPeriod: {
+    type: new mongoose.Schema({ startsAt: Date, endsAt: Date }, { _id: false }),
+    default: null,
+  },
 }, { timestamps: true });
 
 paymentSchema.index({ user: 1, createdAt: -1 });
