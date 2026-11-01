@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Animated,
@@ -22,8 +22,6 @@ import { useAuth } from './auth-context';
 
 const neon = '#9BFF63';
 const background = '#080B09';
-const surface = '#121512';
-const border = '#1E2A21';
 const primaryText = '#F4F8F5';
 const mutedText = '#888F8A';
 const particles = [
@@ -45,7 +43,7 @@ export default function AuthScreen() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const buttonScale = useRef(new Animated.Value(1)).current;
+  const buttonScale = useState(() => new Animated.Value(1))[0];
 
   async function submit() {
     setError('');
@@ -160,7 +158,7 @@ function LoginInput({ icon, label, focused, ...props }: { icon: keyof typeof Mat
 }
 
 function Particle({ left, top, size, delay, duration }: { left: `${number}%`; top: `${number}%`; size: number; delay: number; duration: number }) {
-  const progress = useRef(new Animated.Value(0)).current;
+  const progress = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const animation = Animated.loop(Animated.sequence([
@@ -178,7 +176,7 @@ function Particle({ left, top, size, delay, duration }: { left: `${number}%`; to
 }
 
 function EnergyTrails() {
-  const pulse = useRef(new Animated.Value(0)).current;
+  const pulse = useState(() => new Animated.Value(0))[0];
 
   useEffect(() => {
     const animation = Animated.loop(Animated.sequence([

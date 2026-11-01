@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { router, type Href } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Animated, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
@@ -108,7 +108,7 @@ export default function ClientProfileHub() {
 }
 
 function AnimatedCompetitionCard({ children }: { children: React.ReactNode }) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useState(() => new Animated.Value(1))[0];
   return (
     <AnimatedPressable
       accessibilityRole="button"
@@ -152,7 +152,7 @@ function usePendingHistoryRequests() {
 }
 
 function MenuRow({ icon, title, onPress, warning = false, badge = 0 }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; onPress: () => void; warning?: boolean; badge?: number }) {
-  const scale = useRef(new Animated.Value(1)).current;
+  const scale = useState(() => new Animated.Value(1))[0];
   return (
     <AnimatedPressable
       accessibilityRole="button"
