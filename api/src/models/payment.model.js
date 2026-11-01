@@ -7,6 +7,10 @@ const paymentSchema = new mongoose.Schema({
   planId: { type: mongoose.Schema.Types.ObjectId, ref: 'MembershipPlan', index: true },
   planName: { type: String, required: true, trim: true, maxlength: 80 },
   amount: { type: Number, required: true, min: 0 },
+  // Set when a membership promotion priced the payment: amount = listPrice - discountApplied.
+  promotionId: { type: mongoose.Schema.Types.ObjectId, ref: 'Promotion', default: null },
+  listPrice: { type: Number, min: 0 },
+  discountApplied: { type: Number, min: 0, default: 0 },
   paymentMethod: { type: String, enum: ['Cash', 'Card', 'Transfer'] },
   source: { type: String, enum: ['reception'], index: true },
   paymentDate: { type: Date, default: Date.now },

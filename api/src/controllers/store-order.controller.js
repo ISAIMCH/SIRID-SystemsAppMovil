@@ -91,6 +91,8 @@ async function createOrder(req, res) {
   // An invalid promotion never blocks a sale: the order goes through at regular price with a notice.
   if (input.promotionId && (!promotion || promotion.isActive !== true || (promotion.validUntil && promotion.validUntil <= new Date()))) {
     promotionWarning = 'La promoción ya no está disponible; el pedido se generó a precio regular.';
+  } else if (promotion.appliesTo === 'membership') {
+    promotionWarning = 'La promoción es para membresías; el pedido se generó a precio regular.';
   } else if (promotion?.requiredDocument && !(await hasVerifiedDocument(userId, tenant.organizationId, promotion.requiredDocument))) {
     promotionWarning = 'La promoción requiere un documento verificado; el pedido se generó a precio regular.';
   } else if (promotion) {

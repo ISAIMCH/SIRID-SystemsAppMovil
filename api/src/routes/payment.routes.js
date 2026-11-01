@@ -8,6 +8,7 @@ const router = express.Router();
 // Recepcion charges and redeems PINs; only Admins edit or delete payments.
 router.use(authenticate);
 router.get('/', authorize('Admin', 'Recepcion'), asyncHandler(controller.getPayments));
+router.get('/quote', authorize('Admin', 'Recepcion'), asyncHandler(controller.quotePayment));
 router.post('/', authorize('Admin', 'Recepcion'), asyncHandler(controller.createPayment));
 router.patch('/redeem', authorize('Admin', 'Recepcion'), asyncHandler(controller.redeemPaymentByPin));
 router.put('/:id', authorize('Admin'), asyncHandler(controller.updatePayment));

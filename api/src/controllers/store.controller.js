@@ -2,6 +2,7 @@ const { z } = require('zod');
 const Product = require('../models/product.model');
 const ProductStock = require('../models/product-stock.model');
 const Promotion = require('../models/promotion.model');
+const MembershipPlan = require('../models/membership-plan.model');
 const { CLIENT_CATEGORIES } = require('../models/document.model');
 const HttpError = require('../utils/http-error');
 const parseUpdate = require('../utils/parse-update');
@@ -31,7 +32,9 @@ const promotionSchema = z.object({
   description: z.string().trim().max(1000).default(''),
   imageUrl: imageSchema.default(''),
   discountPercentage: z.coerce.number().min(0).max(100).default(0),
+  appliesTo: z.enum(Promotion.PROMOTION_TARGETS).default('store'),
   applicableProducts: z.array(objectIdSchema).default([]),
+  applicablePlans: z.array(objectIdSchema).default([]),
   validUntil: z.coerce.date().optional(),
   requiredDocument: z.union([z.enum(CLIENT_CATEGORIES), z.literal(''), z.null()]).transform((value) => value || null).optional(),
   isActive: z.boolean().optional(),
@@ -125,11 +128,30 @@ async function deleteProduct(req, res) {
   res.status(204).end();
 }
 
-async function listPromotions(req, res) {
+// ?appliesTo=store|membership narrows the list; the app's store only gets store promotions (listStorePromotions).
+async function listPromotions(req, res, appliesTo = req.query.appliesTo) {
   const filter = organizationFilter(req);
+  if (appliesTo === 'membership') filter.appliesTo = 'membership';
+  else if (appliesTo === 'store') filter.appliesTo = { $ne: 'membership' };
   if (resolveTenant(req).role !== 'Admin') Object.assign(filter, { active: { $ne: false }, isActive: { $ne: false } });
   const promotions = await Promotion.find(filter).sort({ createdAt: -1 }).lean();
   res.json({ promotions });
+}
+
+function listStorePromotions(req, res) {
+  return listPromotions(req, res, 'store');
+}
+
+async function assertPlansInOrganization(req, planIds = []) {
+  if (planIds.length === 0) return;
+  const count = await MembershipPlan.countDocuments({ _id: { $in: planIds }, ...organizationFilter(req), isDeleted: { $ne: true } });
+  if (count !== new Set(planIds).size) throw new HttpError(400, 'Algún plan de la promoción no existe.');
+}
+
+// A promotion targets products or plans, never both: the list of the other kind is emptied.
+function keepOneTarget(input, appliesTo) {
+  if (appliesTo === 'membership') return { ...input, applicableProducts: [] };
+  return { ...input, applicablePlans: [] };
 }
 
 async function assertProductsInOrganization(req, productIds = []) {
@@ -139,17 +161,21 @@ async function assertProductsInOrganization(req, productIds = []) {
 }
 
 async function createPromotion(req, res) {
-  const input = syncActiveFlags({ isActive: true, ...promotionSchema.parse(req.body) });
+  const parsed = syncActiveFlags({ isActive: true, ...promotionSchema.parse(req.body) });
+  const input = keepOneTarget(parsed, parsed.appliesTo);
   await assertProductsInOrganization(req, input.applicableProducts);
+  await assertPlansInOrganization(req, input.applicablePlans);
   const promotion = await Promotion.create({ ...input, ...organizationFilter(req) });
   res.status(201).json({ promotion });
 }
 
 async function updatePromotion(req, res) {
   assertId(req.params.id);
-  const input = syncActiveFlags(parseUpdate(promotionSchema, req.body));
+  let input = syncActiveFlags(parseUpdate(promotionSchema, req.body));
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  if (input.appliesTo) input = keepOneTarget(input, input.appliesTo);
   await assertProductsInOrganization(req, input.applicableProducts);
+  await assertPlansInOrganization(req, input.applicablePlans);
   const promotion = await Promotion.findOneAndUpdate({ _id: req.params.id, ...organizationFilter(req) }, input, { new: true, runValidators: true });
   if (!promotion) throw new HttpError(404, 'Promoción no encontrada.');
   res.json({ promotion });
@@ -168,6 +194,7 @@ module.exports = {
   updateProduct,
   deleteProduct,
   listPromotions,
+  listStorePromotions,
   createPromotion,
   updatePromotion,
   deletePromotion,
