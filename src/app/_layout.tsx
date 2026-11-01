@@ -3,10 +3,11 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { StatusBar } from 'expo-status-bar';
 
 import { AuthProvider, useAuth } from '@/features/gymgo/auth-context';
+import StaffInvitationNotifier from '@/features/gymgo/staff-invitation-notifier';
 import { palette } from '@/features/gymgo/theme';
 
 function RootNavigator() {
-  const { isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension } = useAuth();
+  const { user, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension } = useAuth();
 
   if (isLoading) {
     return (
@@ -53,11 +54,14 @@ function RootNavigator() {
   return (
     <>
       <StatusBar style="dark" />
+      {/* Here rather than in (main), so an account that has not joined any gym hears about invitations too. */}
+      {user ? <StaffInvitationNotifier key={user.id} /> : null}
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.paper } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(main)" />
         <Stack.Screen name="join-gym" />
+        <Stack.Screen name="staff-invitations" />
       </Stack>
     </>
   );
