@@ -12,7 +12,8 @@ const { resolveAccess, legacyRole, platformMember, resolveTargetGym, gymFilter, 
 const { canSeeMember } = require('../src/utils/members');
 const { emitRealtime, emitToStaff } = require('../src/utils/realtime');
 const { authorize } = require('../src/middlewares/auth.middleware');
-const { applyLegacyRole, applyRoles, assertCanManage, assignableRolesSchema, serializeDirectoryUser } = require('../src/controllers/auth.controller');
+const { applyLegacyRole, assignableRolesSchema, serializeDirectoryUser } = require('../src/controllers/auth.controller');
+const { applyRoles, assertCanManage } = require('../src/utils/members');
 const { withStock } = require('../src/controllers/store.controller');
 const { resolveOrderOwnership } = require('../src/controllers/store-order.controller');
 const ProductStock = require('../src/models/product-stock.model');

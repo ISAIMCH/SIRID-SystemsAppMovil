@@ -29,6 +29,7 @@ const accessDeviceRoutes = require('./routes/access-device.routes');
 const organizationRoutes = require('./routes/organization.routes');
 const platformRoutes = require('./routes/platform.routes');
 const historyShareRoutes = require('./routes/history-share.routes');
+const staffInvitationRoutes = require('./routes/staff-invitation.routes');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -88,6 +89,7 @@ app.use('/api/access-devices', accessDeviceRoutes);
 app.use('/api/organizations', organizationRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/history-shares', historyShareRoutes);
+app.use('/api/staff-invitations', staffInvitationRoutes);
 app.use('/api', accessRoutes);
 app.use(notFound);
 app.use(errorHandler);
