@@ -4,6 +4,7 @@ const MembershipPlan = require('../models/membership-plan.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime } = require('../utils/realtime');
 const { activateMembership } = require('../utils/membership');
+const { priceMembership, quoteMembership } = require('../utils/membership-pricing');
 const { generateUniquePaymentPin } = require('../utils/payment-pin');
 const parseUpdate = require('../utils/parse-update');
 const { resolveTenant, resolveTargetGym, organizationFilter, gymFilter } = require('../utils/tenant');
@@ -13,7 +14,9 @@ const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 const paymentSchema = z.object({
   userId: objectIdSchema,
   planId: objectIdSchema,
-  amount: z.coerce.number().min(0),
+  // Ignored when promotionId is sent: the server prices the plan with the promotion. Defaults to the plan's price.
+  amount: z.coerce.number().min(0).optional(),
+  promotionId: z.union([objectIdSchema, z.literal(''), z.null()]).transform((value) => value || null).optional(),
   currency: z.string().trim().length(3).default('MXN'),
   durationDays: z.coerce.number().int().min(1).max(730).optional(),
   source: z.enum(['reception']),
@@ -49,8 +52,10 @@ async function createPayment(req, res) {
   const { organizationId } = resolveTenant(req);
   const gymId = resolveTargetGym(req, requestedGymId);
   await findClientMember(req, input.userId, 'Usuario no encontrado.');
-  const plan = await MembershipPlan.findOne({ _id: input.planId, organizationId, isDeleted: { $ne: true } }).select('name durationInDays');
+  const plan = await MembershipPlan.findOne({ _id: input.planId, organizationId, isDeleted: { $ne: true } }).select('name price durationInDays');
   if (!plan) throw new HttpError(404, 'Plan no encontrado.');
+  const pricing = await priceMembership({ plan, promotionId: input.promotionId, userId: input.userId, organizationId });
+  if (!pricing.promotionId && input.amount !== undefined) pricing.amount = input.amount;
   if (input.status === 'pending') await assertNoOtherPendingPayment(input.userId, organizationId);
   const pin = input.status === 'pending' ? await generateUniquePaymentPin() : null;
 
@@ -60,6 +65,7 @@ async function createPayment(req, res) {
     await session.withTransaction(async () => {
       [payment] = await Payment.create([{
         ...input,
+        ...pricing,
         organizationId,
         gymId,
         currency: input.currency.toUpperCase(),
@@ -92,10 +98,11 @@ async function updatePayment(req, res) {
     await findClientMember(req, input.userId, 'Usuario no encontrado.');
     update.user = input.userId;
   }
+  let newPlan = null;
   if (input.planId) {
-    const plan = await MembershipPlan.findOne({ _id: input.planId, ...organizationFilter(req), isDeleted: { $ne: true } }).select('name');
-    if (!plan) throw new HttpError(404, 'Plan no encontrado.');
-    update.planName = plan.name;
+    newPlan = await MembershipPlan.findOne({ _id: input.planId, ...organizationFilter(req), isDeleted: { $ne: true } }).select('name price');
+    if (!newPlan) throw new HttpError(404, 'Plan no encontrado.');
+    update.planName = newPlan.name;
   }
 
   const session = await Payment.startSession();
@@ -107,6 +114,15 @@ async function updatePayment(req, res) {
       const wasPaid = payment.status === 'paid';
       if (wasPaid && update.status && update.status !== 'paid') {
         throw new HttpError(409, 'Un pago pagado no puede cambiar de estado.');
+      }
+      // A payment priced by a promotion keeps the server's price: a new promotion, plan or amount is priced again.
+      const promotionId = 'promotionId' in input ? input.promotionId : payment.promotionId;
+      if ('promotionId' in input || (promotionId && (newPlan || input.amount !== undefined))) {
+        if (wasPaid) throw new HttpError(409, 'No se puede cambiar la promoción de un pago pagado.');
+        const plan = newPlan ?? await MembershipPlan.findOne({ _id: payment.planId, organizationId: payment.organizationId }).select('price').session(session);
+        if (!plan) throw new HttpError(404, 'Plan no encontrado.');
+        const pricing = await priceMembership({ plan, promotionId, userId: update.user ?? payment.user, organizationId: payment.organizationId, session });
+        Object.assign(update, pricing, !pricing.promotionId && input.amount !== undefined ? { amount: input.amount } : {});
       }
       payment.set(update);
       if (payment.status === 'pending') {
@@ -133,6 +149,19 @@ async function updatePayment(req, res) {
     .populate('user', 'name email');
   emitRealtime(req, 'payment-updated', { action: 'updated', payment: payment.toObject() }, [payment.user], { gymId: payment.gymId });
   res.json({ payment });
+}
+
+// The price of a plan with each current membership promotion, so reception sees the discount before charging.
+async function quotePayment(req, res) {
+  const input = z.object({
+    planId: objectIdSchema,
+    userId: z.union([objectIdSchema, z.literal('')]).transform((value) => value || undefined).optional(),
+  }).parse(req.query);
+  const { organizationId } = resolveTenant(req);
+  if (input.userId) await findClientMember(req, input.userId, 'Usuario no encontrado.');
+  const plan = await MembershipPlan.findOne({ _id: input.planId, organizationId, isDeleted: { $ne: true } }).select('price').lean();
+  if (!plan) throw new HttpError(404, 'Plan no encontrado.');
+  res.json(await quoteMembership({ plan, userId: input.userId, organizationId }));
 }
 
 async function redeemPaymentByPin(req, res) {
@@ -177,4 +206,4 @@ async function deletePayment(req, res) {
   res.status(204).end();
 }
 
-module.exports = { getPayments, createPayment, updatePayment, redeemPaymentByPin, deletePayment };
+module.exports = { getPayments, createPayment, updatePayment, quotePayment, redeemPaymentByPin, deletePayment };

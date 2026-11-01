@@ -10,7 +10,7 @@ router.get('/products', asyncHandler(controller.getProducts));
 router.post('/products', authorize('Admin'), asyncHandler(controller.createProduct));
 router.patch('/products/:id', authorize('Admin'), asyncHandler(controller.updateProduct));
 router.delete('/products/:id', authorize('Admin'), asyncHandler(controller.deleteProduct));
-router.get('/promotions', asyncHandler(controller.listPromotions));
+router.get('/promotions', asyncHandler(controller.listStorePromotions));
 router.post('/promotions', authorize('Admin'), asyncHandler(controller.createPromotion));
 router.patch('/promotions/:id', authorize('Admin'), asyncHandler(controller.updatePromotion));
 router.delete('/promotions/:id', authorize('Admin'), asyncHandler(controller.deletePromotion));
