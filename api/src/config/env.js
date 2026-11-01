@@ -11,7 +11,6 @@ const envSchema = z.object({
   MONGO_URI: z.string().min(1),
   JWT_SECRET: z.string().min(32),
   QR_TOKEN_SECRET: z.string().min(32),
-  IOT_DEVICE_API_KEY: z.string().min(32),
   ADMIN_BOOTSTRAP_KEY: z.string().min(32),
   ENABLE_ADMIN_BOOTSTRAP: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   JWT_EXPIRES_IN: z.string().default('1h'),

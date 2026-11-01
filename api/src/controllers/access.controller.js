@@ -5,16 +5,15 @@ const User = require('../models/user.model');
 const AccessIoT = require('../models/access-iot.model');
 const Membership = require('../models/membership.model');
 const OrganizationMember = require('../models/organization-member.model');
-const Gym = require('../models/gym.model');
 const env = require('../config/env');
 const HttpError = require('../utils/http-error');
 const { hasActiveMembership, membershipCoversGym } = require('../utils/membership');
 const { resolveTenant } = require('../utils/tenant');
 
 // The QR names the client and the organization; the gym comes from the device or the staff member who scans it.
-// `gym` (the gym selected in the app) is only read by devices that still use the deprecated shared key.
+// The QR names the client and the organization; the gym comes from the device or the staff member who scans it.
 async function createQrToken(req, res) {
-  const { role, organizationId, gymId } = resolveTenant(req);
+  const { role, organizationId } = resolveTenant(req);
   if (role !== 'Cliente') throw new HttpError(403, 'El QR solo está disponible para clientes.');
   const membership = await Membership.findOne({ userId: req.user._id, organizationId }).lean();
   if (!hasActiveMembership(membership)) throw new HttpError(403, 'Tu membresía no está activa.');
@@ -22,7 +21,7 @@ async function createQrToken(req, res) {
   const issuedAt = Math.floor(Date.now() / 1000);
   const jti = randomUUID();
   // iat is set here so exp matches the expiresAt returned. jsonwebtoken reads notBefore as seconds from now, not a timestamp.
-  const qrToken = jwt.sign({ typ: 'gym-access', jti, org: String(organizationId), gym: String(gymId), iat: issuedAt }, env.QR_TOKEN_SECRET, {
+  const qrToken = jwt.sign({ typ: 'gym-access', jti, org: String(organizationId), iat: issuedAt }, env.QR_TOKEN_SECRET, {
     subject: req.user.id,
     issuer: 'gymgo-api',
     audience: 'gymgo-iot',
@@ -57,16 +56,10 @@ function staffAccessGym(tenant, gymId) {
   return tenant.gymIds[0];
 }
 
-// The organization and gym where the QR is being used, from the device, the staff member or (deprecated) the QR.
-async function resolveAccessPoint(req, payload, gymId) {
-  if (req.accessPoint && !req.accessPoint.legacy) return req.accessPoint;
-  if (req.tenant) {
-    return { organizationId: req.tenant.organizationId, gymId: staffAccessGym(req.tenant, gymId), deviceId: null, validatedBy: req.user._id };
-  }
-  const legacyGymId = gymId ?? payload.gym;
-  const gym = legacyGymId && await Gym.findOne({ _id: legacyGymId, organizationId: payload.org, isActive: true }).select('_id organizationId').lean();
-  if (!gym) throw new HttpError(400, 'El dispositivo debe indicar su sucursal. Regístralo en el dashboard para obtener su propia llave.');
-  return { organizationId: gym.organizationId, gymId: gym._id, deviceId: null };
+// The organization and gym where the QR is being used: the device's own gym, or the one the staff member picks.
+function resolveAccessPoint(req, gymId) {
+  if (req.accessPoint) return req.accessPoint;
+  return { organizationId: req.tenant.organizationId, gymId: staffAccessGym(req.tenant, gymId), deviceId: null, validatedBy: req.user._id };
 }
 
 async function registerQrAccess(req, res) {
@@ -88,7 +81,7 @@ async function registerQrAccess(req, res) {
   if (payload.typ !== 'gym-access' || !payload.sub || !payload.jti || !payload.org) {
     throw new HttpError(401, 'El código QR no es válido para acceso.');
   }
-  const accessPoint = await resolveAccessPoint(req, payload, input.gymId);
+  const accessPoint = resolveAccessPoint(req, input.gymId);
   if (String(accessPoint.organizationId) !== String(payload.org)) {
     throw new HttpError(403, 'Este código QR es de otro gimnasio.');
   }

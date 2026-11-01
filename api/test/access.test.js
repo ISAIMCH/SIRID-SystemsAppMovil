@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 
 // The controllers read the environment when they load.
 const placeholder = 'x'.repeat(40);
-for (const key of ['JWT_SECRET', 'QR_TOKEN_SECRET', 'IOT_DEVICE_API_KEY', 'ADMIN_BOOTSTRAP_KEY']) process.env[key] ??= `${placeholder}${key}`;
+for (const key of ['JWT_SECRET', 'QR_TOKEN_SECRET', 'ADMIN_BOOTSTRAP_KEY']) process.env[key] ??= `${placeholder}${key}`;
 process.env.MONGO_URI ??= 'mongodb://localhost/test';
 
 const env = require('../src/config/env');
@@ -125,7 +125,6 @@ test('a registered device enters at its own gym', async () => {
     const req = deviceRequest(key);
     assert.equal(await run(authenticateIotDevice, req), undefined);
     assert.equal(req.accessPoint.gymId, northGym);
-    assert.equal(req.accessPoint.legacy, false);
   } finally {
     restore.forEach((undo) => undo());
   }
@@ -157,16 +156,10 @@ test('a revoked or unknown device key is rejected', async () => {
   }
 });
 
-test('the deprecated shared key still authenticates, without a gym of its own', async () => {
-  const req = deviceRequest(env.IOT_DEVICE_API_KEY);
-  assert.equal(await run(authenticateIotDevice, req), undefined);
-  assert.deepEqual(req.accessPoint, { legacy: true, organizationId: null, gymId: null, deviceId: null });
-});
-
 test('a device does not accept the QR of a client of another organization', async () => {
   const req = {
     body: { qrToken: qrToken({ org: String(id()) }) },
-    accessPoint: { legacy: false, organizationId: id(), gymId: northGym, deviceId: id() },
+    accessPoint: { organizationId: id(), gymId: northGym, deviceId: id() },
   };
   const error = await run(registerQrAccess, req);
   assert.equal(error.statusCode, 403);

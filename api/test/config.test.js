@@ -8,7 +8,6 @@ const baseEnv = {
   MONGO_URI: 'mongodb://localhost/test',
   JWT_SECRET: 'j'.repeat(32),
   QR_TOKEN_SECRET: 'q'.repeat(32),
-  IOT_DEVICE_API_KEY: 'i'.repeat(32),
   ADMIN_BOOTSTRAP_KEY: 'a'.repeat(32),
 };
 Object.assign(process.env, baseEnv, { NODE_ENV: 'test' });
