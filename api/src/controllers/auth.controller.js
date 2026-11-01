@@ -228,9 +228,9 @@ function safeStringEqual(value, expected) {
 async function registerClient(req, res) {
   // Observations are staff notes kept per organization (OrganizationMember), never set by the client.
   const { joinCode, observations: _observations, ...input } = registrationSchema.extend({ joinCode: z.string().trim().max(20).optional() }).parse(req.body);
-  if (await User.exists({ email: input.email })) {
-    throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
-  }
+  const existing = await User.findOne({ email: input.email }).select('pendingActivation').lean();
+  if (existing?.pendingActivation) throw pendingActivationError();
+  if (existing) throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
 
   // A client signs up without a gym and joins one by code, now (joinCode) or later from the app (POST /gyms/join).
   const gym = joinCode ? await findGymByJoinCode(joinCode) : null;
@@ -409,6 +409,8 @@ function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = tru
     roles: [...new Set([...(member?.roles ?? []), ...gymRoles.flatMap((assignment) => assignment.roles)])],
     gymRoles,
     isActive: user.isActive && (member?.isActive ?? true),
+    // Opened by reception and not yet activated in the app (see client-enrollment.controller.js).
+    pendingActivation: Boolean(user.pendingActivation),
     canEditCredentials,
     goal: user.goal,
     experienceLevel: user.experienceLevel,
@@ -423,7 +425,7 @@ function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = tru
   };
 }
 
-const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays membership';
+const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive pendingActivation goal experienceLevel availableTrainingDays membership';
 
 // Admins see the organization's clients and the staff of their gyms; Coach and Recepcion see clients only.
 async function listDirectoryUsers(req, res) {
@@ -657,9 +659,15 @@ async function updateMembership(req, res) {
   res.json({ user: user.toSafeJSON() });
 }
 
+// Reception opened the account; its holder sets a password with the code reception gave them.
+function pendingActivationError() {
+  return new HttpError(403, 'Tu gimnasio ya te registró. Activa tu cuenta con el código que te dio recepción.', { code: 'account_pending_activation' });
+}
+
 async function login(req, res) {
   const input = credentialsSchema.parse(req.body);
   const user = await User.findOne({ email: input.email }).select('+passwordHash');
+  if (user?.pendingActivation && user.isActive) throw pendingActivationError();
   const validPassword = user
     ? await bcrypt.compare(input.password, user.passwordHash)
     : await bcrypt.compare(input.password, '$2b$12$LJ3m4ys3Lz0W9h8XyPzRzeB9oV0aU4wGj8K2nI9F7Yd4X1v5qP8aK');
@@ -706,6 +714,10 @@ async function updatePhysicalProfile(req, res) {
 }
 
 module.exports = {
+  DIRECTORY_FIELDS,
+  phoneSchema,
+  membershipsByUser,
+  serializeDirectoryUser,
   credentialsSchema,
   registrationSchema,
   authResponse,

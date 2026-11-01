@@ -50,6 +50,18 @@ const userSchema = new mongoose.Schema({
   weightKg: { type: Number, min: 20, max: 400 },
   heightCm: { type: Number, min: 80, max: 260 },
   currentlyInside: { type: Boolean, default: false },
+  // An account reception opened for a client: it has no usable password until the client activates it in the app
+  // with the one-time code reception gave them (see utils/client-activation.js).
+  pendingActivation: { type: Boolean, default: false },
+  activation: {
+    type: new mongoose.Schema({
+      codeHash: { type: String, required: true },
+      expiresAt: { type: Date, required: true },
+      failedAttempts: { type: Number, default: 0 },
+    }, { _id: false }),
+    default: null,
+    select: false,
+  },
 }, { timestamps: true });
 
 userSchema.methods.setPassword = async function setPassword(password) {
