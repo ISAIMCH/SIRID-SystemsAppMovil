@@ -64,6 +64,11 @@ api.interceptors.response.use(undefined, async (error: unknown) => {
   return Promise.reject(error);
 });
 
+// The API's machine-readable reason for an error (e.g. account_pending_activation), if it sent one.
+export function getApiErrorCode(error: unknown) {
+  return isAxiosError<{ code?: string }>(error) ? error.response?.data?.code ?? null : null;
+}
+
 export function getApiErrorMessage(error: unknown, fallback: string) {
   if (isAxiosError<{ error?: string }>(error)) {
     if (error.response) return error.response.data?.error ?? fallback;

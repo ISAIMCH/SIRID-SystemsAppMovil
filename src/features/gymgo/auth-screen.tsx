@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -17,7 +17,7 @@ import {
     View,
 } from 'react-native';
 
-import { getApiErrorMessage } from './api';
+import { getApiErrorCode, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 
 const neon = '#9BFF63';
@@ -43,10 +43,18 @@ export default function AuthScreen() {
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  // Reception opened this account; it needs the activation code instead of a password.
+  const [needsActivation, setNeedsActivation] = useState(false);
   const buttonScale = useState(() => new Animated.Value(1))[0];
+
+  function openActivation() {
+    const typedEmail = email.trim();
+    router.push((typedEmail ? `/(auth)/activate?email=${encodeURIComponent(typedEmail)}` : '/(auth)/activate') as Href);
+  }
 
   async function submit() {
     setError('');
+    setNeedsActivation(false);
     if (!email.trim() || !password) {
       setError('Escribe tu correo y contraseña para continuar.');
       return;
@@ -62,6 +70,7 @@ export default function AuthScreen() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(main)');
     } catch (requestError) {
+      setNeedsActivation(getApiErrorCode(requestError) === 'account_pending_activation');
       setError(getApiErrorMessage(requestError, 'No se pudo conectar con GymGo. Intenta de nuevo.'));
     } finally {
       setIsSubmitting(false);
@@ -141,6 +150,11 @@ export default function AuthScreen() {
             style={[styles.submitButton, { transform: [{ scale: buttonScale }] }, isSubmitting && styles.disabled]}>
             {isSubmitting ? <ActivityIndicator color="#071007" /> : <Text style={styles.submitText}>INICIAR SESIÓN</Text>}
           </AnimatedPressable>
+          <Pressable accessibilityRole="link" onPress={openActivation} style={[styles.activationLink, needsActivation && styles.activationLinkHighlighted]}>
+            <Text style={[styles.activationText, needsActivation && styles.activationTextHighlighted]}>
+              {needsActivation ? 'ACTIVAR MI CUENTA' : '¿Te registraron en recepción? Activa tu cuenta'}
+            </Text>
+          </Pressable>
           <Text style={styles.secureNote}>Acceso seguro para miembros GymGo</Text>
         </View>
       </ScrollView>
@@ -148,7 +162,7 @@ export default function AuthScreen() {
   );
 }
 
-function LoginInput({ icon, label, focused, ...props }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; focused: boolean } & React.ComponentProps<typeof TextInput>) {
+export function LoginInput({ icon, label, focused, ...props }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; focused: boolean } & React.ComponentProps<typeof TextInput>) {
   return (
     <View style={[styles.inputShell, focused && styles.inputFocused]}>
       <MaterialIcons name={icon} size={18} color={focused ? neon : mutedText} />
@@ -222,5 +236,9 @@ const styles = StyleSheet.create({
   submitButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
   submitText: { color: '#071007', fontSize: 14, fontWeight: '900', letterSpacing: 1 },
   disabled: { opacity: 0.6 },
+  activationLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  activationLinkHighlighted: { borderWidth: 1, borderColor: neon },
+  activationText: { color: neon, fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  activationTextHighlighted: { letterSpacing: 1, fontWeight: '900' },
   secureNote: { color: '#626A64', fontSize: 11, textAlign: 'center' },
 });
