@@ -8,7 +8,7 @@ const observationsSchema = z.object({
   observations: z.string().trim().max(4000),
 });
 
-function serializeClient(user) {
+function serializeClient(user, member) {
   return {
     id: String(user._id),
     name: user.name,
@@ -20,7 +20,7 @@ function serializeClient(user) {
     goal: user.goal,
     experienceLevel: user.experienceLevel,
     availableTrainingDays: user.availableTrainingDays,
-    observations: user.observations,
+    observations: member.observations,
     membership: user.membership,
     assignedCoach: user.assignedCoach ? {
       id: String(user.assignedCoach._id),
@@ -30,23 +30,23 @@ function serializeClient(user) {
   };
 }
 
+// The notes belong to the request's organization; other organizations keep their own.
 async function updateClientObservations(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.id)) throw new HttpError(400, 'ID de usuario inválido.');
 
-  await findClientMember(req, req.params.id);
+  const member = await findClientMember(req, req.params.id);
   const filter = { _id: req.params.id };
   if (resolveTenant(req).role === 'Coach') filter.assignedCoach = req.user.id;
   const input = observationsSchema.parse(req.body);
-  const client = await User.findOneAndUpdate(filter, { observations: input.observations }, {
-    new: true,
-    runValidators: true,
-  })
-    .select('name email phone address role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach')
+  const client = await User.findOne(filter)
+    .select('name email phone address role isActive goal experienceLevel availableTrainingDays membership assignedCoach')
     .populate('assignedCoach', 'name email')
     .lean();
-
   if (!client) throw new HttpError(404, 'Cliente no encontrado.');
-  res.json({ user: serializeClient(client) });
+
+  member.observations = input.observations;
+  await member.save();
+  res.json({ user: serializeClient(client, member) });
 }
 
 module.exports = { updateClientObservations };

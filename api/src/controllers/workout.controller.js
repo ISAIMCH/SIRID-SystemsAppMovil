@@ -1,6 +1,7 @@
 const { z } = require('zod');
 const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
+const Membership = require('../models/membership.model');
 const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
@@ -110,6 +111,15 @@ function sessionResponse(session) {
       })),
     })),
   };
+}
+
+// The gym a session counts for: the client's selected gym when it belongs to the routine's organization,
+// else the client's home gym there.
+async function sessionGym(req, routine) {
+  const tenant = resolveTenant(req);
+  if (String(tenant.organizationId) === String(routine.organizationId)) return tenant.gymId;
+  const membership = await Membership.findOne({ userId: req.user._id, organizationId: routine.organizationId }).select('homeGymId').lean();
+  return membership?.homeGymId ?? null;
 }
 
 async function createWorkoutSession(req, res) {
@@ -254,6 +264,8 @@ async function createWorkoutSession(req, res) {
   }
 
   const [session] = await WorkoutSession.create([{
+    organizationId: routine.organizationId,
+    gymId: await sessionGym(req, routine),
     user: req.user.id,
     routine: routine.id,
     routineTitle: routine.title,
@@ -291,17 +303,18 @@ async function getClientWorkoutHistory(req, res) {
     throw new HttpError(404, 'Cliente no encontrado.');
   }
 
-  const sessions = await WorkoutSession.find({ user: client._id })
+  const sessions = await WorkoutSession.find({ user: client._id, organizationId: resolveTenant(req).organizationId })
     .sort({ completedAt: -1 })
     .limit(100)
     .lean();
   res.json({ sessions: sessions.map(sessionResponse) });
 }
 
-// Clients reach their own sessions; Admins the sessions of the organization's clients.
+// Clients reach their own sessions; Admins the sessions their organization's clients trained with it.
 async function findManagedSession(req, id) {
-  if (resolveTenant(req).role !== 'Admin') return WorkoutSession.findOne({ _id: id, user: req.user.id });
-  const session = await WorkoutSession.findById(id);
+  const { role, organizationId } = resolveTenant(req);
+  if (role !== 'Admin') return WorkoutSession.findOne({ _id: id, user: req.user.id });
+  const session = await WorkoutSession.findOne({ _id: id, organizationId });
   if (session) await findClientMember(req, session.user, 'No se encontró el entrenamiento.');
   return session;
 }

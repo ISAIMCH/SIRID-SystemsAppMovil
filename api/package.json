@@ -18,6 +18,7 @@
     "migrate:payments": "node scripts/migrate-payment-statuses.js",
     "migrate:tenancy": "node scripts/migrate-tenancy.js",
     "migrate:documents": "node scripts/migrate-documents.js",
+    "migrate:history": "node scripts/migrate-history-isolation.js",
     "platform:admin": "node scripts/set-platform-admin.js"
   },
   "dependencies": {

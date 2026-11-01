@@ -94,7 +94,7 @@ async function getEquipmentTraffic(req, res) {
     Routine.find({ ...organizationFilter(req), status: 'active', assignedTo: { $ne: null } })
       .populate('assignedTo', 'role isActive currentlyInside preferredTrainingTime availableTrainingDays')
       .lean(),
-    WorkoutSession.find({ completedAt: { $gte: new Date(Math.max(startOfToday.getTime(), ninetyMinutesAgo.getTime())) } })
+    WorkoutSession.find({ ...gymFilter(req), completedAt: { $gte: new Date(Math.max(startOfToday.getTime(), ninetyMinutesAgo.getTime())) } })
       .select('completedAt blocks')
       .lean(),
   ]);
