@@ -6,7 +6,7 @@ const WorkoutSession = require('../models/workout-session.model');
 const HttpError = require('../utils/http-error');
 const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
 const { resolveTenant } = require('../utils/tenant');
-const { findClientMember } = require('../utils/members');
+const { findClientMember, isAssignedCoach } = require('../utils/members');
 const { normalizeBlocks } = require('./routine.controller');
 const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 
@@ -297,13 +297,12 @@ async function getMyWorkoutHistory(req, res) {
 
 async function getClientWorkoutHistory(req, res) {
   if (!/^[a-f\d]{24}$/i.test(req.params.clientId)) throw new HttpError(400, 'ID de cliente inválido.');
-  await findClientMember(req, req.params.clientId);
-  const client = await User.findById(req.params.clientId).select('assignedCoach');
-  if (!client || (resolveTenant(req).role === 'Coach' && String(client.assignedCoach) !== req.user.id)) {
+  const member = await findClientMember(req, req.params.clientId);
+  if (resolveTenant(req).role === 'Coach' && !isAssignedCoach(member, req.user.id)) {
     throw new HttpError(404, 'Cliente no encontrado.');
   }
 
-  const sessions = await WorkoutSession.find({ user: client._id, organizationId: resolveTenant(req).organizationId })
+  const sessions = await WorkoutSession.find({ user: member.userId, organizationId: resolveTenant(req).organizationId })
     .sort({ completedAt: -1 })
     .limit(100)
     .lean();

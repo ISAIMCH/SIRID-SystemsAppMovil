@@ -23,7 +23,7 @@ const {
 } = require('../utils/tenant');
 const { MIRRORED_FIELDS, saveMembership } = require('../utils/membership');
 const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
-const { isOwner, hasGymRole, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
+const { isOwner, hasGymRole, isAssignedCoach, canSeeMember, findVisibleMember, findClientMember, assertCoachInGyms } = require('../utils/members');
 const { storeLegacyUploads, applyLegacyDocumentList } = require('../utils/documents');
 
 const phoneSchema = z.string().trim()
@@ -144,8 +144,10 @@ async function sessionResponse(user, requestedGymId = null) {
   ]);
   const access = context && resolveAccess(context, ROUTE_ROLES, requestedGymId);
   const membership = context?.member.roles.includes('Cliente') ? await membershipSummary(user._id, context.organizationId) : {};
+  // The client's Coach is the one of the session's organization.
+  const assignedCoach = context?.member.assignedCoach ? String(context.member.assignedCoach) : null;
   return {
-    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}), ...membership },
+    user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}), assignedCoach, ...membership },
     organization: context ? { id: String(context.organizationId), name: context.organization.name } : null,
     gyms,
     defaultGymId: access ? String(access.gymId) : null,
@@ -287,7 +289,7 @@ async function createManagedUser(req, res) {
   }
   if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
 
-  const assignedCoach = input.assignedCoach ?? null;
+  const assignedCoach = input.role === 'Cliente' ? input.assignedCoach ?? null : null;
   const availableTrainingDays = input.availableTrainingDays ?? [];
 
   const user = new User({
@@ -298,7 +300,6 @@ async function createManagedUser(req, res) {
     goal: input.goal,
     experienceLevel: input.experienceLevel,
     availableTrainingDays,
-    assignedCoach,
     preferredTrainingTime: input.preferredTrainingTime,
     restrictions: input.restrictions,
     preferredZones: input.preferredZones,
@@ -320,7 +321,7 @@ async function createManagedUser(req, res) {
       await OrganizationMember.create([{ userId: user._id, organizationId, gyms: [{ gymId, roles: ['Coach'] }], observations: input.observations }], { session });
       return;
     }
-    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'], observations: input.observations }], { session });
+    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'], assignedCoach, observations: input.observations }], { session });
     await Membership.create([{
       ...user.membership.toObject(),
       userId: user._id,
@@ -336,11 +337,12 @@ async function createManagedUser(req, res) {
     await user.save();
   }
 
-  res.status(201).json({ user: { ...user.toSafeJSON(), observations: input.observations ?? '' } });
+  res.status(201).json({ user: { ...user.toSafeJSON(), assignedCoach: assignedCoach ? String(assignedCoach) : null, observations: input.observations ?? '' } });
 }
 
+// `member` is the user's OrganizationMember in the request's organization, with assignedCoach populated.
 function serializeDirectoryUser(user, member) {
-  const coach = user.assignedCoach;
+  const coach = member?.assignedCoach?.name ? member.assignedCoach : null;
   return {
     id: String(user._id),
     name: user.name,
@@ -364,7 +366,7 @@ function serializeDirectoryUser(user, member) {
   };
 }
 
-const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays membership assignedCoach';
+const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays membership';
 
 // Admins see the organization's clients and the staff of their gyms; Coach and Recepcion see clients only.
 async function listDirectoryUsers(req, res) {
@@ -372,19 +374,16 @@ async function listDirectoryUsers(req, res) {
   const { organizationId, role, gymIds } = resolveTenant(req);
   if (input.role === 'Coach' && role !== 'Admin') throw new HttpError(403, 'No tienes permiso para ver Coaches.');
 
-  const members = (await OrganizationMember.find({ organizationId, isActive: true }).lean())
+  const members = (await OrganizationMember.find({ organizationId, isActive: true }).populate('assignedCoach', 'name email').lean())
     .filter((member) => canSeeMember(req, member))
+    .filter((member) => role !== 'Coach' || isAssignedCoach(member, req.user.id))
     .filter((member) => {
       if (role !== 'Admin' || input.role === 'Cliente') return member.roles.includes('Cliente');
       if (input.role === 'Coach') return hasGymRole(member, 'Coach', gymIds);
       return true;
     });
-  const filter = { _id: { $in: members.map((member) => member.userId) } };
-  if (role === 'Coach') filter.assignedCoach = req.user.id;
-
-  const users = await User.find(filter)
+  const users = await User.find({ _id: { $in: members.map((member) => member.userId) } })
     .select(DIRECTORY_FIELDS)
-    .populate('assignedCoach', 'name email')
     .sort({ name: 1 })
     .lean();
   const memberByUser = new Map(members.map((member) => [String(member.userId), member]));
@@ -398,15 +397,15 @@ async function getDirectoryUser(req, res) {
   const member = await findVisibleMember(req, req.params.id);
   const client = await User.findOne({ _id: req.params.id, role: { $in: ['Cliente', 'Coach'] } })
     .select(DIRECTORY_FIELDS)
-    .populate('assignedCoach', 'name email')
     .lean();
 
   if (!client) throw new HttpError(404, 'Usuario no encontrado.');
   if (role !== 'Admin' && !member.roles.includes('Cliente')) throw new HttpError(404, 'Usuario no encontrado.');
-  if (role === 'Coach' && String(client.assignedCoach?._id) !== req.user.id) {
+  if (role === 'Coach' && !isAssignedCoach(member, req.user.id)) {
     throw new HttpError(404, 'Usuario no encontrado.');
   }
 
+  await member.populate('assignedCoach', 'name email');
   res.json({ user: serializeDirectoryUser(client, member) });
 }
 
@@ -459,9 +458,9 @@ async function updateDirectoryUser(req, res) {
     user.address = input.address || undefined;
   }
   if (input.assignedCoach !== undefined) {
-    if (user.role !== 'Cliente') throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
+    if (!member.roles.includes('Cliente')) throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
     if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
-    user.assignedCoach = input.assignedCoach;
+    member.assignedCoach = input.assignedCoach;
   }
   await withTransaction(async (session) => {
     await user.save({ session });
@@ -470,8 +469,8 @@ async function updateDirectoryUser(req, res) {
 
   const updated = await User.findById(user._id)
     .select(DIRECTORY_FIELDS)
-    .populate('assignedCoach', 'name email')
     .lean();
+  await member.populate('assignedCoach', 'name email');
   res.json({ user: serializeDirectoryUser(updated, member) });
 }
 
@@ -543,9 +542,9 @@ async function updateUser(req, res) {
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
   if (input.assignedCoach !== undefined) {
-    if (user.role !== 'Cliente') throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
+    if (!member.roles.includes('Cliente')) throw new HttpError(400, 'Solo los clientes pueden tener Coach asignado.');
     if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
-    user.assignedCoach = input.assignedCoach;
+    member.assignedCoach = input.assignedCoach;
   }
   if (input.observations !== undefined) member.observations = input.observations;
   await withTransaction(async (session) => {
@@ -553,7 +552,7 @@ async function updateUser(req, res) {
     if (member.isModified()) await member.save({ session });
   });
 
-  res.json({ user: { ...user.toSafeJSON(), observations: member.observations } });
+  res.json({ user: { ...user.toSafeJSON(), assignedCoach: member.assignedCoach ? String(member.assignedCoach) : null, observations: member.observations } });
 }
 
 async function updateMembership(req, res) {

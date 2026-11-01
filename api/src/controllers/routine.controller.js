@@ -6,7 +6,7 @@ const Equipment = require('../models/equipment.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime, emitToStaff } = require('../utils/realtime');
 const { resolveTenant, organizationFilter } = require('../utils/tenant');
-const { findClientMember } = require('../utils/members');
+const { findClientMember, findOrganizationMember, isAssignedCoach, coachClientIds } = require('../utils/members');
 const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 
 const exerciseSchema = z.object({
@@ -155,10 +155,10 @@ function normalizeAdvancedBlocks(blocks) {
 
 // The client must belong to the request's organization and, for a Coach, be one of their clients.
 async function findAssignableClient(req, clientId) {
-  await findClientMember(req, clientId, 'El cliente no existe o está inactivo.');
+  const member = await findClientMember(req, clientId, 'El cliente no existe o está inactivo.');
   const client = await User.findOne({ _id: clientId, isActive: true });
   if (!client) throw new HttpError(404, 'El cliente no existe o está inactivo.');
-  if (resolveTenant(req).role === 'Coach' && String(client.assignedCoach) !== req.user.id) {
+  if (resolveTenant(req).role === 'Coach' && !isAssignedCoach(member, req.user.id)) {
     throw new HttpError(403, 'Solo puedes asignar rutinas a tus clientes.');
   }
   return client;
@@ -211,7 +211,7 @@ async function canManageRoutine(req, routine) {
   const { role } = resolveTenant(req);
   if (role === 'Admin') return true;
   if (role !== 'Coach' || !routine.assignedTo) return false;
-  return Boolean(await User.exists({ _id: routine.assignedTo, assignedCoach: req.user.id }));
+  return isAssignedCoach(await findOrganizationMember(req, routine.assignedTo), req.user.id);
 }
 
 // Unassigned (template) routines reach the organization's staff; assigned ones only their client, author and Admins.
@@ -294,7 +294,7 @@ async function listRoutines(req, res) {
   let filter = { isDeleted: { $ne: true } };
   if (role === 'Cliente') filter = { assignedTo: req.user.id, isDeleted: { $ne: true } };
   if (role === 'Coach' || role === 'Recepcion') {
-    const clientIds = role === 'Coach' ? await User.find({ assignedCoach: req.user.id }).distinct('_id') : [];
+    const clientIds = role === 'Coach' ? await coachClientIds(req) : [];
     filter = { assignedTo: { $in: clientIds }, isDeleted: { $ne: true } };
   }
   if (role !== 'Cliente' && /^[a-f\d]{24}$/i.test(String(req.query.clientId ?? ''))) {

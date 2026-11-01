@@ -66,7 +66,6 @@ function buildUsers(passwordHash, now) {
       email: 'cliente1@gymgo.test',
       role: 'Cliente',
       isActive: true,
-      assignedCoach: null,
       goal: 'ganar masa muscular',
       experienceLevel: 'principiante',
       availableTrainingDays: [1, 3, 5],
@@ -89,7 +88,6 @@ function buildUsers(passwordHash, now) {
       email: 'cliente2@gymgo.test',
       role: 'Cliente',
       isActive: true,
-      assignedCoach: null,
       goal: 'perder grasa',
       experienceLevel: 'intermedio',
       availableTrainingDays: [2, 4, 6],
@@ -165,10 +163,10 @@ async function seed() {
   }
 
   if (!coach) throw new Error('No se pudo crear el Coach de prueba.');
-  await User.updateMany(
+  // The Coach is assigned per organization; migrate:history moves this to the clients' members.
+  await User.collection.updateMany(
     { email: { $in: ['cliente1@gymgo.test', 'cliente2@gymgo.test'] } },
     { $set: { assignedCoach: coach._id } },
-    { runValidators: true },
   );
 
   const seededEquipmentCount = await Equipment.countDocuments({
@@ -178,7 +176,7 @@ async function seed() {
 
   console.log(`Seeder completado. Equipos: ${seededEquipmentCount}/15. Usuarios: ${seededUserCount}/3.`);
   console.log('Cuentas de prueba: coach@gymgo.test, cliente1@gymgo.test, cliente2@gymgo.test.');
-  console.log('Ejecuta npm run migrate:tenancy para registrar a los usuarios nuevos en la organización.');
+  console.log('Ejecuta npm run migrate:tenancy y luego npm run migrate:history para registrar a los usuarios nuevos en la organización.');
 }
 
 seed()

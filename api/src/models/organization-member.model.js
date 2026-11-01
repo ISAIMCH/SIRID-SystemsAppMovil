@@ -25,6 +25,8 @@ const organizationMemberSchema = new mongoose.Schema({
     type: [gymAssignmentSchema],
     validate: { validator: (gyms) => isUniqueList(gyms.map((gym) => gym.gymId)), message: 'No repitas sucursales.' },
   },
+  // A client's Coach in this organization; each organization assigns its own.
+  assignedCoach: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
   // Staff notes about this person; each organization keeps its own.
   observations: { type: String, trim: true, maxlength: 4000, default: '' },
   isActive: { type: Boolean, default: true },
