@@ -62,4 +62,10 @@ function emitToOrganizationStaff(req, organizationId, event, payload, users = []
   if (io) io.to([`org:${organizationId}:staff`, ...users.map(toUserRoom).filter(Boolean)]).emit(event, payload);
 }
 
-module.exports = { realtimeRooms, emitRealtime, emitToStaff, emitToOrganizationStaff };
+// Sends gym data to its owners, managers and reception without a signed-in user (e.g. a turnstile's request).
+function emitToGymStaff(req, organizationId, gymId, event, payload) {
+  const io = req.app?.get('io');
+  if (io) io.to([`org:${organizationId}:owners`, `gym:${gymId}:managers`, `gym:${gymId}:reception`]).emit(event, payload);
+}
+
+module.exports = { realtimeRooms, emitRealtime, emitToStaff, emitToOrganizationStaff, emitToGymStaff };

@@ -1,54 +1,71 @@
 const { z } = require('zod');
 const AccessIoT = require('../models/access-iot.model');
 const Equipment = require('../models/equipment.model');
-const User = require('../models/user.model');
+const Gym = require('../models/gym.model');
 const WorkoutSession = require('../models/workout-session.model');
 const mongoose = require('mongoose');
 const HttpError = require('../utils/http-error');
 const { resolveTenant, gymFilter } = require('../utils/tenant');
 const { findClientMember, isAssignedCoach } = require('../utils/members');
+const { addCalendarDays, getDateInTimezone, localMidnightToUtc, gymTimezoneExpression } = require('../utils/timezone');
+const { findClientsInside } = require('../utils/occupancy');
 
-// Clients inside right now whose latest access was a check-in at one of the request's gyms.
-async function countCurrentOccupancy(req) {
-  const lastEvents = await AccessIoT.aggregate([
-    { $match: gymFilter(req) },
-    { $sort: { occurredAt: -1 } },
-    { $group: { _id: '$user', event: { $first: '$event' } } },
-    { $match: { event: 'check-in' } },
-  ]);
-  return User.countDocuments({ _id: { $in: lastEvents.map((item) => item._id) }, isActive: true, currentlyInside: true });
+// Where each gym's "today" and the period start, in its own time zone; `days` counts today.
+function gymPeriodStarts(gyms, days, now = new Date()) {
+  return gyms.map((gym) => {
+    const today = getDateInTimezone(now, gym.timezone);
+    return {
+      gymId: gym._id,
+      timezone: gym.timezone,
+      todayStart: localMidnightToUtc(today, gym.timezone),
+      periodStart: localMidnightToUtc(addCalendarDays(today, -(days - 1)), gym.timezone),
+    };
+  });
 }
 
+// Entries and exits since each gym's own start time.
+function sinceGymStart(organizationId, starts, field) {
+  return {
+    organizationId,
+    event: { $in: AccessIoT.PASSAGE_EVENTS },
+    $or: starts.map((start) => ({ gymId: start.gymId, occurredAt: { $gte: start[field] } })),
+  };
+}
+
+// Days and hours are counted in each gym's time zone (Gym.timezone), not the server's.
 async function getOperationsDashboard(req, res) {
   const { period } = z.object({ period: z.enum(['day', 'week']).default('day') }).parse(req.query);
+  const { organizationId, gymIds } = resolveTenant(req);
   const now = new Date();
-  const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const periodStart = new Date(todayStart);
-  if (period === 'week') periodStart.setUTCDate(periodStart.getUTCDate() - 6);
+  const gyms = await Gym.find({ _id: { $in: gymIds } }).select('timezone').lean();
+  const starts = gymPeriodStarts(gyms, period === 'week' ? 7 : 1, now);
+  const timezones = [...new Set(gyms.map((gym) => gym.timezone))];
+  const localTimezone = gymTimezoneExpression(gyms);
+  const noGyms = starts.length === 0;
 
-  const [eventsByDay, hourlyEvents, todaysCounts, currentOccupancy, equipmentByZone] = await Promise.all([
-    AccessIoT.aggregate([
-      { $match: { ...gymFilter(req), occurredAt: { $gte: periodStart } } },
+  const [eventsByDay, hourlyEvents, todaysCounts, inside, equipmentByZone] = await Promise.all([
+    noGyms ? [] : AccessIoT.aggregate([
+      { $match: sinceGymStart(organizationId, starts, 'periodStart') },
       { $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt', timezone: 'UTC' } },
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$occurredAt', timezone: localTimezone } },
         checkIns: { $sum: { $cond: [{ $eq: ['$event', 'check-in'] }, 1, 0] } },
         checkOuts: { $sum: { $cond: [{ $eq: ['$event', 'check-out'] }, 1, 0] } },
       } },
       { $sort: { _id: 1 } },
     ]),
-    AccessIoT.aggregate([
-      { $match: { ...gymFilter(req), occurredAt: { $gte: periodStart }, event: 'check-in' } },
-      { $group: { _id: { $hour: '$occurredAt' }, checkIns: { $sum: 1 } } },
+    noGyms ? [] : AccessIoT.aggregate([
+      { $match: { ...sinceGymStart(organizationId, starts, 'periodStart'), event: 'check-in' } },
+      { $group: { _id: { $hour: { date: '$occurredAt', timezone: localTimezone } }, checkIns: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]),
-    AccessIoT.aggregate([
-      { $match: { ...gymFilter(req), occurredAt: { $gte: todayStart } } },
+    noGyms ? [] : AccessIoT.aggregate([
+      { $match: sinceGymStart(organizationId, starts, 'todayStart') },
       { $group: {
         _id: '$event',
         count: { $sum: 1 },
       } },
     ]),
-    countCurrentOccupancy(req),
+    findClientsInside(organizationId, gymIds),
     Equipment.aggregate([
       { $match: { ...gymFilter(req), isDeleted: { $ne: true } } },
       { $group: {
@@ -60,6 +77,7 @@ async function getOperationsDashboard(req, res) {
       { $sort: { _id: 1 } },
     ]),
   ]);
+  const currentOccupancy = inside.length;
 
   const hourlyDemand = Array.from({ length: 24 }, (_, hour) => ({
     hour,
@@ -73,7 +91,11 @@ async function getOperationsDashboard(req, res) {
 
   res.json({
     period,
-    periodStart,
+    // The earliest gym start; each gym counts from its own local midnight.
+    periodStart: noGyms ? null : new Date(Math.min(...starts.map((start) => start.periodStart.getTime()))),
+    // Dates and hours are local to these zones; a single one when every visible gym shares it.
+    timezones,
+    timezone: timezones.length === 1 ? timezones[0] : null,
     generatedAt: now,
     today,
     currentOccupancy,
@@ -88,49 +110,6 @@ async function getOperationsDashboard(req, res) {
       outOfService: item.outOfService,
     })),
   });
-}
-
-function addCalendarDays(dateString, amount) {
-  const value = new Date(`${dateString}T00:00:00.000Z`);
-  value.setUTCDate(value.getUTCDate() + amount);
-  return value.toISOString().slice(0, 10);
-}
-
-function getDateInTimezone(date, timezone) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
-}
-
-function localMidnightToUtc(dateString, timezone) {
-  const [year, month, day] = dateString.split('-').map(Number);
-  const desiredLocalAsUtc = Date.UTC(year, month - 1, day);
-  let timestamp = desiredLocalAsUtc;
-  const formatter = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  });
-
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const parts = formatter.formatToParts(new Date(timestamp));
-    const values = Object.fromEntries(parts.map((part) => [part.type, Number(part.value)]));
-    const representedAsUtc = Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute, values.second);
-    const adjustment = desiredLocalAsUtc - representedAsUtc;
-    if (adjustment === 0) break;
-    timestamp += adjustment;
-  }
-  return new Date(timestamp);
 }
 
 function calculatePeriodRange(period, requestedDate, timezone = 'UTC', now = new Date()) {
@@ -298,6 +277,7 @@ async function getClientFitnessAnalytics(req, res) {
 
 module.exports = {
   getOperationsDashboard,
+  gymPeriodStarts,
   getClientFitnessAnalytics,
   calculatePeriodRange,
   buildClientChart,
