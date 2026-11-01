@@ -76,7 +76,7 @@ function formatDisplayDate(value: string) {
 
 export default function ClientHomeScreen() {
   const { width } = useWindowDimensions();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [period, setPeriod] = useState<Period>('day');
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
