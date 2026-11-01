@@ -72,6 +72,8 @@ type AuthContextValue = {
   dismissSuspension: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: ClientRegistration) => Promise<void>;
+  // An account reception opened: the one-time code it gave the client plus a password of their own. Signs in.
+  activateAccount: (input: { email: string; code: string; password: string }) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (user: GymGoUser) => void;
 };
@@ -267,6 +269,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await applySession(response.data);
   }
 
+  async function activateAccount(input: { email: string; code: string; password: string }) {
+    setActiveGymHeader(null);
+    const response = await api.post<SessionResponse & { token: string }>('/auth/activate', {
+      email: input.email.trim().toLowerCase(),
+      code: input.code,
+      password: input.password,
+    });
+    await writeAccessToken(response.data.token);
+    await applySession(response.data);
+  }
+
   async function signOut() {
     disconnectSocket();
     useCartStore.getState().clearCart();
@@ -281,7 +294,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const needsGym = user?.role === 'Cliente' && !gyms.some((gym) => gym.roles.includes('Cliente'));
 
   return (
-    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, refreshSession, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension, signIn, signUp, signOut, updateUser: setUser }}>
+    <AuthContext.Provider value={{ user, gyms, activeGym, needsGym, selectGym, joinGym, refreshSession, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension, signIn, signUp, activateAccount, signOut, updateUser: setUser }}>
       {children}
     </AuthContext.Provider>
   );
