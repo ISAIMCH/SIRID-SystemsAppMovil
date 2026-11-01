@@ -10,6 +10,7 @@ process.env.MONGO_URI ??= 'mongodb://localhost/test';
 const User = require('../src/models/user.model');
 const WorkoutSession = require('../src/models/workout-session.model');
 const OrganizationMember = require('../src/models/organization-member.model');
+const Membership = require('../src/models/membership.model');
 const { getClientWorkoutHistory } = require('../src/controllers/workout.controller');
 const { listDirectoryUsers } = require('../src/controllers/auth.controller');
 const { isAssignedCoach } = require('../src/utils/members');
@@ -112,7 +113,8 @@ test('a Coach only lists the clients assigned to them in their organization', as
   let userFilter;
   const restore = [
     stub(OrganizationMember, 'find', () => query(members)),
-    stub(User, 'find', (filter) => { userFilter = filter; return query([{ _id: mine, name: 'Ana', role: 'Cliente' }]); }),
+    stub(User, 'find', (filter) => { userFilter = filter; return query([{ _id: mine, name: 'Ana', role: 'Cliente', membership: { status: 'expired' } }]); }),
+    stub(Membership, 'find', (filter) => query(String(filter.organizationId) === String(organizationId) ? [{ userId: mine, organizationId, status: 'active' }] : [])),
   ];
   try {
     let body;
@@ -120,6 +122,8 @@ test('a Coach only lists the clients assigned to them in their organization', as
     await listDirectoryUsers(req, { json: (value) => { body = value; } });
     assert.deepEqual(userFilter._id.$in.map(String), [String(mine)]);
     assert.equal(body.users[0].assignedCoach.name, 'Luis');
+    // The membership shown is the one with the request's organization, not the copy on the user.
+    assert.equal(body.users[0].membership.status, 'active');
   } finally {
     restore.forEach((undo) => undo());
   }
