@@ -115,14 +115,19 @@ async function updatePayment(req, res) {
       if (wasPaid && update.status && update.status !== 'paid') {
         throw new HttpError(409, 'Un pago pagado no puede cambiar de estado.');
       }
-      // A payment priced by a promotion keeps the server's price: a new promotion, plan or amount is priced again.
+      // A payment priced by a promotion keeps the server's price: only a different promotion or plan prices it again.
+      // The dashboard resends the same plan and amount on every edit, so unchanged values are not a change.
       const promotionId = 'promotionId' in input ? input.promotionId : payment.promotionId;
-      if ('promotionId' in input || (promotionId && (newPlan || input.amount !== undefined))) {
+      const promotionChanged = 'promotionId' in input && String(input.promotionId ?? '') !== String(payment.promotionId ?? '');
+      const planChanged = Boolean(newPlan) && String(newPlan._id) !== String(payment.planId);
+      if (promotionChanged || (promotionId && planChanged)) {
         if (wasPaid) throw new HttpError(409, 'No se puede cambiar la promoción de un pago pagado.');
         const plan = newPlan ?? await MembershipPlan.findOne({ _id: payment.planId, organizationId: payment.organizationId }).select('price').session(session);
         if (!plan) throw new HttpError(404, 'Plan no encontrado.');
         const pricing = await priceMembership({ plan, promotionId, userId: update.user ?? payment.user, organizationId: payment.organizationId, session });
         Object.assign(update, pricing, !pricing.promotionId && input.amount !== undefined ? { amount: input.amount } : {});
+      } else if (promotionId) {
+        delete update.amount;
       }
       payment.set(update);
       if (payment.status === 'pending') {

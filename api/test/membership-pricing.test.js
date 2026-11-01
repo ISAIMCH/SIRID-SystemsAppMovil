@@ -9,9 +9,11 @@ process.env.MONGO_URI ??= 'mongodb://localhost/test';
 
 const Document = require('../src/models/document.model');
 const MembershipPlan = require('../src/models/membership-plan.model');
+const Payment = require('../src/models/payment.model');
 const Promotion = require('../src/models/promotion.model');
 const { promotionCoversPlan, quoteMembership, priceMembership } = require('../src/utils/membership-pricing');
 const { createPromotion } = require('../src/controllers/store.controller');
+const { updatePayment } = require('../src/controllers/payment.controller');
 
 const id = () => new mongoose.Types.ObjectId();
 const [studentPlan, basicPlan, organizationId, userId] = [id(), id(), id(), id()];
@@ -123,5 +125,46 @@ test('a membership promotion keeps only its plans, which must belong to the orga
     await assert.rejects(createPromotion(req({ title: 'X', appliesTo: 'membership', applicablePlans: [String(basicPlan)] }), res), /plan/);
   } finally {
     restore.forEach((undo) => undo());
+  }
+});
+
+// Edits a payment priced by a promotion, as the dashboard does (it resends plan and amount), and returns what was set.
+async function editPromotionPayment(stored, body) {
+  const changes = {};
+  const payment = { ...stored, set: (values) => Object.assign(changes, values), save: async () => {} };
+  const restore = [
+    stub(MembershipPlan, 'findOne', () => query({ _id: body.planId ?? stored.planId, name: 'Estudiante', price: 450 })),
+    stub(Payment, 'startSession', async () => ({ withTransaction: (work) => work(), endSession: async () => {} })),
+    stub(Payment, 'findOne', () => query(payment)),
+    stub(Payment, 'findById', () => ({ populate() { return this; }, then: (resolve) => resolve({ ...payment, toObject: () => payment }) })),
+    stub(Promotion, 'findOne', () => query(promotion({ discountPercentage: 30 }))),
+  ];
+  const req = { params: { id: String(stored._id) }, body, user: { id: String(id()) }, tenant: { role: 'Admin', organizationId, gymIds: [] } };
+  try {
+    await updatePayment(req, { json: () => {} });
+    return changes;
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+}
+
+test('editing a paid payment priced by a promotion keeps its price when plan and promotion do not change', async () => {
+  const stored = { _id: id(), user: userId, organizationId, planId: studentPlan, promotionId: id(), amount: 315, status: 'paid' };
+  const changes = await editPromotionPayment(stored, { planId: String(studentPlan), amount: 450, reference: 'R-1' });
+  assert.equal(changes.amount, undefined);
+  assert.equal(changes.reference, 'R-1');
+
+  await assert.rejects(editPromotionPayment(stored, { planId: String(basicPlan) }), /pago pagado/);
+});
+
+test('a pending payment that gets a promotion is priced again by the server', async () => {
+  const stored = { _id: id(), user: userId, organizationId, planId: studentPlan, promotionId: null, amount: 450, status: 'pending', validationPin: '12345' };
+  const restore = stub(Payment, 'exists', async () => null);
+  try {
+    const changes = await editPromotionPayment(stored, { promotionId: String(id()), amount: 1 });
+    assert.equal(changes.amount, 315);
+    assert.equal(changes.discountApplied, 135);
+  } finally {
+    restore();
   }
 });
