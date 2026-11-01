@@ -181,7 +181,8 @@ function safeStringEqual(value, expected) {
 }
 
 async function registerClient(req, res) {
-  const { joinCode, ...input } = registrationSchema.extend({ joinCode: z.string().trim().max(20).optional() }).parse(req.body);
+  // Observations are staff notes kept per organization (OrganizationMember), never set by the client.
+  const { joinCode, observations: _observations, ...input } = registrationSchema.extend({ joinCode: z.string().trim().max(20).optional() }).parse(req.body);
   if (await User.exists({ email: input.email })) {
     throw new HttpError(409, 'Ya existe una cuenta con ese correo.');
   }
@@ -298,7 +299,6 @@ async function createManagedUser(req, res) {
     experienceLevel: input.experienceLevel,
     availableTrainingDays,
     assignedCoach,
-    observations: input.observations,
     preferredTrainingTime: input.preferredTrainingTime,
     restrictions: input.restrictions,
     preferredZones: input.preferredZones,
@@ -317,10 +317,10 @@ async function createManagedUser(req, res) {
   await withTransaction(async (session) => {
     await user.save({ session });
     if (input.role === 'Coach') {
-      await OrganizationMember.create([{ userId: user._id, organizationId, gyms: [{ gymId, roles: ['Coach'] }] }], { session });
+      await OrganizationMember.create([{ userId: user._id, organizationId, gyms: [{ gymId, roles: ['Coach'] }], observations: input.observations }], { session });
       return;
     }
-    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'] }], { session });
+    await OrganizationMember.create([{ userId: user._id, organizationId, roles: ['Cliente'], observations: input.observations }], { session });
     await Membership.create([{
       ...user.membership.toObject(),
       userId: user._id,
@@ -336,7 +336,7 @@ async function createManagedUser(req, res) {
     await user.save();
   }
 
-  res.status(201).json({ user: user.toSafeJSON() });
+  res.status(201).json({ user: { ...user.toSafeJSON(), observations: input.observations ?? '' } });
 }
 
 function serializeDirectoryUser(user, member) {
@@ -354,7 +354,7 @@ function serializeDirectoryUser(user, member) {
     goal: user.goal,
     experienceLevel: user.experienceLevel,
     availableTrainingDays: user.availableTrainingDays,
-    observations: user.observations,
+    observations: member?.observations ?? '',
     membership: user.membership,
     assignedCoach: coach ? {
       id: String(coach._id),
@@ -364,7 +364,7 @@ function serializeDirectoryUser(user, member) {
   };
 }
 
-const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays observations membership assignedCoach';
+const DIRECTORY_FIELDS = '_id name lastName email phone address documents role isActive goal experienceLevel availableTrainingDays membership assignedCoach';
 
 // Admins see the organization's clients and the staff of their gyms; Coach and Recepcion see clients only.
 async function listDirectoryUsers(req, res) {
@@ -453,7 +453,7 @@ async function updateDirectoryUser(req, res) {
   if (input.goal !== undefined) user.goal = input.goal;
   if (input.experienceLevel !== undefined) user.experienceLevel = input.experienceLevel;
   if (input.availableTrainingDays !== undefined) user.availableTrainingDays = input.availableTrainingDays;
-  if (input.observations !== undefined) user.observations = input.observations;
+  if (input.observations !== undefined) member.observations = input.observations;
   if (input.address !== undefined) {
     if (user.role !== 'Coach') throw new HttpError(400, 'La dirección solo aplica a Coaches.');
     user.address = input.address || undefined;
@@ -463,7 +463,10 @@ async function updateDirectoryUser(req, res) {
     if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
     user.assignedCoach = input.assignedCoach;
   }
-  await user.save();
+  await withTransaction(async (session) => {
+    await user.save({ session });
+    if (member.isModified()) await member.save({ session });
+  });
 
   const updated = await User.findById(user._id)
     .select(DIRECTORY_FIELDS)
@@ -544,13 +547,13 @@ async function updateUser(req, res) {
     if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
     user.assignedCoach = input.assignedCoach;
   }
-  if (input.observations !== undefined) user.observations = input.observations;
+  if (input.observations !== undefined) member.observations = input.observations;
   await withTransaction(async (session) => {
     await user.save({ session });
     if (member.isModified()) await member.save({ session });
   });
 
-  res.json({ user: user.toSafeJSON() });
+  res.json({ user: { ...user.toSafeJSON(), observations: member.observations } });
 }
 
 async function updateMembership(req, res) {

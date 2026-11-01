@@ -36,7 +36,11 @@ const workoutBlockSchema = new mongoose.Schema({
   }], required: true, validate: (items) => items.length > 0 },
 }, { _id: false });
 
+// Each session belongs to the organization of its routine and the gym where it was trained:
+// that organization's staff see it; other organizations only with the client's consent (etapa 6).
 const workoutSessionSchema = new mongoose.Schema({
+  organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
+  gymId: { type: mongoose.Schema.Types.ObjectId, ref: 'Gym', default: null },
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   routine: { type: mongoose.Schema.Types.ObjectId, ref: 'Routine', required: true },
   routineTitle: { type: String, trim: true, maxlength: 120 },
@@ -55,5 +59,6 @@ const workoutSessionSchema = new mongoose.Schema({
 }, { timestamps: true, strict: false });
 
 workoutSessionSchema.index({ user: 1, completedAt: -1 });
+workoutSessionSchema.index({ organizationId: 1, user: 1, completedAt: -1 });
 
 module.exports = mongoose.model('WorkoutSession', workoutSessionSchema);

@@ -223,8 +223,10 @@ async function getClientFitnessAnalytics(req, res) {
     throw new HttpError(400, error.message);
   }
 
+  // Staff only count what the client trained with their organization; the client sees everything.
   const match = {
     user: new mongoose.Types.ObjectId(clientId),
+    ...(role === 'Cliente' ? {} : { organizationId: new mongoose.Types.ObjectId(String(resolveTenant(req).organizationId)) }),
     completedAt: { $gte: range.start, $lt: range.end },
   };
   const chartGroup = buildTimeGroupExpression(input.period, input.timezone);

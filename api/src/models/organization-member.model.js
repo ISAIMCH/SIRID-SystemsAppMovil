@@ -25,6 +25,8 @@ const organizationMemberSchema = new mongoose.Schema({
     type: [gymAssignmentSchema],
     validate: { validator: (gyms) => isUniqueList(gyms.map((gym) => gym.gymId)), message: 'No repitas sucursales.' },
   },
+  // Staff notes about this person; each organization keeps its own.
+  observations: { type: String, trim: true, maxlength: 4000, default: '' },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 
