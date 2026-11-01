@@ -130,11 +130,22 @@ async function listUserGyms(user) {
   });
 }
 
+// A Membership in the shape of the legacy User.membership copy.
+function membershipCopy(membership) {
+  return Object.fromEntries(MIRRORED_FIELDS.map((field) => [field, membership[field]]));
+}
+
 // The membership a client has with the organization, in the shape of the legacy User.membership copy.
 async function membershipSummary(userId, organizationId) {
   const membership = await Membership.findOne({ userId, organizationId }).lean();
   if (!membership) return {};
-  return { membership: Object.fromEntries(MIRRORED_FIELDS.map((field) => [field, membership[field]])) };
+  return { membership: membershipCopy(membership) };
+}
+
+// User.membership copies whichever organization saved last, so staff see the membership with their own organization.
+async function membershipsByUser(userIds, organizationId) {
+  const memberships = await Membership.find({ userId: { $in: userIds }, organizationId }).lean();
+  return new Map(memberships.map((membership) => [String(membership.userId), { ...membershipCopy(membership), planId: membership.planId }]));
 }
 
 // Organizations the user owns that SIRID has not approved yet (or rejected/suspended), for a status banner.
@@ -380,7 +391,7 @@ async function createManagedUser(req, res) {
 // `member` is the user's OrganizationMember in the request's organization, with assignedCoach populated.
 // `roles` adds the staff roles held in the gyms of the request (`gymIds`) to the organization roles.
 // `isActive` is the person's status in this organization; `canEditCredentials` is false for accounts other organizations use.
-function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = true } = {}) {
+function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = true, membership } = {}) {
   const coach = member?.assignedCoach?.name ? member.assignedCoach : null;
   const visibleGyms = new Set(gymIds.map(String));
   const gymRoles = (member?.gyms ?? [])
@@ -403,7 +414,7 @@ function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = tru
     experienceLevel: user.experienceLevel,
     availableTrainingDays: user.availableTrainingDays,
     observations: member?.observations ?? '',
-    membership: user.membership,
+    membership,
     assignedCoach: coach ? {
       id: String(coach._id),
       name: coach.name,
@@ -435,6 +446,7 @@ async function listDirectoryUsers(req, res) {
     .sort({ name: 1 })
     .lean();
   const memberByUser = new Map(members.map((member) => [String(member.userId), member]));
+  const membershipByUser = await membershipsByUser(users.map((user) => user._id), organizationId);
   // Only owners and managers edit users, so only they need to know which accounts other organizations use.
   const sharedIds = new Set(role !== 'Admin' ? [] : (await OrganizationMember.distinct('userId', {
     userId: { $in: users.map((user) => user._id) },
@@ -445,6 +457,7 @@ async function listDirectoryUsers(req, res) {
   res.json({
     users: users.map((user) => serializeDirectoryUser(user, memberByUser.get(String(user._id)), gymIds, {
       canEditCredentials: !sharedIds.has(String(user._id)),
+      membership: membershipByUser.get(String(user._id)),
     })),
   });
 }
@@ -464,7 +477,8 @@ async function getDirectoryUser(req, res) {
   }
 
   await member.populate('assignedCoach', 'name email');
-  res.json({ user: serializeDirectoryUser(client, member, gymIds, { canEditCredentials: await belongsOnlyTo(client, member.organizationId) }) });
+  const membership = (await membershipsByUser([client._id], member.organizationId)).get(String(client._id));
+  res.json({ user: serializeDirectoryUser(client, member, gymIds, { canEditCredentials: await belongsOnlyTo(client, member.organizationId), membership }) });
 }
 
 async function updateDirectoryUser(req, res) {
@@ -536,7 +550,8 @@ async function updateDirectoryUser(req, res) {
     .select(DIRECTORY_FIELDS)
     .lean();
   await member.populate('assignedCoach', 'name email');
-  res.json({ user: serializeDirectoryUser(updated, member, resolveTenant(req).gymIds, { canEditCredentials: await belongsOnlyTo(updated, member.organizationId) }) });
+  const membership = (await membershipsByUser([updated._id], member.organizationId)).get(String(updated._id));
+  res.json({ user: serializeDirectoryUser(updated, member, resolveTenant(req).gymIds, { canEditCredentials: await belongsOnlyTo(updated, member.organizationId), membership }) });
 }
 
 async function updateUser(req, res) {

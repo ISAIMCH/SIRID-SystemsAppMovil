@@ -133,7 +133,7 @@ async function editPromotionPayment(stored, body) {
   const changes = {};
   const payment = { ...stored, set: (values) => Object.assign(changes, values), save: async () => {} };
   const restore = [
-    stub(MembershipPlan, 'findOne', () => query({ _id: body.planId ?? stored.planId, name: 'Estudiante', price: 450 })),
+    stub(MembershipPlan, 'findOne', () => query({ _id: body.planId ?? stored.planId, name: 'Estudiante', price: 450, durationInDays: 30 })),
     stub(Payment, 'startSession', async () => ({ withTransaction: (work) => work(), endSession: async () => {} })),
     stub(Payment, 'findOne', () => query(payment)),
     stub(Payment, 'findById', () => ({ populate() { return this; }, then: (resolve) => resolve({ ...payment, toObject: () => payment }) })),
@@ -164,6 +164,20 @@ test('a pending payment that gets a promotion is priced again by the server', as
     const changes = await editPromotionPayment(stored, { promotionId: String(id()), amount: 1 });
     assert.equal(changes.amount, 315);
     assert.equal(changes.discountApplied, 135);
+  } finally {
+    restore();
+  }
+});
+
+test('changing the plan of a pending payment takes the duration of the new plan; a paid payment keeps its plan', async () => {
+  const stored = { _id: id(), user: userId, organizationId, planId: studentPlan, promotionId: null, amount: 450, durationDays: 90, status: 'pending', validationPin: '12345' };
+  const restore = stub(Payment, 'exists', async () => null);
+  try {
+    const changes = await editPromotionPayment(stored, { planId: String(basicPlan), amount: 300 });
+    assert.equal(changes.durationDays, 30);
+    assert.equal(changes.amount, 300);
+
+    await assert.rejects(editPromotionPayment({ ...stored, status: 'paid' }, { planId: String(basicPlan) }), /plan de un pago pagado/);
   } finally {
     restore();
   }

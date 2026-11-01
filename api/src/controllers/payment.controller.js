@@ -100,7 +100,7 @@ async function updatePayment(req, res) {
   }
   let newPlan = null;
   if (input.planId) {
-    newPlan = await MembershipPlan.findOne({ _id: input.planId, ...organizationFilter(req), isDeleted: { $ne: true } }).select('name price');
+    newPlan = await MembershipPlan.findOne({ _id: input.planId, ...organizationFilter(req), isDeleted: { $ne: true } }).select('name price durationInDays');
     if (!newPlan) throw new HttpError(404, 'Plan no encontrado.');
     update.planName = newPlan.name;
   }
@@ -120,6 +120,9 @@ async function updatePayment(req, res) {
       const promotionId = 'promotionId' in input ? input.promotionId : payment.promotionId;
       const promotionChanged = 'promotionId' in input && String(input.promotionId ?? '') !== String(payment.promotionId ?? '');
       const planChanged = Boolean(newPlan) && String(newPlan._id) !== String(payment.planId);
+      // A paid payment already activated its membership with its plan; changing it would leave the two out of step.
+      if (planChanged && wasPaid) throw new HttpError(409, 'No se puede cambiar el plan de un pago pagado.');
+      if (planChanged && input.durationDays === undefined) update.durationDays = newPlan.durationInDays;
       if (promotionChanged || (promotionId && planChanged)) {
         if (wasPaid) throw new HttpError(409, 'No se puede cambiar la promoción de un pago pagado.');
         const plan = newPlan ?? await MembershipPlan.findOne({ _id: payment.planId, organizationId: payment.organizationId }).select('price').session(session);
