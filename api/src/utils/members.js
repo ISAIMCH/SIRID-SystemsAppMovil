@@ -37,6 +37,17 @@ async function findClientMember(req, userId, message = 'Cliente no encontrado.')
   return member;
 }
 
+// Whether the member (a client of the request's organization) is assigned to that Coach there.
+function isAssignedCoach(member, coachId) {
+  const assigned = member?.assignedCoach?._id ?? member?.assignedCoach;
+  return Boolean(assigned) && String(assigned) === String(coachId);
+}
+
+// The Coach's clients in the request's organization.
+async function coachClientIds(req) {
+  return OrganizationMember.find({ organizationId: resolveTenant(req).organizationId, assignedCoach: req.user.id, isActive: true }).distinct('userId');
+}
+
 // A Coach the client can be assigned to: active and coaching in one of the request's gyms.
 async function assertCoachInGyms(req, coachId) {
   const [member, isActiveUser] = await Promise.all([
@@ -48,4 +59,4 @@ async function assertCoachInGyms(req, coachId) {
   }
 }
 
-module.exports = { isOwner, hasGymRole, canSeeMember, findOrganizationMember, findVisibleMember, findClientMember, assertCoachInGyms };
+module.exports = { isOwner, hasGymRole, isAssignedCoach, coachClientIds, canSeeMember, findOrganizationMember, findVisibleMember, findClientMember, assertCoachInGyms };

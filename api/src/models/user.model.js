@@ -41,7 +41,6 @@ const userSchema = new mongoose.Schema({
   // SIRID staff who manage every organization; granted only with scripts/set-platform-admin.js.
   isPlatformAdmin: { type: Boolean, default: false },
   membership: { type: membershipSchema, default: () => ({}) },
-  assignedCoach: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   goal: { type: String, trim: true, maxlength: 120 },
   experienceLevel: { type: String, enum: ['principiante', 'intermedio', 'avanzado'] },
   availableTrainingDays: [{ type: Number, min: 0, max: 6 }],
@@ -73,7 +72,6 @@ userSchema.methods.toSafeJSON = function toSafeJSON() {
     role: this.role,
     isActive: this.isActive,
     membership: this.membership,
-    assignedCoach: this.assignedCoach,
     goal: this.goal,
     experienceLevel: this.experienceLevel,
     availableTrainingDays: this.availableTrainingDays,

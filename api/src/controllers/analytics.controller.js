@@ -6,7 +6,7 @@ const WorkoutSession = require('../models/workout-session.model');
 const mongoose = require('mongoose');
 const HttpError = require('../utils/http-error');
 const { resolveTenant, gymFilter } = require('../utils/tenant');
-const { findClientMember } = require('../utils/members');
+const { findClientMember, isAssignedCoach } = require('../utils/members');
 
 // Clients inside right now whose latest access was a check-in at one of the request's gyms.
 async function countCurrentOccupancy(req) {
@@ -207,9 +207,8 @@ async function getClientFitnessAnalytics(req, res) {
     throw new HttpError(403, 'Solo puedes consultar tus propias estadísticas.');
   }
   if (role === 'Coach') {
-    await findClientMember(req, clientId);
-    const assignedClient = await User.exists({ _id: clientId, assignedCoach: req.user.id });
-    if (!assignedClient) throw new HttpError(404, 'Cliente no encontrado.');
+    const member = await findClientMember(req, clientId);
+    if (!isAssignedCoach(member, req.user.id)) throw new HttpError(404, 'Cliente no encontrado.');
   } else if (role === 'Admin') {
     await findClientMember(req, clientId);
   } else if (role !== 'Cliente') {

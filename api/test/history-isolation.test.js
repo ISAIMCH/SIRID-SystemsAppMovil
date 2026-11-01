@@ -11,8 +11,10 @@ const User = require('../src/models/user.model');
 const WorkoutSession = require('../src/models/workout-session.model');
 const OrganizationMember = require('../src/models/organization-member.model');
 const { getClientWorkoutHistory } = require('../src/controllers/workout.controller');
+const { listDirectoryUsers } = require('../src/controllers/auth.controller');
+const { isAssignedCoach } = require('../src/utils/members');
 const { updateClientObservations } = require('../src/controllers/user.controller');
-const { sessionTenant, notesMember } = require('../scripts/migrate-history-isolation');
+const { sessionTenant, notesMember, coachAssignments } = require('../scripts/migrate-history-isolation');
 
 const id = () => new mongoose.Types.ObjectId();
 
@@ -65,7 +67,7 @@ test("staff only read the sessions their organization's routines produced", asyn
 test("observations are saved on the organization's member, never on the shared account", async () => {
   const organizationId = id();
   const clientId = id();
-  const member = { userId: clientId, organizationId, roles: ['Cliente'], gyms: [], observations: '', save: async () => {} };
+  const member = { userId: clientId, organizationId, roles: ['Cliente'], gyms: [], observations: '', assignedCoach: null, save: async () => {}, populate: async () => {} };
   let userWrites = 0;
   const restore = [
     stub(OrganizationMember, 'findOne', async () => member),
@@ -84,9 +86,51 @@ test("observations are saved on the organization's member, never on the shared a
   }
 });
 
-test('the shared account no longer carries observations', () => {
-  const user = new User({ name: 'Ana', email: 'ana@ejemplo.com', passwordHash: 'x', observations: 'nota' });
-  assert.equal('observations' in user.toSafeJSON(), false);
+test('the shared account no longer carries observations nor the assigned Coach', () => {
+  const user = new User({ name: 'Ana', email: 'ana@ejemplo.com', passwordHash: 'x', observations: 'nota', assignedCoach: id() });
+  const safe = user.toSafeJSON();
+  assert.equal('observations' in safe, false);
+  assert.equal('assignedCoach' in safe, false);
+});
+
+test("the assigned Coach is the one of the request's organization", () => {
+  const coachId = id();
+  assert.equal(isAssignedCoach({ assignedCoach: coachId }, String(coachId)), true);
+  assert.equal(isAssignedCoach({ assignedCoach: { _id: coachId, name: 'Luis' } }, String(coachId)), true);
+  assert.equal(isAssignedCoach({ assignedCoach: id() }, String(coachId)), false);
+  assert.equal(isAssignedCoach({ assignedCoach: null }, String(coachId)), false);
+});
+
+test('a Coach only lists the clients assigned to them in their organization', async () => {
+  const organizationId = id();
+  const coachId = id();
+  const [mine, notMine] = [id(), id()];
+  const members = [
+    { userId: mine, organizationId, roles: ['Cliente'], gyms: [], assignedCoach: { _id: coachId, name: 'Luis', email: 'luis@ejemplo.com' } },
+    { userId: notMine, organizationId, roles: ['Cliente'], gyms: [], assignedCoach: { _id: id(), name: 'Otro', email: 'otro@ejemplo.com' } },
+  ];
+  let userFilter;
+  const restore = [
+    stub(OrganizationMember, 'find', () => query(members)),
+    stub(User, 'find', (filter) => { userFilter = filter; return query([{ _id: mine, name: 'Ana', role: 'Cliente' }]); }),
+  ];
+  try {
+    let body;
+    const req = { query: {}, user: { id: String(coachId), _id: coachId }, tenant: { organizationId, role: 'Coach', gymIds: [id()], gymId: id() }, tenantContext: { member: { roles: [], gyms: [] } } };
+    await listDirectoryUsers(req, { json: (value) => { body = value; } });
+    assert.deepEqual(userFilter._id.$in.map(String), [String(mine)]);
+    assert.equal(body.users[0].assignedCoach.name, 'Luis');
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+});
+
+test("old assignments move to the client's organizations where that Coach coaches", () => {
+  const [orgA, orgB] = [id(), id()];
+  const clientMembers = [{ organizationId: orgA, roles: ['Cliente'] }, { organizationId: orgB, roles: ['Cliente'] }];
+  const coachMembers = [{ organizationId: orgB, gyms: [{ gymId: id(), roles: ['Coach'] }] }];
+  assert.deepEqual(coachAssignments(clientMembers, coachMembers), [clientMembers[1]]);
+  assert.deepEqual(coachAssignments(clientMembers, []), []);
 });
 
 test('old sessions take their routine organization and the client home gym there', () => {
