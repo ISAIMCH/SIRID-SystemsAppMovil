@@ -123,7 +123,7 @@ export default function ClientHomeScreen() {
   useFocusEffect(useCallback(() => {
     if (!user?.id) return undefined;
     let isCurrent = true;
-    api.get<WorkoutStats>('/workouts/me/stats')
+    api.get<WorkoutStats>('/workouts/me/stats', { params: { tzOffsetMinutes: -new Date().getTimezoneOffset() } })
       .then((response) => {
         if (isCurrent) setWorkoutStats(response.data);
       })
@@ -167,7 +167,7 @@ export default function ClientHomeScreen() {
           <View style={styles.streakText}>
             <Text style={styles.streakLabel}>Racha actual</Text>
             <Text style={styles.streakValue}>
-              {isLoadingStreak ? '—' : `${workoutStats?.currentStreak ?? 0} días seguidos`}
+              {isLoadingStreak || !workoutStats ? '—' : `${workoutStats.currentStreak} días asistidos`}
             </Text>
           </View>
         </FloatingCard>
