@@ -7,6 +7,7 @@ import AdminBillingScreen from './admin-billing-screen';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { IconBadge } from './fit-ui';
+import { membershipDisplayStatus, membershipStatusLabels } from './membership-status';
 import { palette } from './theme';
 import { ActionButton, Notice, Page, SectionTitle, Surface } from './ui';
 
@@ -42,13 +43,6 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
   pending: 'Pendiente',
   paid: 'Pagado',
   cancelled: 'Cancelado',
-};
-
-const membershipStatusLabels: Record<Membership['status'], string> = {
-  pending: 'Pendiente',
-  active: 'Activa',
-  suspended: 'Suspendida',
-  expired: 'Vencida',
 };
 
 function formatDate(value?: string) {
@@ -97,6 +91,7 @@ function ClientMembership() {
   }, [retryNumber]));
 
   const pendingPayment = payments.find((payment) => payment.status === 'pending');
+  const membershipStatus = membershipDisplayStatus(membership);
 
   async function createPaymentRequest() {
     setError('');
@@ -116,8 +111,8 @@ function ClientMembership() {
   function requestPayment() {
     const userMembershipExpiresAt = user?.membership?.expiresAt ? new Date(user.membership.expiresAt).getTime() : 0;
     const membershipExpiresAt = membership?.expiresAt ? new Date(membership.expiresAt).getTime() : 0;
-    const hasActiveMembership = user?.membership?.status === 'active'
-      || membership?.status === 'active'
+    const hasActiveMembership = membershipDisplayStatus(user?.membership) === 'active'
+      || membershipDisplayStatus(membership) === 'active'
       || userMembershipExpiresAt > Date.now()
       || membershipExpiresAt > Date.now();
 
@@ -170,8 +165,8 @@ function ClientMembership() {
             <IconBadge name="workspace-premium" color={palette.neon} size={48} />
             <View style={styles.planTitleRow}>
               <Text style={styles.planName}>{membership.planName ?? 'Plan por asignar'}</Text>
-              <Text style={[styles.membershipStatus, membership.status === 'active' ? styles.membershipActive : membership.status === 'pending' ? styles.membershipPending : styles.membershipInactive]}>
-                {membershipStatusLabels[membership.status]}
+              <Text style={[styles.membershipStatus, membershipStatus === 'active' ? styles.membershipActive : membershipStatus === 'pending' ? styles.membershipPending : styles.membershipInactive]}>
+                {membershipStatusLabels[membershipStatus]}
               </Text>
             </View>
             <Text style={styles.planPrice}>

@@ -8,12 +8,12 @@ import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard } from './fit-ui';
+import { membershipDisplayStatus, membershipLabel } from './membership-status';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
 type Segment = 'Cliente' | 'Coach';
 
-const membershipLabels = { active: 'Activa', pending: 'Pendiente', suspended: 'Suspendida', expired: 'Vencida' } as const;
 
 export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmentToggle = false }: { initialSegment?: Segment; hideSegmentToggle?: boolean }) {
   const { user } = useAuth();
@@ -113,9 +113,9 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
               )}
             </View>
             {person.role === 'Cliente' ? (
-              <View style={[styles.chip, person.membership?.status === 'active' && styles.chipActive]}>
-                <Text style={[styles.chipText, person.membership?.status === 'active' && styles.chipTextActive]}>
-                  {membershipLabels[person.membership?.status ?? 'pending']}
+              <View style={[styles.chip, membershipDisplayStatus(person.membership) === 'active' && styles.chipActive]}>
+                <Text style={[styles.chipText, membershipDisplayStatus(person.membership) === 'active' && styles.chipTextActive]}>
+                  {membershipLabel(person.membership)}
                 </Text>
               </View>
             ) : null}

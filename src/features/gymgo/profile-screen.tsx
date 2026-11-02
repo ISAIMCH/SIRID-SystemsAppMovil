@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { api, getApiErrorMessage } from './api';
 import { useAuth, type GymGoUser } from './auth-context';
 import { FloatingCard, IconBadge } from './fit-ui';
+import { membershipLabel } from './membership-status';
 import { palette } from './theme';
 import { Notice, Page } from './ui';
 
@@ -25,8 +26,6 @@ function formatDate(value?: string) {
   return value ? new Date(value).toLocaleDateString('es-MX') : '—';
 }
 
-const membershipLabels = { active: 'Activa', pending: 'Pendiente', suspended: 'Suspendida', expired: 'Vencida' } as const;
-
 export default function ProfileScreen() {
   const { user, updateUser } = useAuth();
   const [weight, setWeight] = useState(user?.weightKg?.toString() ?? '');
@@ -44,9 +43,12 @@ export default function ProfileScreen() {
   const weightKg = parseNumber(weight);
   const heightCm = parseNumber(height);
   const phoneDigits = phone.replace(/\D/g, '');
+  // Peso y altura son opcionales: si se capturan, deben estar en rango.
+  const isWeightValid = weight.trim() === '' || (weightKg !== null && weightKg >= 20 && weightKg <= 400);
+  const isHeightValid = height.trim() === '' || (heightCm !== null && heightCm >= 80 && heightCm <= 260);
   const isValid = name.trim().length >= 2 && email.includes('@') && (!phoneDigits || phoneDigits.length === 10)
-    && weightKg !== null && heightCm !== null && weightKg >= 20 && weightKg <= 400 && heightCm >= 80 && heightCm <= 260;
-  const bmi = isValid ? weightKg / ((heightCm / 100) ** 2) : null;
+    && isWeightValid && isHeightValid;
+  const bmi = isValid && weightKg !== null && heightCm !== null ? weightKg / ((heightCm / 100) ** 2) : null;
   const info = bmi ? bmiInfo(bmi) : null;
   const markerPosition = bmi ? Math.min(100, Math.max(0, ((bmi - 14) / 24) * 100)) : 0;
 
@@ -63,8 +65,8 @@ export default function ProfileScreen() {
         phone: phoneDigits,
         goal: goal.trim(),
         experienceLevel,
-        weightKg,
-        heightCm,
+        weightKg: weightKg ?? undefined,
+        heightCm: heightCm ?? undefined,
       });
       updateUser(response.data.user);
       setName(response.data.user.name);
@@ -180,12 +182,12 @@ export default function ProfileScreen() {
         <Pressable accessibilityRole="button" disabled={!isValid || isSaving} onPress={() => void save()} style={[styles.saveButton, (!isValid || isSaving) && styles.disabled]}>
           {isSaving ? <ActivityIndicator color={palette.deepGreen} /> : <><MaterialIcons name="check" size={20} color={palette.deepGreen} /><Text style={styles.saveText}>Guardar datos</Text></>}
         </Pressable>
-        {!isValid && (weight || height || email || phone) ? <Text style={styles.helper}>Correo válido, teléfono de 10 dígitos y peso/altura dentro de rango.</Text> : null}
+        {!isValid && (weight || height || email || phone) ? <Text style={styles.helper}>Correo válido, teléfono de 10 dígitos y, si los capturas, peso (20–400 kg) y altura (80–260 cm).</Text> : null}
       </FloatingCard>
 
       <FloatingCard style={styles.infoCard}>
         <Text style={styles.sectionTitle}>Membresía</Text>
-        <InfoRow label="Estado" value={membershipLabels[user?.membership?.status ?? 'pending']} />
+        <InfoRow label="Estado" value={membershipLabel(user?.membership)} />
         <InfoRow label="Inicio" value={formatDate(user?.membership?.startsAt)} />
         <InfoRow label="Vencimiento" value={formatDate(user?.membership?.expiresAt)} />
         <Text style={styles.sectionTitle}>Coach asignado</Text>

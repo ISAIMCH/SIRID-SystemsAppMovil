@@ -220,6 +220,19 @@ function emitRoutineUpdate(req, payload, routine, previousAssignedTo = null) {
   return emitRealtime(req, 'routine-updated', payload, [routine.assignedTo, previousAssignedTo, routine.createdBy]);
 }
 
+// A client follows one routine at a time: activating one pauses the client's other active routines.
+// The 'created'/'updated' event emitted for the activated routine already prompts listeners to reload.
+function pauseOtherRoutines(routine) {
+  if (!routine.assignedTo || routine.status !== 'active') return null;
+  return Routine.updateMany({
+    _id: { $ne: routine._id },
+    organizationId: routine.organizationId,
+    assignedTo: routine.assignedTo,
+    status: 'active',
+    isDeleted: { $ne: true },
+  }, { $set: { status: 'paused' } });
+}
+
 function routineResponse(routine) {
   const value = routine.toObject ? routine.toObject() : routine;
   const blocks = normalizeBlocks(value).map((block) => ({
@@ -323,6 +336,7 @@ async function createRoutine(req, res) {
       blocks: normalizeAdvancedBlocks(input.blocks),
       createdBy: req.user.id,
     });
+    await pauseOtherRoutines(routine);
     const response = routineResponse(routine);
     emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
     return res.status(201).json({ routine: response });
@@ -337,6 +351,7 @@ async function createRoutine(req, res) {
       assignedTo: input.type === 'custom' ? assignedTo : null,
       createdBy: req.user.id,
     });
+    await pauseOtherRoutines(routine);
     const response = routineResponse(routine);
     emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
     return res.status(201).json({ routine: response });
@@ -346,6 +361,7 @@ async function createRoutine(req, res) {
   await ensureEligibleBlocks(input.blocks, resolveTenant(req).organizationId);
   await findAssignableClient(req, input.assignedTo);
   const routine = await Routine.create({ ...input, ...organizationFilter(req), createdBy: req.user.id });
+  await pauseOtherRoutines(routine);
   const response = routineResponse(routine);
   emitRoutineUpdate(req, { action: 'created', routine: response }, routine);
   res.status(201).json({ routine: response });
@@ -434,6 +450,7 @@ async function updateRoutine(req, res) {
   if (input.blocks && routine.exercises) routine.set('exercises', undefined);
   Object.assign(routine, input);
   await routine.save();
+  if (input.status === 'active') await pauseOtherRoutines(routine);
   const response = routineResponse(routine);
   emitRoutineUpdate(req, { action: 'updated', routine: response }, routine);
   res.json({ routine: response });
@@ -464,6 +481,7 @@ module.exports = {
   scheduleRefinement,
   ensureEligibleBlocks,
   findAssignableClient,
+  pauseOtherRoutines,
   normalizeBlocks,
   legacyExercisesFromBlocks,
   routineResponse,

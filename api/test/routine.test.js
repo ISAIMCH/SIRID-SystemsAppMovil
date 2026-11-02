@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { routineSchema, routineBaseSchema, normalizeBlocks } = require('../src/controllers/routine.controller');
+const Routine = require('../src/models/routine.model');
+const { routineSchema, routineBaseSchema, normalizeBlocks, pauseOtherRoutines } = require('../src/controllers/routine.controller');
 
 function validRoutine(overrides = {}) {
   return {
@@ -93,4 +94,27 @@ test('normalizes a legacy flat routine into stable single blocks', () => {
   assert.equal(String(first[0]._id), String(second[0]._id));
   assert.equal(first[0].sets, 4);
   assert.equal(first[0].exercises[0]._id, id);
+});
+
+test('activar una rutina pausa las otras rutinas activas del mismo cliente', async (t) => {
+  const calls = [];
+  t.mock.method(Routine, 'updateMany', async (filter, update) => { calls.push({ filter, update }); });
+  const routine = { _id: 'r2', organizationId: 'org1', assignedTo: 'client1', status: 'active' };
+  await pauseOtherRoutines(routine);
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0].filter, {
+    _id: { $ne: 'r2' },
+    organizationId: 'org1',
+    assignedTo: 'client1',
+    status: 'active',
+    isDeleted: { $ne: true },
+  });
+  assert.deepEqual(calls[0].update, { $set: { status: 'paused' } });
+});
+
+test('no pausa nada para plantillas sin cliente ni rutinas pausadas', async (t) => {
+  const updateMany = t.mock.method(Routine, 'updateMany', async () => {});
+  await pauseOtherRoutines({ _id: 'r1', assignedTo: null, status: 'active' });
+  await pauseOtherRoutines({ _id: 'r1', assignedTo: 'client1', status: 'paused' });
+  assert.equal(updateMany.mock.callCount(), 0);
 });
