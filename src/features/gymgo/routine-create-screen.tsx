@@ -266,7 +266,7 @@ function RoutineForm() {
           accessibilityLabel="Volver"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color={palette.ink} />
+          <IconBadge name="arrow-back" color="#10FF85" />
         </Pressable>
         <View style={styles.flex}>
           <Text style={styles.title}>{heading}</Text>

@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { Redirect, router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Redirect, router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import AdminBillingScreen from './admin-billing-screen';
@@ -77,7 +77,7 @@ function ClientMembership() {
   const [success, setSuccess] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let isCurrent = true;
     api.get<{ membership: Membership; payments: Payment[] }>('/billing/me')
       .then((response) => {
@@ -92,7 +92,9 @@ function ClientMembership() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, [retryNumber]);
+  // retryNumber is a manual "reintentar" trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryNumber]));
 
   const pendingPayment = payments.find((payment) => payment.status === 'pending');
 

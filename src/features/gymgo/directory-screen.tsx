@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AdminPillToggle } from './admin-hub';
@@ -25,7 +25,7 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
   const [error, setError] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let isCurrent = true;
     api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: segment } })
       .then((response) => {
@@ -38,7 +38,9 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, [segment, retryNumber]);
+  // retryNumber is a manual "reintentar" trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segment, retryNumber]));
 
   function changeSegment(next: Segment) {
     if (next === segment) return;
