@@ -10,6 +10,7 @@ const HttpError = require('../utils/http-error');
 const { hasActiveMembership } = require('../utils/membership');
 const { evaluateAccess } = require('../utils/access-rules');
 const { resolveTenant } = require('../utils/tenant');
+const { emitToGymStaff } = require('../utils/realtime');
 
 // The QR names the client and the organization; the gym comes from the device or the staff member who scans it.
 async function createQrToken(req, res) {
@@ -38,7 +39,7 @@ async function createQrToken(req, res) {
 }
 
 async function isInsideOrganization(userId, organizationId) {
-  const lastAccess = await AccessIoT.findOne({ user: userId }).sort({ occurredAt: -1 }).select('event organizationId').lean();
+  const lastAccess = await AccessIoT.findOne({ user: userId, event: { $in: AccessIoT.PASSAGE_EVENTS } }).sort({ occurredAt: -1 }).select('event organizationId').lean();
   return lastAccess?.event === 'check-in' && String(lastAccess.organizationId) === String(organizationId);
 }
 
@@ -96,6 +97,8 @@ async function registerQrAccess(req, res) {
 
   const session = await User.startSession();
   let result;
+  // The client being checked, known once their account is found; a refusal after that goes to the access log.
+  let client = null;
   try {
     await session.withTransaction(async () => {
       if (await AccessIoT.exists({ qrJti: payload.jti }).session(session)) {
@@ -105,7 +108,8 @@ async function registerQrAccess(req, res) {
       // Operations in one transaction run one after another.
       const user = await User.findById(payload.sub).session(session);
       if (!user) throw new HttpError(403, 'La cuenta no está habilitada para ingresar.', { code: 'account_disabled' });
-      const lastAccess = await AccessIoT.findOne({ user: user._id }).sort({ occurredAt: -1 }).select('event organizationId gymId').session(session).lean();
+      client = { id: user._id, name: user.name };
+      const lastAccess = await AccessIoT.findOne({ user: user._id, event: { $in: AccessIoT.PASSAGE_EVENTS } }).sort({ occurredAt: -1 }).select('event organizationId gymId').session(session).lean();
       const event = nextAccessEvent(lastAccess, accessPoint.gymId);
 
       // Leaving is always allowed, so nobody is locked in when their hours or membership run out inside.
@@ -142,6 +146,7 @@ async function registerQrAccess(req, res) {
       }], { session });
 
       result = {
+        id: String(access._id),
         event: access.event,
         occurredAt: access.occurredAt,
         gymId: String(access.gymId),
@@ -149,11 +154,44 @@ async function registerQrAccess(req, res) {
         userName: user.name,
       };
     });
+  } catch (error) {
+    if (client && error instanceof HttpError) await recordDeniedAccess(req, accessPoint, client, error, input.deviceId);
+    throw error;
   } finally {
     await session.endSession();
   }
 
+  emitToGymStaff(req, accessPoint.organizationId, accessPoint.gymId, 'access:recorded', result);
   res.status(201).json({ accepted: true, access: result });
+}
+
+// Kept outside the refused transaction, without the QR's jti, so the client can retry with a new code.
+// A failure here never hides the refusal itself.
+async function recordDeniedAccess(req, accessPoint, client, error, deviceId) {
+  try {
+    const denied = await AccessIoT.create({
+      organizationId: accessPoint.organizationId,
+      gymId: accessPoint.gymId,
+      user: client.id,
+      event: 'denied',
+      reason: { code: error.extra?.code ?? `http_${error.statusCode}`, message: error.message },
+      source: 'qr',
+      deviceId: deviceId ?? accessPoint.deviceName,
+      accessDevice: accessPoint.deviceId,
+      validatedBy: accessPoint.validatedBy ?? null,
+    });
+    emitToGymStaff(req, accessPoint.organizationId, accessPoint.gymId, 'access:recorded', {
+      id: String(denied._id),
+      event: 'denied',
+      occurredAt: denied.occurredAt,
+      gymId: String(accessPoint.gymId),
+      userId: String(client.id),
+      userName: client.name,
+      reason: denied.reason,
+    });
+  } catch (logError) {
+    console.error('No se pudo registrar el acceso rechazado:', logError);
+  }
 }
 
 module.exports = { createQrToken, registerQrAccess, nextAccessEvent, openCheckInElsewhere, staffAccessGym };

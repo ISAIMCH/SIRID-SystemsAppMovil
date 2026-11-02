@@ -1,14 +1,6 @@
 const mongoose = require('mongoose');
 const { generateJoinCode } = require('../utils/access-codes');
-
-function isTimeZone(value) {
-  try {
-    new Intl.DateTimeFormat('es-MX', { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
+const { isTimeZone } = require('../utils/timezone');
 
 const gymSchema = new mongoose.Schema({
   organizationId: { type: mongoose.Schema.Types.ObjectId, ref: 'Organization', required: true, index: true },
@@ -18,6 +10,8 @@ const gymSchema = new mongoose.Schema({
   timezone: { type: String, required: true, default: 'America/Mexico_City', validate: { validator: isTimeZone, message: 'Zona horaria inválida.' } },
   // Clients type or scan it in the app to join the gym; staff can regenerate it if it leaks.
   joinCode: { type: String, uppercase: true, trim: true, default: generateJoinCode },
+  // Most people allowed inside at once; null means no limit is set. The live monitor compares it with who is inside.
+  capacity: { type: Number, min: 1, max: 100000, default: null },
   isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 

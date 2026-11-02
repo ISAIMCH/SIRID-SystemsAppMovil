@@ -9,6 +9,7 @@ router.use(authenticate);
 router.post('/join', asyncHandler(controller.joinGym));
 router.get('/', authorize('Admin', 'Recepcion'), asyncHandler(controller.listGyms));
 router.post('/', authorize('Admin'), asyncHandler(controller.createGym));
+router.patch('/:id', authorize('Admin'), asyncHandler(controller.updateGym));
 router.post('/:id/join-code', authorize('Admin'), asyncHandler(controller.regenerateJoinCode));
 
 module.exports = router;
