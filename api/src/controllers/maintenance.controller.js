@@ -43,9 +43,11 @@ async function createReport(req, res) {
 
 async function listReports(req, res) {
   const query = z.object({ status: z.enum(['pending', 'in_progress', 'resolved']).optional() }).parse(req.query);
+  // A coach sees who reported it, not their contact details.
+  const reporterFields = req.tenant.role === 'Admin' ? 'name email' : 'name';
   const reports = await MaintenanceReport.find({ ...gymFilter(req), ...(query.status ? { status: query.status } : {}) })
     .populate('equipment', REPORT_EQUIPMENT_FIELDS)
-    .populate('reportedBy', 'name email')
+    .populate('reportedBy', reporterFields)
     .sort({ createdAt: -1 })
     .lean();
   res.json({ reports });

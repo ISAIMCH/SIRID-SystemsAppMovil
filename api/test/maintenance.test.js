@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const Equipment = require('../src/models/equipment.model');
 const MaintenanceReport = require('../src/models/maintenance-report.model');
 const User = require('../src/models/user.model');
-const { listMyReports, updateReport } = require('../src/controllers/maintenance.controller');
+const { listMyReports, listReports, updateReport } = require('../src/controllers/maintenance.controller');
 
 const id = () => new mongoose.Types.ObjectId();
 const gymId = id();
@@ -101,4 +101,18 @@ test('a client lists only their own reports in the active organization', async (
     restore();
   }
   assert.deepEqual(filter, { organizationId, reportedBy: String(clientId) });
+});
+
+test('a coach reads the gym reports with the reporter name but without their email', async () => {
+  const organizationId = id();
+  const populated = [];
+  const chain = { populate: (path, fields) => { populated.push([path, fields]); return chain; }, sort: () => chain, lean: async () => [] };
+  const restore = stub(MaintenanceReport, 'find', () => chain);
+  try {
+    await listReports({ query: {}, tenant: { organizationId, role: 'Coach', gymIds: [gymId], gymId } }, { json() {} });
+    await listReports({ query: {}, tenant: { organizationId, role: 'Admin', gymIds: [gymId], gymId } }, { json() {} });
+  } finally {
+    restore();
+  }
+  assert.deepEqual(populated.filter(([path]) => path === 'reportedBy').map(([, fields]) => fields), ['name', 'name email']);
 });
