@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
@@ -20,7 +21,7 @@ export default function ClientsScreen() {
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoadingRoutines, setIsLoadingRoutines] = useState(!isAdmin);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (isAdmin) return;
     let isCurrent = true;
     api.get<{ routines: Routine[] }>('/routines')
@@ -34,7 +35,7 @@ export default function ClientsScreen() {
         if (isCurrent) setIsLoadingRoutines(false);
       });
     return () => { isCurrent = false; };
-  }, [isAdmin]);
+  }, [isAdmin]));
 
   async function createAndAssignClient() {
     setMessage('');

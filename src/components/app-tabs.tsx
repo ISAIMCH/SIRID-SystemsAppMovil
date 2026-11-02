@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth, type GymGoRole } from '@/features/gymgo/auth-context';
 import { palette } from '@/features/gymgo/theme';
@@ -47,6 +48,7 @@ const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: '
 
 export default function AppTabs() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const isClient = user?.role === 'Cliente';
   const isCoach = user?.role === 'Coach';
   const allowed = user ? ROLE_TABS[user.role] : [];
@@ -61,14 +63,15 @@ export default function AppTabs() {
         tabBarStyle: {
           backgroundColor: isClient || isCoach ? '#070B09' : palette.surface,
           borderTopColor: isClient || isCoach ? '#27342E' : palette.line,
-          height: 62,
+          height: 62 + insets.bottom,
           paddingTop: 6,
-          paddingBottom: 6,
+          paddingBottom: 6 + insets.bottom,
         },
         sceneStyle: { backgroundColor: isClient || isCoach ? '#070B09' : palette.paper },
       }}>
       {TAB_NAMES.map((name) => {
-        const { title, icon } = TAB_META[name];
+        const { title } = TAB_META[name];
+        const icon = name === 'billing' && isClient ? 'person' : TAB_META[name].icon;
         const visible = allowed.includes(name);
         const label = name === 'directory' && user?.role === 'Coach'
           ? 'Clientes'

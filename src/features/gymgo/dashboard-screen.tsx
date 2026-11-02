@@ -1,6 +1,6 @@
-import { router, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -52,7 +52,7 @@ function StaffDashboard() {
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState('');
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let isCurrent = true;
     api.get<{ routines: Routine[] }>('/routines')
       .then((response) => {
@@ -65,9 +65,9 @@ function StaffDashboard() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, []);
+  }, []));
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let isCurrent = true;
     const summaryRequest = isClient
       ? api.get<WorkoutStats>('/workouts/me/stats')
@@ -86,7 +86,7 @@ function StaffDashboard() {
         if (isCurrent) setIsLoadingSummary(false);
       });
     return () => { isCurrent = false; };
-  }, [isClient]);
+  }, [isClient]));
 
   const activeRoutineCount = routines.filter((routine) => routine.status === 'active').length;
   const roleHeading = isClient ? 'Tu semana, a tu ritmo.' : user?.role === 'Admin' ? 'Tu gimnasio, en foco.' : 'Entrena con estrategia.';
@@ -97,7 +97,7 @@ function StaffDashboard() {
       <AdminLightProvider enabled={isAdmin}>
       <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, user?.role === 'Coach' && styles.darkSafeArea, isAdmin && styles.adminSafeArea]}>
         <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint, isAdmin && styles.adminTopTint]} />
-        <View style={[styles.page, user?.role === 'Coach' && styles.darkPage, isAdmin && styles.adminPage]}>
+        <ScrollView contentContainerStyle={[styles.page, user?.role === 'Coach' && styles.darkPage, isAdmin && styles.adminPage]}>
         <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
         <GymSwitcher />
         {pendingInvitations > 0 ? (
@@ -218,7 +218,7 @@ function StaffDashboard() {
                 {operations.equipmentByZone.map((zone) => (
                   <View key={zone.zone} style={styles.zoneRow}>
                     <Text style={[styles.zoneName, user?.role === 'Coach' && styles.darkZoneText]}>{zone.zone}</Text>
-                    <Text style={[styles.zoneValue, user?.role === 'Coach' && styles.darkZoneText]}>{zone.available}/{zone.total} disp. · {zone.busy} ocup.</Text>
+                    <Text style={[styles.zoneValue, user?.role === 'Coach' && styles.darkZoneText]}>{zone.available}/{zone.total} disp.</Text>
                   </View>
                 ))}
                 {!operations.equipmentByZone.length ? <Text style={styles.demandBody}>No hay equipos por zona registrados.</Text> : null}
@@ -263,7 +263,7 @@ function StaffDashboard() {
         <View style={styles.footerLine}>
           <Text style={styles.footerText}>{user?.role === 'Coach' ? 'COACH CREATOR' : 'GYMGO · MOVIMIENTO CON PROPÓSITO'}</Text>
         </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
       </AdminLightProvider>
     </DarkUiProvider>

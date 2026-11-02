@@ -3,7 +3,7 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { connectSocket } from '../../services/socket';
@@ -445,6 +445,13 @@ export default function RoutinesScreen() {
     setLogMessage({ text: 'Entrenamiento descartado.', error: false });
   }
 
+  function confirmDiscardWorkout() {
+    Alert.alert('¿Descartar entrenamiento?', 'Se perderán todas las series registradas en esta sesión.', [
+      { text: 'Seguir entrenando', style: 'cancel' },
+      { text: 'Descartar', style: 'destructive', onPress: discardWorkout },
+    ]);
+  }
+
   function finishBlockSet(block: RoutineBlock, setNumber: number) {
     const blockId = block._id ?? String(block.order);
     const done = completedSets[blockId] ?? [];
@@ -679,7 +686,7 @@ export default function RoutinesScreen() {
                       <Text style={styles.startWorkoutButtonText}>Iniciar entrenamiento</Text>
                     </Pressable>
                   ) : (
-                    <Pressable accessibilityRole="button" onPress={discardWorkout} style={styles.discardWorkoutButton}>
+                    <Pressable accessibilityRole="button" onPress={confirmDiscardWorkout} style={styles.discardWorkoutButton}>
                       <Text style={styles.discardWorkoutText}>Descartar</Text>
                     </Pressable>
                   )}

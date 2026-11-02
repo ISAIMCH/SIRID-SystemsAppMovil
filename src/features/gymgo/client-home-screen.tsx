@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -86,7 +86,7 @@ export default function ClientHomeScreen() {
   const [workoutStats, setWorkoutStats] = useState<WorkoutStats | null>(null);
   const [isLoadingStreak, setIsLoadingStreak] = useState(true);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!user?.id) return undefined;
     let isCurrent = true;
     const controller = new AbortController();
@@ -116,9 +116,11 @@ export default function ClientHomeScreen() {
       clearTimeout(requestTimer);
       controller.abort();
     };
-  }, [period, reloadToken, user?.id]);
+  // reloadToken is a manual "reintentar" trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, reloadToken, user?.id]));
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     if (!user?.id) return undefined;
     let isCurrent = true;
     api.get<WorkoutStats>('/workouts/me/stats')
@@ -132,7 +134,7 @@ export default function ClientHomeScreen() {
         if (isCurrent) setIsLoadingStreak(false);
       });
     return () => { isCurrent = false; };
-  }, [user?.id]);
+  }, [user?.id]));
 
   const selectedAnalytics = analytics?.period === period ? analytics : null;
   const maximumCalories = Math.max(5, ...(selectedAnalytics?.chartData.map((item) => item.caloriesBurned) ?? [0]));
@@ -242,7 +244,6 @@ export default function ClientHomeScreen() {
               </View>
             ) : !isLoading ? (
               <View style={styles.emptyChart}>
-                <Text style={styles.emptyChartValue}>0 <Text style={styles.emptyChartUnit}>kcal</Text></Text>
                 <Text style={styles.emptyChartText}>Aún no hay actividad en este periodo</Text>
                 <Pressable
                   accessibilityRole="button"
@@ -355,8 +356,6 @@ const styles = StyleSheet.create({
   chartArea: { minHeight: 182, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginHorizontal: -8 },
   axisText: { color: dark.muted, fontSize: 9 },
   emptyChart: { minHeight: 160, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyChartValue: { color: dark.white, fontSize: 34, fontWeight: '900' },
-  emptyChartUnit: { color: dark.muted, fontSize: 13, fontWeight: '800' },
   emptyChartText: { color: dark.muted, fontSize: 12 },
   startWorkoutButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: dark.green, borderRadius: 10, backgroundColor: 'transparent', paddingHorizontal: 16, marginTop: 4 },
   startWorkoutButtonText: { color: dark.green, fontSize: 13, fontWeight: '800' },

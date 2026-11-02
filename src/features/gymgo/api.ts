@@ -72,9 +72,13 @@ export function getApiErrorCode(error: unknown) {
 export function getApiErrorMessage(error: unknown, fallback: string) {
   if (isAxiosError<{ error?: string }>(error)) {
     if (error.response) return error.response.data?.error ?? fallback;
-    return `${fallback} (${error.code ?? 'sin respuesta'}: ${error.message}) — ${apiOrigin}`;
+    if (__DEV__) console.warn(`[api] ${error.code ?? 'sin respuesta'}: ${error.message} — ${apiOrigin}`);
+    return error.code === 'ECONNABORTED'
+      ? 'El servidor tardó demasiado en responder. Intenta de nuevo en unos segundos.'
+      : 'No pudimos conectar con GymGo. Revisa tu conexión a internet e intenta de nuevo.';
   }
-  return error instanceof Error ? `${fallback} (${error.message})` : fallback;
+  if (__DEV__ && error instanceof Error) console.warn(`[api] ${error.message}`);
+  return fallback;
 }
 
 export async function getEquipmentTraffic() {
