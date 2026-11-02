@@ -64,10 +64,10 @@ test('a unit can go back to service before the report is resolved', async () => 
   assert.deepEqual(units, [0]);
 });
 
-test('an updated report goes live to owners, the gym managers and its reporter, not to reception', async () => {
+test('an updated report goes live to owners, managers, coaches and its reporter, not to reception', async () => {
   const [organizationId, reporterId] = [id(), id()];
   const report = {
-    id: String(id()), organizationId, gymId, equipment: id(), reportedBy: { _id: reporterId, name: 'Ana' },
+    id: String(id()), organizationId, gymId, equipment: id(), reportedBy: { _id: reporterId, name: 'Ana', email: 'ana@ejemplo.com' },
     status: 'pending', equipmentOutOfService: false, save: async () => {},
   };
   const emitted = [];
@@ -84,10 +84,13 @@ test('an updated report goes live to owners, the gym managers and its reporter, 
     restore.forEach((undo) => undo());
   }
 
-  assert.equal(emitted.length, 1);
+  assert.equal(emitted.length, 2);
   assert.equal(emitted[0].event, 'maintenance-updated');
   assert.equal(emitted[0].payload.action, 'updated');
   assert.deepEqual(emitted[0].rooms, [`org:${organizationId}:owners`, `gym:${gymId}:managers`, `user:${reporterId}`]);
+  // The gym's coaches get it too, with the reporter's name only.
+  assert.equal(emitted[1].rooms, `gym:${gymId}:coaches`);
+  assert.deepEqual(emitted[1].payload.report.reportedBy, { _id: reporterId, name: 'Ana' });
 });
 
 test('a client lists only their own reports in the active organization', async () => {

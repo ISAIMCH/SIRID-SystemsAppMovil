@@ -10,6 +10,7 @@ import { ExerciseSearch } from './exercise-search';
 import type { ExerciseSelection } from './exercise-search';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { SelectField } from './select-field';
+import { useMaintenanceAlerts } from './use-maintenance-alerts';
 import { palette } from './theme';
 import type { Routine, RoutineBlock, RoutineTemplate } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
@@ -144,9 +145,13 @@ function RoutineForm() {
     setSelectedDays(availableDays.length ? availableDays : [1, 2, 3]);
   }, [assignedTo, clients, isEditing, isTemplate]);
 
+  const maintenanceAlerts = useMaintenanceAlerts(user?.role === 'Coach');
+
   if (user?.role !== 'Coach') return <Redirect href="/(main)/routines" />;
 
   const availableEquipment = equipment.filter((item) => item.status !== 'out_of_service');
+  // One name per equipment, even with several reports open on it.
+  const reportedEquipment = [...new Set((maintenanceAlerts ?? []).map((alert) => alert.equipment?.name).filter(Boolean))];
   const selectedClient = clients.find((client) => client.id === assignedTo);
 
   function openClientFile() {
@@ -275,6 +280,11 @@ function RoutineForm() {
       </View>
 
       {loadError ? <Notice error>{loadError}</Notice> : null}
+      {reportedEquipment.length ? (
+        <Pressable accessibilityRole="button" onPress={() => router.push('/(main)/maintenance')}>
+          <Notice>{`Con fallas reportadas: ${reportedEquipment.join(', ')}. Toca para ver las alertas.`}</Notice>
+        </Pressable>
+      ) : null}
       {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
 
       <FloatingCard style={styles.section}>

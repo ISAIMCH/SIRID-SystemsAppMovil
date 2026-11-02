@@ -1,6 +1,8 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
@@ -11,6 +13,7 @@ import type { DirectoryClient } from './directory-types';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { membershipDisplayStatus, membershipLabel } from './membership-status';
 import { routineEditorHref } from './routine-links';
+import SharedHistorySection from './shared-history-section';
 import { palette } from './theme';
 import type { Routine } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
@@ -57,6 +60,16 @@ export default function ClientDetailScreen() {
   // retryNumber is a manual "reintentar" trigger.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, retryNumber]));
+
+  // Membership, coach or contact changes made from the dashboard show up here without leaving the screen.
+  useEffect(() => {
+    const socket = connectSocket();
+    const onUpdate = (update: { userId: string }) => {
+      if (update.userId === clientId) setRetryNumber((value) => value + 1);
+    };
+    socket.on('directory-updated', onUpdate);
+    return () => { socket.off('directory-updated', onUpdate); };
+  }, [clientId]);
 
   // The Coach sees the client's routines here; reloads after returning from the editor.
   useFocusEffect(useCallback(() => {
@@ -176,6 +189,7 @@ export default function ClientDetailScreen() {
               ) : null}
 
               {isCoachViewer && !isCoach ? <ClientProgress clientId={person.id} /> : null}
+              {isCoachViewer && !isCoach ? <SharedHistorySection clientId={person.id} /> : null}
 
               {isAdmin ? <ActionButton onPress={() => setIsEditing(true)}>Editar perfil</ActionButton> : null}
             </>

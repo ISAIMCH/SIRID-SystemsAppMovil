@@ -1,7 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { connectSocket } from '@/services/socket';
 
 import { AdminPillToggle } from './admin-hub';
 import { api, getApiErrorMessage } from './api';
@@ -41,6 +43,14 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
   // retryNumber is a manual "reintentar" trigger.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [segment, retryNumber]));
+
+  // Reception enrolls clients and managers assign coaches from the dashboard: reload when the directory changes.
+  useEffect(() => {
+    const socket = connectSocket();
+    const reload = () => setRetryNumber((current) => current + 1);
+    socket.on('directory-updated', reload);
+    return () => { socket.off('directory-updated', reload); };
+  }, []);
 
   function changeSegment(next: Segment) {
     if (next === segment) return;

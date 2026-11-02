@@ -3,7 +3,7 @@ const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
-const { emitToGymManagers } = require('../utils/realtime');
+const { emitToGymCoaches, emitToGymManagers } = require('../utils/realtime');
 const { gymFilter, organizationFilter } = require('../utils/tenant');
 
 const REPORT_EQUIPMENT_FIELDS = 'name zone brand status';
@@ -16,8 +16,11 @@ function populatedReport(id) {
 }
 
 // Owners and the gym's managers see every report live; the client who reported it follows its status.
+// Coaches get the same report with the reporter's name only, as GET /reports gives it to them.
 function emitReportUpdate(req, action, report) {
   emitToGymManagers(req, report.organizationId, report.gymId, 'maintenance-updated', { action, report }, [report.reportedBy?._id ?? report.reportedBy]);
+  const reporter = report.reportedBy && typeof report.reportedBy === 'object' ? { _id: report.reportedBy._id, name: report.reportedBy.name } : report.reportedBy;
+  emitToGymCoaches(req, report.gymId, 'maintenance-updated', { action, report: { ...report, reportedBy: reporter } });
 }
 
 const reportInputSchema = z.object({

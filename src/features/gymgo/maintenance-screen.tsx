@@ -31,6 +31,9 @@ const reportStatus: Record<MaintenanceReport['status'], string> = {
 export default function MaintenanceScreen() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
+  const isCoach = user?.role === 'Coach';
+  // Admins manage the gym's reports; coaches only read them to plan routines; clients report and follow their own.
+  const readsGymReports = isAdmin || isCoach;
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [reports, setReports] = useState<MaintenanceReport[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState('');
@@ -42,15 +45,14 @@ export default function MaintenanceScreen() {
   const [success, setSuccess] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
 
-  // Admins see every report of the gym; a client sees their own, to follow what happened with them.
   const loadReports = useCallback(async () => {
-    const response = await api.get<{ reports: MaintenanceReport[] }>(isAdmin ? '/maintenance/reports' : '/maintenance/reports/me');
+    const response = await api.get<{ reports: MaintenanceReport[] }>(readsGymReports ? '/maintenance/reports' : '/maintenance/reports/me');
     return response.data.reports;
-  }, [isAdmin]);
+  }, [readsGymReports]);
 
   useEffect(() => {
     let isCurrent = true;
-    const request = isAdmin
+    const request = readsGymReports
       ? loadReports().then((loaded) => { if (isCurrent) setReports(loaded); })
       : Promise.all([api.get<{ equipment: Equipment[] }>('/inventory'), loadReports()]).then(([response, loaded]) => {
         if (!isCurrent) return;
@@ -66,7 +68,7 @@ export default function MaintenanceScreen() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, [isAdmin, loadReports, retryNumber]);
+  }, [readsGymReports, loadReports, retryNumber]);
 
   // New reports and status changes made from the dashboard show up without reloading.
   useEffect(() => {
@@ -127,6 +129,8 @@ export default function MaintenanceScreen() {
     }
   }
 
+  const openReports = reports.filter((report) => report.status !== 'resolved');
+
   return (
     <Page admin={isAdmin} dark={!isAdmin}>
       {isAdmin ? (
@@ -141,8 +145,10 @@ export default function MaintenanceScreen() {
             <IconBadge name="arrow-back" color="#FFFFFF" />
           </Pressable>
           <View style={styles.headerText}>
-            <Text style={styles.headerTitle}>Reportar una falla</Text>
-            <Text style={styles.headerDetail}>Selecciona el equipo y describe el problema.</Text>
+            <Text style={styles.headerTitle}>{isCoach ? 'Alertas de mantenimiento' : 'Reportar una falla'}</Text>
+            <Text style={styles.headerDetail}>
+              {isCoach ? 'Equipos con fallas reportadas; tenlos en cuenta al planear rutinas.' : 'Selecciona el equipo y describe el problema.'}
+            </Text>
           </View>
         </View>
       )}
@@ -156,7 +162,25 @@ export default function MaintenanceScreen() {
       {success ? <Notice>{success}</Notice> : null}
       {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
 
-      {!isAdmin ? (
+      {isCoach ? (
+        <>
+          <SectionTitle>{`${openReports.length} alertas abiertas`}</SectionTitle>
+          {!isLoading && !error && openReports.length === 0 ? <Notice>Todo el equipo está funcionando.</Notice> : null}
+          {openReports.map((report) => (
+            <Surface key={report._id} style={styles.reportCard}>
+              <View style={styles.reportHeader}>
+                <View style={styles.equipmentInfo}>
+                  <Text style={[styles.equipmentName, styles.darkText]}>{report.equipment?.name ?? 'Equipo'}</Text>
+                  <Text style={styles.equipmentZone}>{report.equipment?.zone ?? 'Zona desconocida'}</Text>
+                </View>
+                <Text style={styles.reportStatus}>{reportStatus[report.status]}</Text>
+              </View>
+              <Text style={[styles.reportDescription, styles.darkText]}>{report.description}</Text>
+              <Text style={styles.reportMeta}>Reportó {report.reportedBy?.name ?? 'Cliente'} · {new Date(report.createdAt).toLocaleString()}</Text>
+            </Surface>
+          ))}
+        </>
+      ) : !isAdmin ? (
         <>
           <SectionTitle>Selecciona el equipo</SectionTitle>
           {equipment.filter((item) => item.status !== 'out_of_service').length === 0 && !isLoading ? (
@@ -212,7 +236,7 @@ export default function MaintenanceScreen() {
         </>
       ) : (
         <>
-          <SectionTitle>{`${reports.filter((report) => report.status !== 'resolved').length} alertas abiertas`}</SectionTitle>
+          <SectionTitle>{`${openReports.length} alertas abiertas`}</SectionTitle>
           {!isLoading && !error && reports.length === 0 ? <Notice>No hay reportes de mantenimiento.</Notice> : null}
           {reports.map((report) => (
             <Surface key={report._id} style={styles.reportCard}>

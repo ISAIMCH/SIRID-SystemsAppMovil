@@ -11,6 +11,7 @@ import GymSwitcher from './gym-switcher';
 import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
+import { useMaintenanceAlerts } from './use-maintenance-alerts';
 import { palette } from './theme';
 import type { Routine } from './types';
 import { ActionButton, AdminLightProvider, AppHeader, DarkUiProvider, Eyebrow, Notice, SectionTitle, Surface } from './ui';
@@ -44,6 +45,7 @@ function StaffDashboard() {
   const isClient = user?.role === 'Cliente';
   const isAdmin = user?.role === 'Admin';
   const pendingInvitations = usePendingStaffInvitations();
+  const maintenanceAlerts = useMaintenanceAlerts(user?.role === 'Coach');
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [routineError, setRoutineError] = useState('');
@@ -249,6 +251,11 @@ function StaffDashboard() {
             <View style={styles.actionStack}>
               <ActionButton onPress={() => router.push(routineEditorHref())}>Crear rutina</ActionButton>
               <ActionButton secondary onPress={() => router.push('/directory' as Href)}>Ver directorio</ActionButton>
+              <ActionButton secondary onPress={() => router.push('/(main)/maintenance')}>
+                {maintenanceAlerts?.length
+                  ? `Alertas de mantenimiento (${maintenanceAlerts.length})`
+                  : 'Alertas de mantenimiento'}
+              </ActionButton>
             </View>
           ) : (
             <View style={styles.actionStack}>
