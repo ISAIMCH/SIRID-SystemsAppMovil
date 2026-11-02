@@ -1,36 +1,68 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { calculateCurrentTrainingStreak } = require('../src/utils/training-streak');
+const { calculateCurrentTrainingStreak, localWeekStartInstant } = require('../src/utils/training-streak');
 
-test('ignora días de descanso programados al calcular la racha', () => {
-  const sessions = [
-    '2026-09-25T18:00:00.000Z',
-    '2026-09-23T18:00:00.000Z',
-    '2026-09-21T18:00:00.000Z',
-  ];
-  assert.equal(calculateCurrentTrainingStreak(sessions, [1, 3, 5], new Date('2026-09-26T10:00:00.000Z')), 3);
+// Weeks used below (Mexico, UTC-6): Mon 2026-10-19, Mon 2026-10-26, Mon 2026-11-02. 18:00Z is noon local.
+const MWF = [1, 3, 5];
+const at = (day, time = '18:00') => `${day}T${time}:00.000Z`;
+
+test('cuenta los días programados asistidos e ignora los días de descanso', () => {
+  const checkIns = [at('2026-10-26'), at('2026-10-28'), at('2026-10-30')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-01'))), 3);
 });
 
-test('no rompe la racha durante el día programado actual antes de entrenar', () => {
-  const sessions = ['2026-09-23T18:00:00.000Z', '2026-09-21T18:00:00.000Z'];
-  assert.equal(calculateCurrentTrainingStreak(sessions, [1, 3, 5], new Date('2026-09-25T08:00:00.000Z')), 2);
+test('varias entradas el mismo día cuentan una sola vez', () => {
+  const checkIns = [at('2026-10-26', '14:00'), at('2026-10-26', '20:00'), at('2026-10-28')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-10-29'))), 2);
 });
 
-test('rompe la racha si se omite un día de entrenamiento programado', () => {
-  const sessions = ['2026-09-21T18:00:00.000Z'];
-  assert.equal(calculateCurrentTrainingStreak(sessions, [1, 3, 5], new Date('2026-09-25T20:00:00.000Z')), 0);
+test('la semana en curso sigue abierta: una falta aún no rompe la racha', () => {
+  const checkIns = [at('2026-10-26'), at('2026-10-28'), at('2026-10-30')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-04'))), 3);
 });
 
-test('uses the local Mexico date for late-night UTC timestamps', () => {
-  const sessions = [
-    '2026-09-26T01:00:00.000Z',
-    '2026-09-24T01:00:00.000Z',
-    '2026-09-22T01:00:00.000Z',
-  ];
-  assert.equal(calculateCurrentTrainingStreak(sessions, [1, 3, 5], new Date('2026-09-26T10:00:00.000Z'), -360), 3);
+test('asistir un día libre de la misma semana salva la falta sin sumar punto', () => {
+  // Mon, Tue (free) and Fri attended; Wed missed.
+  const checkIns = [at('2026-10-26'), at('2026-10-27'), at('2026-10-30')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-02', '08:00'))), 2);
 });
 
-test('counts a make-up session for its scheduled training day within the week', () => {
-  const sessions = [{ completedAt: '2026-09-22T18:00:00.000Z', trainingDay: 1 }];
-  assert.equal(calculateCurrentTrainingStreak(sessions, [1], new Date('2026-09-23T12:00:00.000Z'), -360), 1);
+test('una semana cerrada sin reponer la falta deja la racha en cero', () => {
+  const checkIns = [at('2026-10-26'), at('2026-10-28')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-02', '08:00'))), 0);
+});
+
+test('la racha solo cuenta desde la última semana completa sin faltas', () => {
+  // Week of 10-19 misses Friday; week of 10-26 is complete.
+  const checkIns = [at('2026-10-19'), at('2026-10-21'), at('2026-10-26'), at('2026-10-28'), at('2026-10-30')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-02', '08:00'))), 3);
+});
+
+test('no hay reposiciones entre semanas distintas', () => {
+  // Friday 10-30 missed; Tuesday 11-03 is a free day of the next week and can't make it up.
+  const checkIns = [at('2026-10-26'), at('2026-10-28'), at('2026-11-02'), at('2026-11-03')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-03'))), 1);
+});
+
+test('los días programados antes del primer acceso no cuentan como falta', () => {
+  const checkIns = [at('2026-10-28'), at('2026-10-30')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, MWF, new Date(at('2026-11-02', '08:00'))), 2);
+});
+
+test('usa la fecha local para los accesos nocturnos', () => {
+  // 03:00Z on Tuesday is 21:00 on Monday in Mexico.
+  const checkIns = [at('2026-10-27', '03:00')];
+  assert.equal(calculateCurrentTrainingStreak(checkIns, [1], new Date(at('2026-11-01')), -360), 1);
+  assert.equal(calculateCurrentTrainingStreak(checkIns, [1], new Date(at('2026-11-01')), 0), 0);
+});
+
+test('sin días programados o sin accesos la racha es cero', () => {
+  assert.equal(calculateCurrentTrainingStreak([at('2026-10-26')], [], new Date(at('2026-10-27'))), 0);
+  assert.equal(calculateCurrentTrainingStreak([], MWF, new Date(at('2026-10-27'))), 0);
+});
+
+test('la semana local empieza el lunes a medianoche en la zona del cliente', () => {
+  // Sunday 21:00 local still belongs to the week that began Monday 10-26 at 00:00 local (06:00Z).
+  assert.equal(localWeekStartInstant(new Date(at('2026-11-02', '03:00')), -360).toISOString(), '2026-10-26T06:00:00.000Z');
+  assert.equal(localWeekStartInstant(new Date(at('2026-11-02', '08:00')), -360).toISOString(), '2026-11-02T06:00:00.000Z');
 });

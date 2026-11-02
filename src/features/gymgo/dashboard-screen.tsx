@@ -74,7 +74,7 @@ function StaffDashboard() {
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
     const summaryRequest = isClient
-      ? api.get<WorkoutStats>('/workouts/me/stats')
+      ? api.get<WorkoutStats>('/workouts/me/stats', { params: { tzOffsetMinutes: -new Date().getTimezoneOffset() } })
       : api.get<OperationsDashboard>('/analytics/dashboard', { params: { period: 'week' } });
 
     summaryRequest
@@ -153,8 +153,8 @@ function StaffDashboard() {
             </Surface>
             <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
               <Text style={styles.metricLabel}>Racha actual</Text>
-              <Text style={styles.metricValue}>{isLoadingSummary ? '—' : workoutStats?.currentStreak ?? 0}</Text>
-              <Text style={styles.metricHint}>días programados</Text>
+              <Text style={styles.metricValue}>{isLoadingSummary || !workoutStats ? '—' : workoutStats.currentStreak}</Text>
+              <Text style={styles.metricHint}>días asistidos</Text>
             </Surface>
           </View>
         ) : (

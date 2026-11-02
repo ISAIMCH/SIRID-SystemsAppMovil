@@ -81,7 +81,7 @@ El mismo mecanismo permite registrar check-in y check-out. La aplicación utiliz
 
 #### Rachas de asistencia
 
-La plataforma calcula la constancia del Cliente mediante una racha de entrenamiento. Los días de descanso programados no rompen la racha, por lo que el indicador respeta el plan personal de cada usuario en lugar de exigir entrenamiento diario.
+La plataforma calcula la constancia del Cliente cruzando los días programados de su rutina con sus entradas al gimnasio por QR: cada día programado al que asistió suma un día a la racha. Los días de descanso no la rompen. Si falta a un día programado pero asiste un día libre de la misma semana (lunes a domingo), la racha se salva sin sumar punto. Si la semana cierra el domingo con una falta sin reponer, la racha vuelve a cero; no hay reposiciones entre semanas distintas.
 
 ### Inventario y Mantenimiento
 

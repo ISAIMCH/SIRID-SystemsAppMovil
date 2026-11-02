@@ -3,8 +3,9 @@ const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
 const Membership = require('../models/membership.model');
 const WorkoutSession = require('../models/workout-session.model');
+const AccessIoT = require('../models/access-iot.model');
 const HttpError = require('../utils/http-error');
-const { calculateCurrentTrainingStreak } = require('../utils/training-streak');
+const { calculateCurrentTrainingStreak, localWeekStartInstant } = require('../utils/training-streak');
 const { resolveTenant } = require('../utils/tenant');
 const { findClientMember, isAssignedCoach } = require('../utils/members');
 const { normalizeBlocks } = require('./routine.controller');
@@ -385,11 +386,14 @@ async function getMyWorkoutStats(req, res) {
   const tzOffsetMinutes = Number.isFinite(parsedTzOffset) && parsedTzOffset >= -840 && parsedTzOffset <= 840
     ? parsedTzOffset
     : -360;
-  const startOfWeek = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 6));
-  const [user, routines, sessions, aggregate] = await Promise.all([
+  const startOfWeek = localWeekStartInstant(today, tzOffsetMinutes);
+  // The streak counts physical attendance: check-ins through the gym's QR access over the last year.
+  const streakWindowStart = new Date(today.getTime() - 54 * 7 * 24 * 60 * 60 * 1000);
+  const [user, routines, checkIns, lastSession, aggregate] = await Promise.all([
     User.findById(req.user.id).select('availableTrainingDays'),
     Routine.find({ assignedTo: req.user.id, status: 'active', isDeleted: { $ne: true } }).select('scheduleDays').lean(),
-    WorkoutSession.find({ user: req.user.id }).select('completedAt trainingDay').sort({ completedAt: -1 }).limit(366).lean(),
+    AccessIoT.find({ user: req.user.id, event: 'check-in', occurredAt: { $gte: streakWindowStart } }).select('occurredAt').lean(),
+    WorkoutSession.findOne({ user: req.user.id }).select('completedAt').sort({ completedAt: -1 }).lean(),
     WorkoutSession.aggregate([
       { $match: { user: req.user._id } },
       { $group: {
@@ -405,12 +409,12 @@ async function getMyWorkoutStats(req, res) {
   const scheduledDays = plannedDays.length ? plannedDays : (user?.availableTrainingDays ?? []);
   const totals = aggregate[0] ?? { totalSessions: 0, totalVolumeKg: 0, completedThisWeek: 0 };
   res.json({
-    currentStreak: calculateCurrentTrainingStreak(sessions, scheduledDays, today, tzOffsetMinutes),
+    currentStreak: calculateCurrentTrainingStreak(checkIns.map((entry) => entry.occurredAt), scheduledDays, today, tzOffsetMinutes),
     scheduledDays,
     totalSessions: totals.totalSessions,
     completedThisWeek: totals.completedThisWeek,
     totalVolumeKg: totals.totalVolumeKg,
-    lastWorkoutAt: sessions[0]?.completedAt ?? null,
+    lastWorkoutAt: lastSession?.completedAt ?? null,
   });
 }
 
