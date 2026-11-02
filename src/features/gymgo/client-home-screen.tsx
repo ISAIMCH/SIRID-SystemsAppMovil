@@ -304,6 +304,7 @@ export default function ClientHomeScreen() {
           <QuickLink icon="fitness-center" label="Rutinas" onPress={() => router.push('/(main)/routines')} />
           <QuickLink icon="storefront" label="Tienda" onPress={() => router.push('/(main)/store')} />
           <QuickLink icon="monitor-weight" label="Perfil físico" onPress={() => router.push('/(main)/profile')} />
+          <QuickLink icon="build" label="Reportar falla de equipo" onPress={() => router.push('/(main)/maintenance')} />
         </View>
       </ScrollView>
       <ClientAccessModal visible={showAccess} onClose={() => setShowAccess(false)} />

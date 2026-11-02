@@ -161,7 +161,8 @@ async function registerQrAccess(req, res) {
     await session.endSession();
   }
 
-  emitToGymStaff(req, accessPoint.organizationId, accessPoint.gymId, 'access:recorded', result);
+  // The client also gets it, so the app can confirm the entry or exit on their phone.
+  emitToGymStaff(req, accessPoint.organizationId, accessPoint.gymId, 'access:recorded', result, [result.userId]);
   res.status(201).json({ accepted: true, access: result });
 }
 
@@ -188,7 +189,7 @@ async function recordDeniedAccess(req, accessPoint, client, error, deviceId) {
       userId: String(client.id),
       userName: client.name,
       reason: denied.reason,
-    });
+    }, [client.id]);
   } catch (logError) {
     console.error('No se pudo registrar el acceso rechazado:', logError);
   }

@@ -37,6 +37,7 @@ export default function ClientProfileHub() {
         <MenuRow icon="person-outline" title="Datos personales y físicos" onPress={() => router.push('/(main)/profile')} />
         <MenuRow icon="credit-card" title="Membresía y pagos" onPress={() => router.push('/(main)/client-billing' as Href)} />
         <MenuRow icon="folder-shared" title="Mis documentos" onPress={() => router.push('/(main)/documents' as Href)} />
+        <MenuRow icon="build" title="Mis reportes de equipo" onPress={() => router.push('/(main)/maintenance' as Href)} />
         <MenuRow icon="shield" title="Privacidad e historial" badge={pendingRequests} onPress={() => router.push('/(main)/privacy' as Href)} />
         {pendingInvitations > 0 ? (
           <MenuRow icon="badge" title="Invitaciones al staff" badge={pendingInvitations} onPress={() => router.push('/staff-invitations' as Href)} />

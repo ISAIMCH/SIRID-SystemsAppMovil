@@ -5,10 +5,11 @@ const OrganizationMember = require('../models/organization-member.model');
 const HttpError = require('../utils/http-error');
 const withTransaction = require('../utils/transaction');
 const { addClientToGym } = require('../utils/join-gym');
+const { emitToOrganizationStaff } = require('../utils/realtime');
 const { belongsOnlyTo, findClientMember } = require('../utils/members');
 const { resolveTargetGym, resolveTenant } = require('../utils/tenant');
 const { createActivation, isActivationUsable, verifyActivationCode, unusablePassword } = require('../utils/client-activation');
-const { authResponse, credentialsSchema, membershipsByUser, phoneSchema, serializeDirectoryUser, DIRECTORY_FIELDS } = require('./auth.controller');
+const { authResponse, credentialsSchema, emitDirectoryUpdate, membershipsByUser, phoneSchema, serializeDirectoryUser, DIRECTORY_FIELDS } = require('./auth.controller');
 
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 
@@ -62,6 +63,7 @@ async function enrollClient(req, res) {
       await user.save({ session });
       await addClientToGym(user._id, gym, { session });
     });
+    emitDirectoryUpdate(req, 'created', user._id);
     return res.status(201).json({ user: await directoryEntry(req, user._id), linkedExisting: false, activation: activationBody(activation) });
   }
 
@@ -85,6 +87,7 @@ async function enrollClient(req, res) {
     }
   });
   if (!activation) req.app?.get('io')?.to(`user:${existing._id}`).emit('client-enrollment:created', { organizationId: String(organizationId), gymId: String(gym._id) });
+  emitDirectoryUpdate(req, 'created', existing._id);
   res.status(201).json({
     user: await directoryEntry(req, existing._id),
     linkedExisting: true,
@@ -123,6 +126,11 @@ async function activateAccount(req, res) {
   user.pendingActivation = false;
   user.activation = null;
   await user.save();
+  // Every gym that enrolled them stops showing the account as pending activation.
+  const organizationIds = await OrganizationMember.distinct('organizationId', { userId: user._id, isActive: true });
+  for (const organizationId of organizationIds) {
+    emitToOrganizationStaff(req, organizationId, 'directory-updated', { action: 'updated', userId: String(user._id), organizationId: String(organizationId) });
+  }
   res.json(await authResponse(user));
 }
 

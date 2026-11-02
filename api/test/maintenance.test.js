@@ -5,7 +5,7 @@ const mongoose = require('mongoose');
 const Equipment = require('../src/models/equipment.model');
 const MaintenanceReport = require('../src/models/maintenance-report.model');
 const User = require('../src/models/user.model');
-const { updateReport } = require('../src/controllers/maintenance.controller');
+const { listMyReports, listReports, updateReport } = require('../src/controllers/maintenance.controller');
 
 const id = () => new mongoose.Types.ObjectId();
 const gymId = id();
@@ -62,4 +62,60 @@ test('resolving a report that never took a unit leaves the other units in mainte
 test('a unit can go back to service before the report is resolved', async () => {
   const units = await runUpdates([{ status: 'in_progress', equipmentStatus: 'available' }], { outOfService: true });
   assert.deepEqual(units, [0]);
+});
+
+test('an updated report goes live to owners, managers, coaches and its reporter, not to reception', async () => {
+  const [organizationId, reporterId] = [id(), id()];
+  const report = {
+    id: String(id()), organizationId, gymId, equipment: id(), reportedBy: { _id: reporterId, name: 'Ana', email: 'ana@ejemplo.com' },
+    status: 'pending', equipmentOutOfService: false, save: async () => {},
+  };
+  const emitted = [];
+  const io = { to: (rooms) => ({ emit: (event, payload) => emitted.push({ rooms, event, payload }) }) };
+  const restore = [
+    stub(User, 'startSession', async () => ({ withTransaction: (work) => work(), endSession: async () => {} })),
+    stub(MaintenanceReport, 'findOne', () => query(report)),
+    stub(MaintenanceReport, 'findById', () => query(report)),
+  ];
+  try {
+    const req = { params: { id: report.id }, body: { status: 'in_progress' }, tenant: { organizationId, gymIds: [gymId], gymId }, app: { get: () => io } };
+    await updateReport(req, { json() {} });
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+
+  assert.equal(emitted.length, 2);
+  assert.equal(emitted[0].event, 'maintenance-updated');
+  assert.equal(emitted[0].payload.action, 'updated');
+  assert.deepEqual(emitted[0].rooms, [`org:${organizationId}:owners`, `gym:${gymId}:managers`, `user:${reporterId}`]);
+  // The gym's coaches get it too, with the reporter's name only.
+  assert.equal(emitted[1].rooms, `gym:${gymId}:coaches`);
+  assert.deepEqual(emitted[1].payload.report.reportedBy, { _id: reporterId, name: 'Ana' });
+});
+
+test('a client lists only their own reports in the active organization', async () => {
+  const [organizationId, clientId] = [id(), id()];
+  let filter;
+  const chain = { populate: () => chain, sort: () => chain, limit: () => chain, lean: async () => [] };
+  const restore = stub(MaintenanceReport, 'find', (value) => { filter = value; return chain; });
+  try {
+    await listMyReports({ user: { id: String(clientId) }, tenant: { organizationId, gymIds: [gymId], gymId } }, { json() {} });
+  } finally {
+    restore();
+  }
+  assert.deepEqual(filter, { organizationId, reportedBy: String(clientId) });
+});
+
+test('a coach reads the gym reports with the reporter name but without their email', async () => {
+  const organizationId = id();
+  const populated = [];
+  const chain = { populate: (path, fields) => { populated.push([path, fields]); return chain; }, sort: () => chain, lean: async () => [] };
+  const restore = stub(MaintenanceReport, 'find', () => chain);
+  try {
+    await listReports({ query: {}, tenant: { organizationId, role: 'Coach', gymIds: [gymId], gymId } }, { json() {} });
+    await listReports({ query: {}, tenant: { organizationId, role: 'Admin', gymIds: [gymId], gymId } }, { json() {} });
+  } finally {
+    restore();
+  }
+  assert.deepEqual(populated.filter(([path]) => path === 'reportedBy').map(([, fields]) => fields), ['name', 'name email']);
 });

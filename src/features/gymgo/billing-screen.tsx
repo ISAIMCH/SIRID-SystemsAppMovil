@@ -1,11 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import AdminBillingScreen from './admin-billing-screen';
+import { connectSocket } from '@/services/socket';
+
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
+import CashierScreen from './cashier-screen';
 import { IconBadge } from './fit-ui';
 import { membershipDisplayStatus, membershipStatusLabels } from './membership-status';
 import { palette } from './theme';
@@ -57,8 +59,9 @@ function formatAmount(amount: number, currency: string) {
 
 export default function BillingScreen() {
   const { user } = useAuth();
-  if (user?.role !== 'Cliente' && user?.role !== 'Admin') return <Redirect href="/(main)" />;
-  return user.role === 'Admin' ? <AdminBillingScreen /> : <ClientMembership />;
+  if (user?.role === 'Admin' || user?.role === 'Recepcion') return <CashierScreen />;
+  if (user?.role !== 'Cliente') return <Redirect href="/(main)" />;
+  return <ClientMembership />;
 }
 
 function ClientMembership() {
@@ -89,6 +92,18 @@ function ClientMembership() {
   // retryNumber is a manual "reintentar" trigger.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryNumber]));
+
+  // Reception confirms or cancels the payment from the dashboard: reload so the PIN and status update here.
+  useEffect(() => {
+    const socket = connectSocket();
+    const reload = () => setRetryNumber((current) => current + 1);
+    socket.on('payment-updated', reload);
+    socket.on('directory-updated', reload);
+    return () => {
+      socket.off('payment-updated', reload);
+      socket.off('directory-updated', reload);
+    };
+  }, []);
 
   const pendingPayment = payments.find((payment) => payment.status === 'pending');
   const membershipStatus = membershipDisplayStatus(membership);

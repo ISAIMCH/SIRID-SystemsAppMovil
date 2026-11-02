@@ -7,10 +7,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientHomeScreen from './client-home-screen';
+import FloorHomeScreen from './floor-home-screen';
 import GymSwitcher from './gym-switcher';
 import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
+import { useMaintenanceAlerts } from './use-maintenance-alerts';
 import { palette } from './theme';
 import type { Routine } from './types';
 import { ActionButton, AdminLightProvider, AppHeader, DarkUiProvider, Eyebrow, Notice, SectionTitle, Surface } from './ui';
@@ -36,6 +38,7 @@ type WorkoutStats = {
 export default function DashboardScreen() {
   const { user } = useAuth();
   if (user?.role === 'Cliente') return <ClientHomeScreen />;
+  if (user?.role === 'Admin' || user?.role === 'Recepcion') return <FloorHomeScreen />;
   return <StaffDashboard />;
 }
 
@@ -44,6 +47,7 @@ function StaffDashboard() {
   const isClient = user?.role === 'Cliente';
   const isAdmin = user?.role === 'Admin';
   const pendingInvitations = usePendingStaffInvitations();
+  const maintenanceAlerts = useMaintenanceAlerts(user?.role === 'Coach');
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [routineError, setRoutineError] = useState('');
@@ -236,25 +240,15 @@ function StaffDashboard() {
               <ActionButton secondary onPress={() => router.push('/(main)/billing')}>Pago y membresía</ActionButton>
               <ActionButton secondary onPress={() => router.push('/(main)/maintenance')}>Reportar falla de equipo</ActionButton>
             </View>
-          ) : isAdmin ? (
-            <View style={styles.actionStack}>
-              <ActionButton onPress={() => router.push('/directory' as Href)}>Abrir directorio</ActionButton>
-              <ActionButton onPress={() => router.push('/(main)/inventory')}>Inventario / Equipos</ActionButton>
-              <ActionButton onPress={() => router.push('/(main)/billing')}>Revisar pagos</ActionButton>
-              <ActionButton onPress={() => router.push('/(main)/maintenance')}>Alertas de mantenimiento</ActionButton>
-              <ActionButton onPress={() => router.push('/(main)/staff')}>Agregar Coach o Cliente</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/(main)/routines')}>Consultar rutinas</ActionButton>
-            </View>
-          ) : user?.role === 'Coach' ? (
+          ) : (
             <View style={styles.actionStack}>
               <ActionButton onPress={() => router.push(routineEditorHref())}>Crear rutina</ActionButton>
               <ActionButton secondary onPress={() => router.push('/directory' as Href)}>Ver directorio</ActionButton>
-            </View>
-          ) : (
-            <View style={styles.actionStack}>
-              <ActionButton onPress={() => router.push('/directory' as Href)}>Ver mi directorio</ActionButton>
-              <ActionButton onPress={() => router.push('/(main)/inventory')}>Consultar equipos</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/(main)/routines')}>Consultar rutinas</ActionButton>
+              <ActionButton secondary onPress={() => router.push('/(main)/maintenance')}>
+                {maintenanceAlerts?.length
+                  ? `Alertas de mantenimiento (${maintenanceAlerts.length})`
+                  : 'Alertas de mantenimiento'}
+              </ActionButton>
             </View>
           )}
         </View>

@@ -11,7 +11,7 @@ async function activeOrganizationMembers(userId) {
 
 // Rooms a socket joins, from the user's roles in every organization:
 // org:<id>:owners, org:<id>:admins (owners and managers), org:<id>:staff (anyone working there),
-// gym:<id>:managers and gym:<id>:reception. Every socket also joins user:<id>.
+// gym:<id>:managers, gym:<id>:reception and gym:<id>:coaches. Every socket also joins user:<id>.
 // SIRID staff join the owner rooms of every organization.
 async function realtimeRooms(user) {
   const members = user.isPlatformAdmin
@@ -26,6 +26,7 @@ async function realtimeRooms(user) {
     for (const gym of member.gyms) {
       if (gym.roles.includes('Gerente')) rooms.add(`gym:${gym.gymId}:managers`);
       if (gym.roles.includes('Recepcion')) rooms.add(`gym:${gym.gymId}:reception`);
+      if (gym.roles.includes('Coach')) rooms.add(`gym:${gym.gymId}:coaches`);
     }
     if (isOwner || member.gyms.some((gym) => gym.roles.includes('Gerente'))) rooms.add(`${organization}:admins`);
   }
@@ -62,10 +63,23 @@ function emitToOrganizationStaff(req, organizationId, event, payload, users = []
   if (io) io.to([`org:${organizationId}:staff`, ...users.map(toUserRoom).filter(Boolean)]).emit(event, payload);
 }
 
-// Sends gym data to its owners, managers and reception without a signed-in user (e.g. a turnstile's request).
-function emitToGymStaff(req, organizationId, gymId, event, payload) {
+// Sends gym data to its owners, managers and reception (and the given users) without a signed-in user
+// (e.g. a turnstile's request).
+function emitToGymStaff(req, organizationId, gymId, event, payload, users = []) {
   const io = req.app?.get('io');
-  if (io) io.to([`org:${organizationId}:owners`, `gym:${gymId}:managers`, `gym:${gymId}:reception`]).emit(event, payload);
+  if (io) io.to([`org:${organizationId}:owners`, `gym:${gymId}:managers`, `gym:${gymId}:reception`, ...users.map(toUserRoom).filter(Boolean)]).emit(event, payload);
 }
 
-module.exports = { realtimeRooms, emitRealtime, emitToStaff, emitToOrganizationStaff, emitToGymStaff };
+// Sends gym data that reception may not see to its owners and managers, and to the given users.
+function emitToGymManagers(req, organizationId, gymId, event, payload, users = []) {
+  const io = req.app?.get('io');
+  if (io) io.to([`org:${organizationId}:owners`, `gym:${gymId}:managers`, ...users.map(toUserRoom).filter(Boolean)]).emit(event, payload);
+}
+
+// Sends gym data to the coaches who work at that gym.
+function emitToGymCoaches(req, gymId, event, payload) {
+  const io = req.app?.get('io');
+  if (io) io.to(`gym:${gymId}:coaches`).emit(event, payload);
+}
+
+module.exports = { realtimeRooms, emitRealtime, emitToStaff, emitToOrganizationStaff, emitToGymStaff, emitToGymManagers, emitToGymCoaches };

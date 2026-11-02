@@ -3,7 +3,25 @@ const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const User = require('../models/user.model');
 const HttpError = require('../utils/http-error');
-const { gymFilter } = require('../utils/tenant');
+const { emitToGymCoaches, emitToGymManagers } = require('../utils/realtime');
+const { gymFilter, organizationFilter } = require('../utils/tenant');
+
+const REPORT_EQUIPMENT_FIELDS = 'name zone brand status';
+
+function populatedReport(id) {
+  return MaintenanceReport.findById(id)
+    .populate('equipment', REPORT_EQUIPMENT_FIELDS)
+    .populate('reportedBy', 'name email')
+    .lean();
+}
+
+// Owners and the gym's managers see every report live; the client who reported it follows its status.
+// Coaches get the same report with the reporter's name only, as GET /reports gives it to them.
+function emitReportUpdate(req, action, report) {
+  emitToGymManagers(req, report.organizationId, report.gymId, 'maintenance-updated', { action, report }, [report.reportedBy?._id ?? report.reportedBy]);
+  const reporter = report.reportedBy && typeof report.reportedBy === 'object' ? { _id: report.reportedBy._id, name: report.reportedBy.name } : report.reportedBy;
+  emitToGymCoaches(req, report.gymId, 'maintenance-updated', { action, report: { ...report, reportedBy: reporter } });
+}
 
 const reportInputSchema = z.object({
   equipmentId: z.string().regex(/^[a-f\d]{24}$/i),
@@ -22,15 +40,28 @@ async function createReport(req, res) {
     reportedBy: req.user.id,
     description: input.description,
   });
+  emitReportUpdate(req, 'created', await populatedReport(report.id));
   res.status(201).json({ report });
 }
 
 async function listReports(req, res) {
   const query = z.object({ status: z.enum(['pending', 'in_progress', 'resolved']).optional() }).parse(req.query);
+  // A coach sees who reported it, not their contact details.
+  const reporterFields = req.tenant.role === 'Admin' ? 'name email' : 'name';
   const reports = await MaintenanceReport.find({ ...gymFilter(req), ...(query.status ? { status: query.status } : {}) })
-    .populate('equipment', 'name zone brand status')
-    .populate('reportedBy', 'name email')
+    .populate('equipment', REPORT_EQUIPMENT_FIELDS)
+    .populate('reportedBy', reporterFields)
     .sort({ createdAt: -1 })
+    .lean();
+  res.json({ reports });
+}
+
+// The client's own reports in the active organization, so they can follow what happened with them.
+async function listMyReports(req, res) {
+  const reports = await MaintenanceReport.find({ ...organizationFilter(req), reportedBy: req.user.id })
+    .populate('equipment', REPORT_EQUIPMENT_FIELDS)
+    .sort({ createdAt: -1 })
+    .limit(50)
     .lean();
   res.json({ reports });
 }
@@ -77,11 +108,9 @@ async function updateReport(req, res) {
     await session.endSession();
   }
 
-  const report = await MaintenanceReport.findById(updatedReport.id)
-    .populate('equipment', 'name zone brand status')
-    .populate('reportedBy', 'name email')
-    .lean();
+  const report = await populatedReport(updatedReport.id);
+  emitReportUpdate(req, 'updated', report);
   res.json({ report });
 }
 
-module.exports = { createReport, listReports, updateReport };
+module.exports = { createReport, listReports, listMyReports, updateReport };
