@@ -10,6 +10,7 @@ const {
   findAssignableClient,
   normalizeBlocks,
   legacyExercisesFromBlocks,
+  pauseOtherRoutines,
 } = require('./routine.controller');
 const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 
@@ -140,6 +141,7 @@ async function assignTemplate(req, res) {
     sourceTemplate: template.id,
     status: 'active',
   });
+  await pauseOtherRoutines(routine);
   res.status(201).json({ routine });
 }
 

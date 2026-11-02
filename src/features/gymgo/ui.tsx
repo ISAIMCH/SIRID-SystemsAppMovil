@@ -48,7 +48,11 @@ export function Page({ children, dark = false, admin = false, overlay }: PropsWi
     <DarkUiContext.Provider value={dark}>
       <AdminLightContext.Provider value={admin}>
         <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, admin && styles.adminSafeArea, dark && styles.darkSafeArea]}>
-          <ScrollView contentContainerStyle={[styles.pageContent, admin && styles.adminPageContent]} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            contentContainerStyle={[styles.pageContent, admin && styles.adminPageContent]}
+            keyboardShouldPersistTaps="handled"
+            // iOS: keeps the focused field above the keyboard.
+            automaticallyAdjustKeyboardInsets>
             {children}
           </ScrollView>
           {overlay}

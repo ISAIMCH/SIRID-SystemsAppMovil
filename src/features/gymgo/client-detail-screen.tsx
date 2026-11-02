@@ -1,22 +1,19 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientProgress from './client-progress';
+import { CoachRoutineList } from './coach-routine-list';
 import { CoachSelect } from './coach-select';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard, IconBadge } from './fit-ui';
+import { membershipDisplayStatus, membershipLabel } from './membership-status';
+import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
+import type { Routine } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
-
-const membershipLabels: Record<NonNullable<DirectoryClient['membership']>['status'], string> = {
-  active: 'Activa',
-  pending: 'Pendiente',
-  suspended: 'Suspendida',
-  expired: 'Vencida',
-};
 
 const experienceLabels: Record<NonNullable<DirectoryClient['experienceLevel']>, string> = {
   principiante: 'Principiante',
@@ -39,8 +36,12 @@ export default function ClientDetailScreen() {
   const [error, setError] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
+  const [routines, setRoutines] = useState<Routine[] | null>(null);
+  const [routinesError, setRoutinesError] = useState('');
+  const [routinesReload, setRoutinesReload] = useState(0);
+  const isCoachViewer = user?.role === 'Coach';
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let isCurrent = true;
     api.get<{ user: DirectoryClient }>(`/auth/users/${clientId}`)
       .then((response) => {
@@ -53,7 +54,27 @@ export default function ClientDetailScreen() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, [clientId, retryNumber]);
+  // retryNumber is a manual "reintentar" trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, retryNumber]));
+
+  // The Coach sees the client's routines here; reloads after returning from the editor.
+  useFocusEffect(useCallback(() => {
+    if (!isCoachViewer) return undefined;
+    let isCurrent = true;
+    api.get<{ routines: Routine[] }>('/routines', { params: { clientId } })
+      .then((response) => {
+        if (!isCurrent) return;
+        setRoutines(response.data.routines);
+        setRoutinesError('');
+      })
+      .catch((requestError: unknown) => {
+        if (isCurrent) setRoutinesError(getApiErrorMessage(requestError, 'No se pudieron cargar las rutinas del cliente.'));
+      });
+    return () => { isCurrent = false; };
+  // routinesReload reloads after a routine is activated.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, isCoachViewer, routinesReload]));
 
   const isCoach = person?.role === 'Coach';
 
@@ -110,7 +131,7 @@ export default function ClientDetailScreen() {
                 <>
                   <SectionTitle>Membresía</SectionTitle>
                   <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
-                    <DetailRow label="Estado" value={person.membership ? membershipLabels[person.membership.status] : 'Pendiente'} accent={person.membership?.status === 'active'} />
+                    <DetailRow label="Estado" value={membershipLabel(person.membership)} accent={membershipDisplayStatus(person.membership) === 'active'} />
                     <DetailRow label="Inicio" value={formatDate(person.membership?.startsAt)} />
                     <DetailRow label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
                   </FloatingCard>
@@ -131,7 +152,30 @@ export default function ClientDetailScreen() {
                 </>
               ) : null}
 
-              {user?.role === 'Coach' && !isCoach ? <ClientProgress clientId={person.id} /> : null}
+              {isCoachViewer && !isCoach ? (
+                <>
+                  <SectionTitle>Observaciones médicas y técnicas</SectionTitle>
+                  <FloatingCard style={styles.details}>
+                    <Text style={[styles.observations, !person.observations && styles.observationsEmpty]}>
+                      {person.observations || 'Sin observaciones registradas. Puedes agregarlas al crear o editar su rutina.'}
+                    </Text>
+                  </FloatingCard>
+
+                  <SectionTitle>Rutinas</SectionTitle>
+                  {routinesError ? <Notice error>{routinesError}</Notice> : null}
+                  {routines === null && !routinesError ? <ActivityIndicator color={palette.green} /> : null}
+                  {routines?.length ? (
+                    <CoachRoutineList routines={routines} onChanged={() => setRoutinesReload((value) => value + 1)} />
+                  ) : routines ? (
+                    <Text style={styles.coachEmail}>Este cliente aún no tiene rutinas.</Text>
+                  ) : null}
+                  <ActionButton onPress={() => router.push(routineEditorHref({ clientId: person.id }))}>
+                    {routines?.length ? 'Crear nueva rutina' : 'Crear rutina'}
+                  </ActionButton>
+                </>
+              ) : null}
+
+              {isCoachViewer && !isCoach ? <ClientProgress clientId={person.id} /> : null}
 
               {isAdmin ? <ActionButton onPress={() => setIsEditing(true)}>Editar perfil</ActionButton> : null}
             </>
@@ -231,5 +275,7 @@ const styles = StyleSheet.create({
   adminSlateCard: { backgroundColor: '#3F3F46', borderColor: '#52525B', borderRadius: 16 },
   coachName: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   coachEmail: { color: '#A1A1AA', fontSize: 13 },
+  observations: { color: '#FFFFFF', fontSize: 14, lineHeight: 21, paddingVertical: 10 },
+  observationsEmpty: { color: '#A1A1AA' },
   form: { gap: 16, padding: 20, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
 });

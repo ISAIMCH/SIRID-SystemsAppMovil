@@ -3,18 +3,19 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { connectSocket } from '../../services/socket';
 import { api, getApiErrorMessage, getEquipmentTraffic } from './api';
 import { useAuth } from './auth-context';
+import { CoachRoutineList } from './coach-routine-list';
 import CoachTemplates from './coach-templates';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
 import type { EquipmentTraffic, Exercise, Routine, RoutineBlock, WorkoutSessionLog, WorkoutSessionPayload } from './types';
-import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
+import { ActionButton, AppHeader, Notice, Page } from './ui';
 
 type MetricValues = { reps: string; weightKg: string; durationMinutes: string; distanceKm: string; level: string };
 type RestTimer = { blockId: string; setNumber: number; remaining: number; startedAt: number; addedRestCount: number };
@@ -635,7 +636,11 @@ export default function RoutinesScreen() {
       ) : null}
       {logMessage ? <Notice error={logMessage.error}>{logMessage.text}</Notice> : null}
 
-      {routine ? (
+      {!isClient && routines.length ? (
+        <CoachRoutineList routines={routines} groupByClient onChanged={() => setRetryNumber((current) => current + 1)} />
+      ) : null}
+
+      {isClient && routine ? (
         <>
           <FloatingCard style={styles.routineSummary}>
             <View style={styles.summaryTop}>
@@ -839,20 +844,9 @@ export default function RoutinesScreen() {
                 </>
               )}
             </>
-          ) : (
-            <>
-              <SectionTitle>Bloques de la rutina</SectionTitle>
-              {allBlocks.map((block, index) => (
-                <FloatingCard key={block._id ?? block.order} style={styles.blockCard}>
-                          <Text style={[styles.blockTitle, styles.darkPrimary]}>{dayNames[block.day]} · {block.blockType} · {block.sets} series</Text>
-                          {block.exercises.map((exercise) => <Text key={exercise._id} style={[styles.exerciseMeta, styles.darkMuted]}>{exercise.name} · {exercise.metricType === 'cardio' ? 'Cardio' : exercise.reps}</Text>)}
-                  <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ routineId: routine?._id ?? '' }))}><Text style={styles.retry}>Editar rutina</Text></Pressable>
-                </FloatingCard>
-              ))}
-            </>
-          )}
+          ) : null}
         </>
-      ) : !isLoading && !error ? <Notice>Aún no tienes rutinas asignadas.</Notice> : null}
+      ) : !isLoading && !error && !routines.length ? <Notice>{isClient ? 'Aún no tienes rutinas asignadas.' : 'Tus clientes aún no tienen rutinas asignadas.'}</Notice> : null}
 
       <Modal visible={Boolean(activeGif)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setActiveGif(null)}>
         <View style={styles.modalBackdrop}>
@@ -902,7 +896,7 @@ function WorkoutFeedbackModal({
 }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
-      <View style={styles.modalBackdrop}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalBackdrop}>
         <View style={styles.modalCard}>
           <View style={styles.modalHeader}>
             <View style={styles.flex}>
@@ -934,7 +928,7 @@ function WorkoutFeedbackModal({
             {saving ? <ActivityIndicator color={palette.white} /> : 'Guardar sesión'}
           </ActionButton>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
