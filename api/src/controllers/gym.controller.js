@@ -8,13 +8,26 @@ const { generateJoinCode, generateDeviceKey, hashDeviceKey } = require('../utils
 const { findGymByJoinCode, addClientToGym } = require('../utils/join-gym');
 const { resolveTenant, resolveTargetGym, gymFilter } = require('../utils/tenant');
 const { isOwner } = require('../utils/members');
+const { isTimeZone } = require('../utils/timezone');
 const { listUserGyms } = require('./auth.controller');
 
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de sucursal inválido.');
 
 function serializeGym(gym) {
-  return { id: String(gym._id), name: gym.name, address: gym.address ?? '', timezone: gym.timezone, joinCode: gym.joinCode ?? null };
+  return {
+    id: String(gym._id),
+    name: gym.name,
+    address: gym.address ?? '',
+    timezone: gym.timezone,
+    capacity: gym.capacity ?? null,
+    joinCode: gym.joinCode ?? null,
+  };
 }
+
+const timezoneSchema = z.string().trim().min(1).max(60).refine(isTimeZone, 'Zona horaria inválida. Usa un nombre IANA, por ejemplo America/Mexico_City.');
+// Empty or null clears the limit.
+const capacitySchema = z.union([z.coerce.number().int().min(1).max(100000), z.literal(''), z.null()])
+  .transform((value) => (value === '' ? null : value));
 
 function serializeDevice(device) {
   return {
@@ -62,7 +75,8 @@ async function createGym(req, res) {
   const input = z.object({
     name: z.string().trim().min(2).max(120),
     address: z.string().trim().max(200).transform((value) => value || undefined).optional(),
-    timezone: z.string().trim().min(1).max(60).default('America/Mexico_City'),
+    timezone: timezoneSchema.default('America/Mexico_City'),
+    capacity: capacitySchema.optional(),
   }).parse(req.body);
 
   const [organization, activeGyms] = await Promise.all([
@@ -77,6 +91,30 @@ async function createGym(req, res) {
 
   const gym = await Gym.create({ ...input, organizationId });
   res.status(201).json({ gym: serializeGym(gym), gyms: await listUserGyms(req.user) });
+}
+
+// Owners edit any gym of the organization; managers the gyms they run. The time zone sets the gym's days and hours
+// for plan schedules and attendance, so it changes how both are counted from now on.
+async function updateGym(req, res) {
+  const gymId = resolveTargetGym(req, objectIdSchema.parse(req.params.id));
+  const input = z.object({
+    name: z.string().trim().min(2).max(120).optional(),
+    address: z.string().trim().max(200).optional(),
+    timezone: timezoneSchema.optional(),
+    capacity: capacitySchema.optional(),
+  }).parse(req.body);
+
+  const gym = await Gym.findOne({ _id: gymId, organizationId: resolveTenant(req).organizationId, isActive: true });
+  if (!gym) throw new HttpError(404, 'Sucursal no encontrada.');
+  if (input.name && input.name !== gym.name && await Gym.exists({ organizationId: gym.organizationId, name: input.name, _id: { $ne: gym._id } })) {
+    throw new HttpError(409, 'Ya existe una sucursal con ese nombre.');
+  }
+  for (const field of ['name', 'timezone', 'capacity']) {
+    if (input[field] !== undefined) gym[field] = input[field];
+  }
+  if (input.address !== undefined) gym.address = input.address || undefined;
+  await gym.save();
+  res.json({ gym: serializeGym(gym), gyms: await listUserGyms(req.user) });
 }
 
 // The old code stops working at once; clients who already joined are not affected.
@@ -126,4 +164,4 @@ async function revokeDevice(req, res) {
   res.json({ device: serializeDevice(device) });
 }
 
-module.exports = { joinGym, listGyms, createGym, regenerateJoinCode, listDevices, createDevice, revokeDevice };
+module.exports = { joinGym, listGyms, createGym, updateGym, regenerateJoinCode, listDevices, createDevice, revokeDevice };
