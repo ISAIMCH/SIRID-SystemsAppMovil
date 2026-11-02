@@ -1,10 +1,8 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useState, type PropsWithChildren, type ReactNode } from 'react';
-import { Animated, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { palette } from './theme';
-import { AdminEmbeddedProvider, AppHeader, Page } from './ui';
 
 export function AdminPillToggle<T extends string>({ value, options, onChange }: {
   value: T;
@@ -35,44 +33,6 @@ export function AdminPillToggle<T extends string>({ value, options, onChange }: 
   );
 }
 
-export function AdminCategoryRail<T extends string>({ value, options, onChange }: {
-  value: T;
-  options: readonly { value: T; label: string; icon: keyof typeof MaterialIcons.glyphMap }[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <FlatList
-      accessibilityRole="tablist"
-      data={options}
-      horizontal
-      keyExtractor={(item) => item.value}
-      renderItem={({ item }) => {
-        const selected = item.value === value;
-        return (
-          <Pressable accessibilityRole="tab" accessibilityState={{ selected }} onPress={() => { void Haptics.selectionAsync(); onChange(item.value); }} style={({ pressed }) => [styles.categoryChip, selected && styles.categoryChipActive, pressed && styles.pressed]}>
-            <MaterialIcons name={item.icon} size={18} color={selected ? '#10FF85' : '#52525B'} />
-            <Text style={[styles.categoryText, selected && styles.categoryTextActive]}>{item.label}</Text>
-          </Pressable>
-        );
-      }}
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.categoryRail}
-    />
-  );
-}
-
-export function AdminHub({ children, toggle, title, detail }: PropsWithChildren<{ toggle: ReactNode; title: string; detail: string }>) {
-  return (
-    <Page admin>
-      <AppHeader title={title} detail={detail} />
-      <AdminEmbeddedProvider>
-        {toggle}
-        {children}
-      </AdminEmbeddedProvider>
-    </Page>
-  );
-}
-
 const styles = StyleSheet.create({
   pillTrack: { flexDirection: 'row', gap: 4, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E4E7', padding: 4, marginBottom: -16 },
   pillIndicator: { position: 'absolute', left: 4, top: 4, bottom: 4, borderRadius: 16, backgroundColor: palette.deepGreen, borderWidth: 1, borderColor: palette.deepGreen },
@@ -80,9 +40,4 @@ const styles = StyleSheet.create({
   pressed: { transform: [{ scale: 0.98 }], opacity: 0.9 },
   pillText: { color: '#52525B', fontSize: 14, fontWeight: '800' },
   pillTextActive: { color: palette.white },
-  categoryRail: { gap: 8, paddingRight: 22 },
-  categoryChip: { flexDirection: 'row', alignItems: 'center', gap: 7, minHeight: 44, borderRadius: 12, paddingHorizontal: 14, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E4E4E7' },
-  categoryChipActive: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
-  categoryText: { color: '#52525B', fontSize: 13, fontWeight: '800' },
-  categoryTextActive: { color: palette.white },
 });

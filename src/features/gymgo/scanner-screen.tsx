@@ -46,7 +46,7 @@ export default function ScannerScreen() {
     if (resetTimer.current) clearTimeout(resetTimer.current);
   }, []);
 
-  if (user?.role !== 'Admin') return <Redirect href="/(main)" />;
+  if (user?.role !== 'Admin' && user?.role !== 'Recepcion') return <Redirect href="/(main)" />;
 
   async function handleBarcodeScanned(scanningResult: BarcodeScanningResult) {
     if (scanLocked.current) return;
@@ -62,7 +62,7 @@ export default function ScannerScreen() {
 
       const response = await api.post<AccessResponse>('/iot/access', {
         qrToken,
-        deviceId: 'admin-reception-simulator',
+        deviceId: 'app-recepcion',
       });
       const { event, userName } = response.data.access;
       setResult({

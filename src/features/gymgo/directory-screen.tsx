@@ -5,7 +5,6 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 
 import { connectSocket } from '@/services/socket';
 
-import { AdminPillToggle } from './admin-hub';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
@@ -14,13 +13,9 @@ import { membershipDisplayStatus, membershipLabel } from './membership-status';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 
-type Segment = 'Cliente' | 'Coach';
-
-
-export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmentToggle = false }: { initialSegment?: Segment; hideSegmentToggle?: boolean }) {
+// The Coach's assigned clients; staff directories live in the web dashboard.
+export default function DirectoryScreen() {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'Admin';
-  const [segment, setSegment] = useState<Segment>(initialSegment);
   const [people, setPeople] = useState<DirectoryClient[]>([]);
   const [search, setSearch] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -29,7 +24,7 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
 
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
-    api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: segment } })
+    api.get<{ users: DirectoryClient[] }>('/auth/users', { params: { role: 'Cliente' } })
       .then((response) => {
         if (isCurrent) setPeople(response.data.users);
       })
@@ -42,7 +37,7 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
     return () => { isCurrent = false; };
   // retryNumber is a manual "reintentar" trigger.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [segment, retryNumber]));
+  }, [retryNumber]));
 
   // Reception enrolls clients and managers assign coaches from the dashboard: reload when the directory changes.
   useEffect(() => {
@@ -52,20 +47,12 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
     return () => { socket.off('directory-updated', reload); };
   }, []);
 
-  function changeSegment(next: Segment) {
-    if (next === segment) return;
-    setPeople([]);
-    setSearch('');
-    setError('');
-    setIsLoading(true);
-    setSegment(next);
-  }
 
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const filtered = people.filter((person) => (
     `${person.name} ${person.lastName ?? ''} ${person.email} ${person.phone ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
   ));
-  const noun = segment === 'Cliente' ? 'clientes' : 'coaches';
+  const noun = 'clientes';
 
   return (
     <Page admin={user?.role === 'Admin'} dark={user?.role === 'Coach'}>
@@ -73,10 +60,6 @@ export default function DirectoryScreen({ initialSegment = 'Cliente', hideSegmen
         title={user?.role === 'Coach' ? 'Clientes' : 'Directorio'}
         detail={user?.role === 'Coach' ? 'Clientes asignados a tu perfil.' : 'Consulta y edita clientes y coaches.'}
       />
-
-      {isAdmin && !hideSegmentToggle ? (
-        <AdminPillToggle value={segment} onChange={changeSegment} options={[{ value: 'Cliente', label: 'Clientes' }, { value: 'Coach', label: 'Coaches' }]} />
-      ) : null}
 
       <Field
         label={`Buscar ${noun}`}

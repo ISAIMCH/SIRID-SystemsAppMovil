@@ -5,9 +5,9 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'rea
 
 import { connectSocket } from '@/services/socket';
 
-import AdminBillingScreen from './admin-billing-screen';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
+import CashierScreen from './cashier-screen';
 import { IconBadge } from './fit-ui';
 import { membershipDisplayStatus, membershipStatusLabels } from './membership-status';
 import { palette } from './theme';
@@ -59,8 +59,9 @@ function formatAmount(amount: number, currency: string) {
 
 export default function BillingScreen() {
   const { user } = useAuth();
-  if (user?.role !== 'Cliente' && user?.role !== 'Admin') return <Redirect href="/(main)" />;
-  return user.role === 'Admin' ? <AdminBillingScreen /> : <ClientMembership />;
+  if (user?.role === 'Admin' || user?.role === 'Recepcion') return <CashierScreen />;
+  if (user?.role !== 'Cliente') return <Redirect href="/(main)" />;
+  return <ClientMembership />;
 }
 
 function ClientMembership() {

@@ -9,40 +9,36 @@ type TabName =
   | 'index'
   | 'access'
   | 'routines'
-  | 'inventory'
   | 'maintenance'
   | 'billing'
   | 'directory'
-  | 'staff'
   | 'scanner'
   | 'store'
-  | 'admin-store';
+  | 'enroll';
 
 const ROLE_TABS: Record<GymGoRole, TabName[]> = {
   Cliente: ['index', 'routines', 'billing'],
   Coach: ['index', 'routines', 'directory'],
-  Admin: ['index', 'inventory', 'directory'],
-  // Reception works from the web dashboard; the app only shows its home.
-  Recepcion: ['index'],
+  // "Modo piso": the app is for the front desk; catalogs and settings live in the web dashboard.
+  Admin: ['index', 'scanner', 'billing', 'enroll'],
+  Recepcion: ['index', 'scanner', 'billing', 'enroll'],
 };
 
 const TAB_META: Record<TabName, { title: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
   index: { title: 'Inicio', icon: 'home' },
   access: { title: 'Acceso QR', icon: 'qr-code-2' },
   routines: { title: 'Rutinas', icon: 'fitness-center' },
-  inventory: { title: 'Inventario', icon: 'inventory-2' },
   maintenance: { title: 'Mantenim.', icon: 'build' },
   billing: { title: 'Membresía', icon: 'credit-card' },
   directory: { title: 'Usuarios', icon: 'groups' },
-  staff: { title: 'Personal', icon: 'person-add' },
   scanner: { title: 'Escáner', icon: 'qr-code-scanner' },
   store: { title: 'Tienda', icon: 'storefront' },
-  'admin-store': { title: 'Comercio', icon: 'local-offer' },
+  enroll: { title: 'Alta', icon: 'person-add' },
 };
 
 const TAB_NAMES = Object.keys(TAB_META) as TabName[];
 
-const SECONDARY_SCREENS = ['routine-create', 'clients', 'profile', 'plans', 'client-workout-detail', 'client-billing', 'documents', 'privacy'];
+const SECONDARY_SCREENS = ['routine-create', 'clients', 'profile', 'client-workout-detail', 'client-billing', 'documents', 'privacy'];
 
 const HIDDEN_OPTIONS = { tabBarButton: () => null, tabBarItemStyle: { display: 'none' } } as const;
 
@@ -77,8 +73,8 @@ export default function AppTabs() {
           ? 'Clientes'
           : name === 'billing' && isClient
             ? 'Perfil'
-            : name === 'billing' && user?.role === 'Admin'
-              ? 'Pagos'
+            : name === 'billing' && (user?.role === 'Admin' || user?.role === 'Recepcion')
+              ? 'Caja'
               : title;
 
         return (
