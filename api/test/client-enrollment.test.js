@@ -126,7 +126,10 @@ test('an existing GymGo account is linked as a client and its holder gets a noti
     assert.equal(result.body.linkedExisting, true);
     assert.equal(result.body.activation, null);
     assert.equal(String(writes.memberUpdates[0].$set.enrollmentNotice.gymId), String(gymId));
-    assert.deepEqual(req.emitted.map(({ room, event }) => [room, event]), [[`user:${existing._id}`, 'client-enrollment:created']]);
+    assert.deepEqual(req.emitted.map(({ room, event }) => [room, event]), [
+      [`user:${existing._id}`, 'client-enrollment:created'],
+      [[`org:${organizationId}:staff`, `user:${existing._id}`], 'directory-updated'],
+    ]);
   } finally {
     restore();
   }
@@ -142,7 +145,8 @@ test('an account another gym opened and nobody activated gets a new code instead
     assert.match(result.body.activation.code, /^[A-Z2-9]{8}$/);
     assert.ok(writes.userUpdates[0].$set.activation.codeHash);
     assert.equal(writes.memberUpdates.length, 0);
-    assert.equal(req.emitted.length, 0);
+    // No notice for the holder (they have no session yet), only the staff's directories.
+    assert.deepEqual(req.emitted.map(({ event }) => event), ['directory-updated']);
   } finally {
     restore();
   }
@@ -195,6 +199,7 @@ test('the client activates the account with the code and a password of their own
     stub(User, 'updateOne', async (filter, update) => { increments.push(update); }),
     // The session of an account that belongs to no gym yet.
     stub(OrganizationMember, 'find', () => query([])),
+    stub(OrganizationMember, 'distinct', async () => []),
     stub(Organization, 'find', () => query([])),
     stub(Gym, 'find', () => query([])),
   ];

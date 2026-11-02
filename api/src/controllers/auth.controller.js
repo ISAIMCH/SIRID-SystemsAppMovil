@@ -37,6 +37,7 @@ const {
   assertCoachInGyms,
 } = require('../utils/members');
 const { storeLegacyUploads, applyLegacyDocumentList } = require('../utils/documents');
+const { emitToOrganizationStaff } = require('../utils/realtime');
 
 const phoneSchema = z.string().trim()
   .transform((value) => value.replace(/[\s()+-]/g, ''))
@@ -218,6 +219,17 @@ async function changeRoles(req, user, member, roles, requestedGymId) {
   }
 }
 
+// Tells the organization's staff (directories, coach client lists) and the person themselves that a directory
+// entry changed; only ids, the listeners reload what they may see.
+function emitDirectoryUpdate(req, action, userId) {
+  const { organizationId } = resolveTenant(req);
+  emitToOrganizationStaff(req, organizationId, 'directory-updated', {
+    action,
+    userId: String(userId),
+    organizationId: String(organizationId),
+  }, [userId]);
+}
+
 function safeStringEqual(value, expected) {
   const valueBuffer = Buffer.from(value);
   const expectedBuffer = Buffer.from(expected);
@@ -385,6 +397,7 @@ async function createManagedUser(req, res) {
     await user.save();
   }
 
+  emitDirectoryUpdate(req, 'created', user._id);
   res.status(201).json({ user: { ...user.toSafeJSON(), assignedCoach: assignedCoach ? String(assignedCoach) : null, observations: input.observations ?? '' } });
 }
 
@@ -553,6 +566,7 @@ async function updateDirectoryUser(req, res) {
     .lean();
   await member.populate('assignedCoach', 'name email');
   const membership = (await membershipsByUser([updated._id], member.organizationId)).get(String(updated._id));
+  emitDirectoryUpdate(req, 'updated', updated._id);
   res.json({ user: serializeDirectoryUser(updated, member, resolveTenant(req).gymIds, { canEditCredentials: await belongsOnlyTo(updated, member.organizationId), membership }) });
 }
 
@@ -627,6 +641,7 @@ async function updateUser(req, res) {
     if (member.isModified()) await member.save({ session });
   });
 
+  emitDirectoryUpdate(req, 'updated', user._id);
   res.json({ user: { ...user.toSafeJSON(), assignedCoach: member.assignedCoach ? String(member.assignedCoach) : null, observations: member.observations } });
 }
 
@@ -656,6 +671,7 @@ async function updateMembership(req, res) {
   membership.set({ ...input, startsAt, expiresAt });
   await saveMembership(membership);
   const user = await User.findById(member.userId);
+  emitDirectoryUpdate(req, 'updated', user._id);
   res.json({ user: user.toSafeJSON() });
 }
 
@@ -719,6 +735,7 @@ module.exports = {
   membershipsByUser,
   serializeDirectoryUser,
   credentialsSchema,
+  emitDirectoryUpdate,
   registrationSchema,
   authResponse,
   registerClient,

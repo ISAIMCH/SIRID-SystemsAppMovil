@@ -74,7 +74,7 @@ test('log dates are whole local days of each gym, the end date included', () => 
   assert.deepEqual(dateRangeFilter([gym]), { gymId: { $in: [gym._id] } });
 });
 
-test('a refused entry is written to the access log and sent live to the gym staff', async () => {
+test('a refused entry is written to the access log and sent live to the gym staff and the client', async () => {
   const [organizationId, gymId, clientId] = [id(), id(), id()];
   const qrToken = jwt.sign({ typ: 'gym-access', jti: String(id()), org: String(organizationId) }, env.QR_TOKEN_SECRET, {
     subject: String(clientId), issuer: 'gymgo-api', audience: 'gymgo-iot', expiresIn: 60,
@@ -117,6 +117,7 @@ test('a refused entry is written to the access log and sent live to the gym staf
   assert.equal(emitted[0].event, 'access:recorded');
   assert.equal(emitted[0].payload.event, 'denied');
   assert.ok(emitted[0].rooms.includes(`gym:${gymId}:reception`));
+  assert.ok(emitted[0].rooms.includes(`user:${clientId}`));
 });
 
 test('the capacity monitor lists who is inside each gym against its capacity', async () => {
