@@ -5,6 +5,7 @@ const Membership = require('../models/membership.model');
 const HttpError = require('../utils/http-error');
 const { activateMembership } = require('../utils/membership');
 const { generateUniquePaymentPin } = require('../utils/payment-pin');
+const { emitRealtime } = require('../utils/realtime');
 const { resolveTenant, organizationFilter, gymFilter } = require('../utils/tenant');
 
 const MEMBERSHIP_FIELDS = 'status startsAt expiresAt planName price currency durationDays autoRenew';
@@ -66,6 +67,8 @@ async function requestReceptionPayment(req, res) {
     validationPin: pin,
   });
 
+  // Reception sees the request arrive; the PIN stays out of the event.
+  emitRealtime(req, 'payment-updated', { action: 'created', payment: serializePayment(payment.toObject()) }, [payment.user], { gymId: payment.gymId });
   res.status(201).json({ payment: serializePayment(payment.toObject(), { includePin: true }) });
 }
 
@@ -93,6 +96,7 @@ async function updatePaymentStatus(req, res) {
   const { status } = z.object({ status: z.enum(['paid', 'cancelled']) }).parse(req.body);
   const session = await Payment.startSession();
   let result;
+  let paymentRefs;
 
   try {
     await session.withTransaction(async () => {
@@ -107,11 +111,13 @@ async function updatePaymentStatus(req, res) {
       if (status === 'paid') await activateMembership(session, payment);
 
       result = serializePayment(payment.toObject());
+      paymentRefs = { user: payment.user, gymId: payment.gymId };
     });
   } finally {
     await session.endSession();
   }
 
+  emitRealtime(req, 'payment-updated', { action: 'updated', payment: result }, [paymentRefs.user], { gymId: paymentRefs.gymId });
   res.json({ payment: result });
 }
 

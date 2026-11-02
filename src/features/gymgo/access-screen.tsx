@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 import { api, getApiErrorMessage } from './api';
+import { accessResultCopy, useAccessResult, type AccessResult } from './client-live-updates';
 import { palette } from './theme';
 import { ActionButton, AppHeader, Notice, Page, Surface } from './ui';
 
@@ -14,6 +15,19 @@ export default function AccessScreen() {
   const [error, setError] = useState('');
   const [now, setNow] = useState(0);
   const [retryNumber, setRetryNumber] = useState(0);
+  const [result, setResult] = useState<AccessResult | null>(null);
+
+  // A scanned code is spent: show what the reader decided and get a fresh code right away.
+  useAccessResult((recorded) => {
+    setResult(recorded);
+    setRetryNumber((current) => current + 1);
+  });
+
+  useEffect(() => {
+    if (!result) return undefined;
+    const timer = setTimeout(() => setResult(null), 6000);
+    return () => clearTimeout(timer);
+  }, [result]);
 
   useEffect(() => {
     let isCurrent = true;
@@ -56,6 +70,12 @@ export default function AccessScreen() {
         <Text style={styles.statusText}>{remainingSeconds > 0 ? 'Código vigente' : 'Renovando código'}</Text>
         {remainingSeconds > 0 ? <Text style={styles.countdown}>{remainingSeconds}s</Text> : null}
       </View>
+
+      {result ? (
+        <Notice error={result.event === 'denied'}>
+          {`${accessResultCopy(result).title}. ${accessResultCopy(result).detail ?? ''}`}
+        </Notice>
+      ) : null}
 
       <Surface style={styles.qrPanel}>
         {qr && remainingSeconds > 0 ? (

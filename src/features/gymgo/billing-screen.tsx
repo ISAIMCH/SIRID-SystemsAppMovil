@@ -1,7 +1,9 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router, useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { connectSocket } from '@/services/socket';
 
 import AdminBillingScreen from './admin-billing-screen';
 import { api, getApiErrorMessage } from './api';
@@ -89,6 +91,18 @@ function ClientMembership() {
   // retryNumber is a manual "reintentar" trigger.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryNumber]));
+
+  // Reception confirms or cancels the payment from the dashboard: reload so the PIN and status update here.
+  useEffect(() => {
+    const socket = connectSocket();
+    const reload = () => setRetryNumber((current) => current + 1);
+    socket.on('payment-updated', reload);
+    socket.on('directory-updated', reload);
+    return () => {
+      socket.off('payment-updated', reload);
+      socket.off('directory-updated', reload);
+    };
+  }, []);
 
   const pendingPayment = payments.find((payment) => payment.status === 'pending');
   const membershipStatus = membershipDisplayStatus(membership);

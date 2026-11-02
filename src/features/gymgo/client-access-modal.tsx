@@ -5,6 +5,7 @@ import QRCode from 'react-native-qrcode-svg';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { api, getApiErrorMessage } from './api';
+import { accessResultCopy, useAccessResult, type AccessResult } from './client-live-updates';
 
 type QrResponse = { qrToken: string; expiresAt: string };
 
@@ -14,6 +15,20 @@ export default function ClientAccessModal({ visible, onClose }: { visible: boole
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [result, setResult] = useState<AccessResult | null>(null);
+
+  // A scanned code is spent: show what the reader decided and get a fresh code right away.
+  useAccessResult((recorded) => {
+    if (!visible) return;
+    setResult(recorded);
+    setRetry((value) => value + 1);
+  });
+
+  useEffect(() => {
+    if (!result) return undefined;
+    const timer = setTimeout(() => setResult(null), 6000);
+    return () => clearTimeout(timer);
+  }, [result]);
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -64,7 +79,8 @@ export default function ClientAccessModal({ visible, onClose }: { visible: boole
         </View>
 
         <View style={styles.center}>
-          <View style={styles.qrFrame}>
+          {result ? <AccessResultPanel result={result} /> : null}
+          <View style={[styles.qrFrame, result ? styles.qrFrameDimmed : null]}>
             {qr && remaining > 0 ? (
               <QRCode value={qr.qrToken} size={250} quietZone={12} color="#081009" backgroundColor="#FFFFFF" />
             ) : <ActivityIndicator color="#9BFF63" size="large" />}
@@ -93,6 +109,20 @@ export default function ClientAccessModal({ visible, onClose }: { visible: boole
   );
 }
 
+function AccessResultPanel({ result }: { result: AccessResult }) {
+  const copy = accessResultCopy(result);
+  const denied = result.event === 'denied';
+  return (
+    <View accessibilityRole="alert" accessibilityLabel={`${copy.title}. ${copy.detail ?? ''}`} style={[styles.result, denied && styles.resultDenied]}>
+      <MaterialIcons name={denied ? 'block' : result.event === 'check-in' ? 'login' : 'logout'} size={28} color={denied ? '#FF978B' : '#9BFF63'} />
+      <View style={styles.resultText}>
+        <Text style={styles.resultTitle}>{copy.title}</Text>
+        {copy.detail ? <Text style={styles.resultDetail}>{copy.detail}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#070B09', paddingHorizontal: 22, paddingTop: 10, paddingBottom: 18 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -102,6 +132,12 @@ const styles = StyleSheet.create({
   closeButton: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', backgroundColor: '#17211C', borderWidth: 1, borderColor: '#27342E' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 20 },
   qrFrame: { width: 290, height: 290, borderRadius: 28, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center', shadowColor: '#9BFF63', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.22, shadowRadius: 24, elevation: 10 },
+  qrFrameDimmed: { opacity: 0.35 },
+  result: { width: '100%', maxWidth: 340, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 18, borderWidth: 1, borderColor: '#2E5A3A', backgroundColor: '#12201A', padding: 14 },
+  resultDenied: { borderColor: '#5A2A26', backgroundColor: '#211311' },
+  resultText: { flex: 1, gap: 3 },
+  resultTitle: { color: '#F4F8F5', fontSize: 16, fontWeight: '900' },
+  resultDetail: { color: '#B8C4BC', fontSize: 13, lineHeight: 18 },
   status: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   statusDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: '#FF8A3D' },
   statusReady: { backgroundColor: '#9BFF63' },

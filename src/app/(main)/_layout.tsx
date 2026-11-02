@@ -2,6 +2,7 @@ import { Redirect } from 'expo-router';
 
 import AppTabs from '@/components/app-tabs';
 import { useAuth } from '@/features/gymgo/auth-context';
+import ClientLiveUpdates from '@/features/gymgo/client-live-updates';
 import HistoryRequestNotifier from '@/features/gymgo/history-request-notifier';
 
 export default function MainLayout() {
@@ -14,6 +15,8 @@ export default function MainLayout() {
     <>
       {user.role === 'Cliente' ? <HistoryRequestNotifier /> : null}
       <AppTabs key={activeGym?.id ?? 'no-gym'} />
+      {/* After the tabs so its banner draws on top of them. */}
+      {user.role === 'Cliente' ? <ClientLiveUpdates /> : null}
     </>
   );
 }
