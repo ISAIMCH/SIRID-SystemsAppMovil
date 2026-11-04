@@ -3,7 +3,7 @@ import { BlurView } from 'expo-blur';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, Text, TextInput, Vibration, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { connectSocket } from '../../services/socket';
@@ -11,6 +11,8 @@ import { api, getApiErrorMessage, getEquipmentTraffic } from './api';
 import { useAuth } from './auth-context';
 import { CoachRoutineList } from './coach-routine-list';
 import CoachTemplates from './coach-templates';
+import { ExerciseDetailModal } from './exercise-detail';
+import type { ExerciseDetailTarget } from './exercise-detail';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
 import { palette } from './theme';
@@ -215,7 +217,7 @@ export default function RoutinesScreen() {
   const [restTracking, setRestTracking] = useState<Record<string, RestTracking>>({});
   const [restTime, setRestTime] = useState<number | null>(null);
   const [weightUnit, setWeightUnit] = useState<'kg' | 'lbs'>('kg');
-  const [activeGif, setActiveGif] = useState<{ name: string; url: string } | null>(null);
+  const [activeGif, setActiveGif] = useState<ExerciseDetailTarget | null>(null);
   const [workoutReward, setWorkoutReward] = useState<WorkoutReward | null>(null);
   const [equipmentTraffic, setEquipmentTraffic] = useState<EquipmentTraffic[]>([]);
   const [smartOrderEnabled, setSmartOrderEnabled] = useState(true);
@@ -751,8 +753,8 @@ export default function RoutinesScreen() {
                               <View style={styles.flex}>
                                 <View style={styles.exerciseNameRow}>
                                   <Text style={styles.exerciseNameDark}>{exercise.name}</Text>
-                                  {exercise.gifUrl ? (
-                                    <Pressable accessibilityRole="button" accessibilityLabel={`Ver animación de ${exercise.name}`} onPress={() => setActiveGif({ name: exercise.name, url: exercise.gifUrl as string })}>
+                                  {exercise.gifUrl || exercise.catalogExerciseId ? (
+                                    <Pressable accessibilityRole="button" accessibilityLabel={`Ver cómo hacer ${exercise.name}`} onPress={() => setActiveGif({ name: exercise.name, gifUrl: exercise.gifUrl, catalogExerciseId: exercise.catalogExerciseId })}>
                                       <MaterialIcons name="play-circle-filled" size={22} color="#55D6D0" />
                                     </Pressable>
                                   ) : null}
@@ -848,19 +850,7 @@ export default function RoutinesScreen() {
         </>
       ) : !isLoading && !error && !routines.length ? <Notice>{isClient ? 'Aún no tienes rutinas asignadas.' : 'Tus clientes aún no tienen rutinas asignadas.'}</Notice> : null}
 
-      <Modal visible={Boolean(activeGif)} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setActiveGif(null)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text numberOfLines={2} style={styles.modalTitle}>{activeGif?.name}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Cerrar animación" onPress={() => setActiveGif(null)}>
-                <MaterialIcons name="close" size={24} color={palette.ink} />
-              </Pressable>
-            </View>
-            {activeGif ? <Image source={{ uri: activeGif.url }} resizeMode="contain" style={styles.gifImage} /> : null}
-          </View>
-        </View>
-      </Modal>
+      <ExerciseDetailModal exercise={activeGif} onClose={() => setActiveGif(null)} />
       <WorkoutFeedbackModal
         visible={Boolean(pendingWorkout)}
         perceivedExertion={perceivedExertion}
@@ -1199,7 +1189,6 @@ const styles = StyleSheet.create({
   exertionOptionText: { color: palette.ink, fontSize: 16, fontWeight: '800' },
   exertionOptionTextSelected: { color: palette.white },
   feedbackNotesInput: { minHeight: 100, borderRadius: 16, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.white, color: palette.ink, padding: 14, fontSize: 15, lineHeight: 21 },
-  gifImage: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#F2F4EE' },
   rewardScreen: { flex: 1, backgroundColor: '#070B09', justifyContent: 'space-between', paddingHorizontal: 24, paddingTop: 36, paddingBottom: 22 },
   rewardContent: { flex: 1, justifyContent: 'center', gap: 13 },
   rewardIcon: { width: 82, height: 82, borderRadius: 41, backgroundColor: '#A3FF681C', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },

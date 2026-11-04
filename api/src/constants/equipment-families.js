@@ -3,9 +3,11 @@ const EQUIPMENT_CATEGORIES = Object.freeze([
   'Barras',
   'Pesas / Mancuernas',
   'Máquinas',
+  'Smith',
   'Poleas / Cables',
   'Bandas',
   'Pesas rusas',
+  'Balones / Accesorios',
   'Otro',
 ]);
 
@@ -13,7 +15,7 @@ const EQUIPMENT_ALIASES = new Map([
   ['body weight', 'Sin equipo'], ['bodyweight', 'Sin equipo'], ['assisted', 'Sin equipo'],
   ['barbell', 'Barras'], ['ez barbell', 'Barras'], ['olympic barbell', 'Barras'], ['trap bar', 'Barras'],
   ['dumbbell', 'Pesas / Mancuernas'], ['weighted', 'Pesas / Mancuernas'],
-  ['leverage machine', 'Máquinas'], ['smith machine', 'Máquinas'], ['sled machine', 'Máquinas'],
+  ['leverage machine', 'Máquinas'], ['smith machine', 'Smith'], ['sled machine', 'Máquinas'],
   ['assisted machine', 'Máquinas'], ['stationary bike', 'Máquinas'], ['elliptical machine', 'Máquinas'],
   ['stepmill machine', 'Máquinas'], ['skierg machine', 'Máquinas'], ['upper body ergometer', 'Máquinas'],
   ['hammer', 'Máquinas'], ['cable', 'Poleas / Cables'], ['rope', 'Poleas / Cables'],
@@ -22,6 +24,9 @@ const EQUIPMENT_ALIASES = new Map([
   ['barra', 'Barras'], ['pesas / mancuernas', 'Pesas / Mancuernas'], ['mancuernas', 'Pesas / Mancuernas'],
   ['máquinas', 'Máquinas'], ['maquinas', 'Máquinas'], ['poleas / cables', 'Poleas / Cables'],
   ['poleas', 'Poleas / Cables'], ['bandas', 'Bandas'], ['pesas rusas', 'Pesas rusas'],
+  ['smith', 'Smith'], ['maquina smith', 'Smith'],
+  ['medicine ball', 'Balones / Accesorios'], ['stability ball', 'Balones / Accesorios'], ['bosu ball', 'Balones / Accesorios'],
+  ['roller', 'Balones / Accesorios'], ['wheel roller', 'Balones / Accesorios'], ['balones / accesorios', 'Balones / Accesorios'],
 ]);
 
 function normalizeText(value) {
@@ -34,6 +39,9 @@ function normalizeEquipmentCategory(value) {
   const direct = EQUIPMENT_ALIASES.get(normalized);
   if (direct) return direct;
   if (normalized.includes('body') || normalized.includes('corporal')) return 'Sin equipo';
+  if (normalized.includes('smith')) return 'Smith';
+  if (normalized.includes('ball') || normalized.includes('balon') || normalized.includes('bosu')
+    || normalized.includes('roller') || normalized.includes('rodillo')) return 'Balones / Accesorios';
   if (normalized.includes('bar') || normalized.includes('barra')) return 'Barras';
   if (normalized.includes('dumbbell') || normalized.includes('mancuern') || normalized.includes('pesa')) return 'Pesas / Mancuernas';
   if (normalized.includes('machine') || normalized.includes('maquina') || normalized.includes('prensa')
@@ -45,7 +53,7 @@ function normalizeEquipmentCategory(value) {
 }
 
 function inferEquipmentCategory(item = {}) {
-  const explicit = item.category ?? item.family;
+  const explicit = item.equipmentCategory ?? item.category ?? item.family;
   if (explicit) return normalizeEquipmentCategory(explicit);
   return normalizeEquipmentCategory(`${item.name ?? ''} ${item.zone ?? ''}`);
 }

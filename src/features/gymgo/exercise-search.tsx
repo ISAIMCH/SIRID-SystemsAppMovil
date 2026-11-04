@@ -1,11 +1,13 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
-import { api, createExercise, getApiErrorMessage, updateExercise } from './api';
+import { createExercise, getApiErrorMessage, getExerciseCatalog, updateExercise } from './api';
+import { ExerciseDetailModal } from './exercise-detail';
+import type { ExerciseDetailTarget } from './exercise-detail';
 import { EQUIPMENT_FAMILY_OPTIONS, normalizeEquipmentCategory } from './equipment-families';
 import type { EquipmentCategory } from './equipment-families';
 import { palette } from './theme';
@@ -117,17 +119,23 @@ function ExerciseFormModal({ visible, exercise, onClose, onSaved }: ExerciseForm
 }
 
 function initialMetricValues(exercises: CuratedExercise[]) {
-  return Object.fromEntries(exercises.map((exercise, order) => [exercise._id, {
-    name: exercise.name,
-    muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
-    equipment: normalizeEquipmentCategory(exercise.equipment),
-    bodyweight: normalizeEquipmentCategory(exercise.equipment) === 'Sin equipo',
-    metricType: normalizeMuscleGroup(exercise.muscleGroup) === 'Cardio' ? 'cardio' : 'strength',
-    videoUrl: exercise.videoUrl,
-    gifUrl: exercise.videoUrl,
-    reps: '10',
-    order,
-  }])) as Record<string, ExerciseSelection>;
+  return Object.fromEntries(exercises.map((exercise, order) => {
+    const isGlobal = exercise.source === 'global';
+    const metricType = exercise.metricType ?? (normalizeMuscleGroup(exercise.muscleGroup) === 'Cardio' ? 'cardio' : 'strength');
+    return [exercise._id, {
+      name: exercise.name,
+      muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
+      equipment: normalizeEquipmentCategory(exercise.equipment),
+      bodyweight: normalizeEquipmentCategory(exercise.equipment) === 'Sin equipo',
+      metricType,
+      // Global exercises keep a link to the catalog so the routine can show their steps later.
+      ...(isGlobal ? { catalogExerciseId: exercise._id } : {}),
+      videoUrl: exercise.videoUrl || undefined,
+      gifUrl: (isGlobal ? exercise.gifUrl : exercise.videoUrl) || undefined,
+      reps: metricType === 'cardio' ? undefined : '10',
+      order,
+    }];
+  })) as Record<string, ExerciseSelection>;
 }
 
 function MetricsModal({
@@ -206,7 +214,14 @@ function Field({ label, value, onChangeText }: { label: string; value: string; o
 export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, canManage = true }: ExerciseSearchProps) {
   const dark = useDarkUi();
   const [catalog, setCatalog] = useState<CuratedExercise[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [outOfService, setOutOfService] = useState<string[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [detail, setDetail] = useState<ExerciseDetailTarget | null>(null);
+  const requestId = useRef(0);
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [muscleFilter, setMuscleFilter] = useState('');
   const [equipmentFilter, setEquipmentFilter] = useState('');
   const [filter, setFilter] = useState<'muscle' | 'equipment' | null>(null);
@@ -217,22 +232,42 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  function loadCatalog() {
-    setLoading(true);
-    return api.get<{ exercises: CuratedExercise[] }>('/exercises').then((response) => setCatalog(response.data.exercises))
-      .catch((requestError) => setError(getApiErrorMessage(requestError, 'No se pudo cargar el catálogo de ejercicios.')))
-      .finally(() => setLoading(false));
-  }
-  // Loading the picker catalog is an external synchronization triggered by visibility.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { if (visible) void loadCatalog(); }, [visible]);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
 
-  const results = useMemo(() => catalog.filter((exercise) => {
-    const matchesQuery = !query.trim() || exercise.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase());
-    const matchesMuscle = !muscleFilter || normalizeMuscleGroup(exercise.muscleGroup) === muscleFilter;
-    const matchesEquipment = !equipmentFilter || normalizeEquipmentCategory(exercise.equipment) === equipmentFilter;
-    return matchesQuery && matchesMuscle && matchesEquipment;
-  }), [catalog, equipmentFilter, muscleFilter, query]);
+  // Search and filters run on the server; a newer request discards the answer of an older one.
+  const loadCatalog = useCallback(async (nextPage = 1) => {
+    const id = ++requestId.current;
+    if (nextPage === 1) setLoading(true); else setLoadingMore(true);
+    setError('');
+    try {
+      const result = await getExerciseCatalog({
+        q: debouncedQuery.length >= 2 ? debouncedQuery : undefined,
+        muscleGroup: muscleFilter || undefined,
+        category: equipmentFilter || undefined,
+        page: nextPage,
+      });
+      if (id !== requestId.current) return;
+      setCatalog((current) => nextPage === 1 ? result.exercises : [...current, ...result.exercises]);
+      setPage(result.page);
+      setHasMore(result.hasMore);
+      setOutOfService(result.outOfServiceCategories);
+    } catch (requestError) {
+      if (id === requestId.current) setError(getApiErrorMessage(requestError, 'No se pudo cargar el catálogo de ejercicios.'));
+    } finally {
+      if (id === requestId.current) { setLoading(false); setLoadingMore(false); }
+    }
+  }, [debouncedQuery, equipmentFilter, muscleFilter]);
+
+  // Loading the picker catalog is an external synchronization triggered by visibility and filters.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (visible) void loadCatalog(1); }, [visible, loadCatalog]);
+
+  function loadNextPage() {
+    if (hasMore && !loading && !loadingMore) void loadCatalog(page + 1);
+  }
 
   function toggle(exercise: CuratedExercise) {
     if (mode === 'single') { setSelected([exercise]); setMetricsVisible(true); return; }
@@ -267,12 +302,23 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {loading ? <ActivityIndicator color={palette.green} style={styles.loader} /> : (
-          <FlatList data={results} keyExtractor={(item) => item._id} contentContainerStyle={styles.list} renderItem={({ item }) => {
+          <FlatList data={catalog} keyExtractor={(item) => `${item.source ?? 'custom'}-${item._id}`} contentContainerStyle={styles.list}
+            onEndReached={loadNextPage} onEndReachedThreshold={0.4}
+            ListEmptyComponent={<Text style={styles.empty}>No hay ejercicios con estos filtros.</Text>}
+            ListFooterComponent={loadingMore ? <ActivityIndicator color={palette.green} style={styles.loader} /> : undefined}
+            renderItem={({ item }) => {
             const checked = selected.some((exercise) => exercise._id === item._id);
+            const category = normalizeEquipmentCategory(item.equipment);
+            const thumbnail = item.imageUrl || item.gifUrl || item.videoUrl;
             return <Pressable onPress={() => toggle(item)} style={styles.exerciseRow}>
-              {item.gifUrl || item.videoUrl ? <Image source={{ uri: item.gifUrl || item.videoUrl }} style={styles.thumbnail} /> : <View style={styles.thumbnail}><MaterialCommunityIcons name="dumbbell" size={23} color={palette.green} /></View>}
-              <View style={styles.flex}><Text numberOfLines={1} style={styles.exerciseName}>{item.name}</Text><Text style={styles.exerciseMeta}>{normalizeMuscleGroup(item.muscleGroup)} · {normalizeEquipmentCategory(item.equipment)}</Text></View>
-              {item.isCustom ? <Pressable onPress={() => { setFormExercise(item); setFormVisible(true); }} hitSlop={8}><MaterialCommunityIcons name="pencil-outline" size={19} color={palette.cyan} /></Pressable> : null}
+              {thumbnail ? <Image source={{ uri: thumbnail }} style={styles.thumbnail} /> : <View style={styles.thumbnail}><MaterialCommunityIcons name="dumbbell" size={23} color={palette.green} /></View>}
+              <View style={styles.flex}>
+                <Text numberOfLines={1} style={styles.exerciseName}>{item.name}</Text>
+                <Text style={styles.exerciseMeta}>{normalizeMuscleGroup(item.muscleGroup)} · {category}</Text>
+                {outOfService.includes(category) ? <Text style={styles.maintenance}>Equipo en mantenimiento</Text> : null}
+              </View>
+              {item.source === 'global' ? <Pressable accessibilityRole="button" accessibilityLabel={`Ver instrucciones de ${item.name}`} onPress={() => setDetail({ name: item.name, gifUrl: item.gifUrl, catalogExerciseId: item._id })} hitSlop={8}><MaterialCommunityIcons name="information-outline" size={20} color={palette.cyan} /></Pressable> : null}
+              {item.isCustom && canManage ? <Pressable onPress={() => { setFormExercise(item); setFormVisible(true); }} hitSlop={8}><MaterialCommunityIcons name="pencil-outline" size={19} color={palette.cyan} /></Pressable> : null}
               {mode === 'superset' ? <View style={[styles.check, checked && styles.checkActive]}>{checked ? <Text style={styles.checkText}>✓</Text> : null}</View> : <MaterialCommunityIcons name="chevron-right" size={21} color={palette.muted} />}
             </Pressable>;
           }} />)}
@@ -296,7 +342,8 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
           </Pressable>
         </Modal> : null}
         {metricsVisible ? <MetricsModal exercises={selected} equipment={equipment} onClose={() => setMetricsVisible(false)} onConfirm={confirm} /> : null}
-        {formVisible ? <ExerciseFormModal visible exercise={formExercise} onClose={() => setFormVisible(false)} onSaved={() => { setFormVisible(false); void loadCatalog(); }} /> : null}
+        {formVisible ? <ExerciseFormModal visible exercise={formExercise} onClose={() => setFormVisible(false)} onSaved={() => { setFormVisible(false); void loadCatalog(1); }} /> : null}
+        <ExerciseDetailModal exercise={detail} onClose={() => setDetail(null)} />
       </View>
     </Modal>
   );
@@ -314,7 +361,7 @@ const styles = StyleSheet.create({
   list: { gap: 8, paddingBottom: 90 }, exerciseRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, backgroundColor: '#1E1E1E', padding: 10 }, thumbnail: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#3A3A3A', alignItems: 'center', justifyContent: 'center' }, flex: { flex: 1 }, exerciseName: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' }, exerciseMeta: { color: '#A1A1AA', fontSize: 13, marginTop: 3 },
   check: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' }, checkActive: { backgroundColor: palette.green, borderColor: palette.green }, checkText: { color: palette.white, fontSize: 17, fontWeight: '800' },
   stickyButton: { position: 'absolute', left: 20, right: 20, bottom: 22, minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: palette.neon }, primaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: palette.neon, paddingHorizontal: 16 }, primaryText: { color: '#081009', fontSize: 14, fontWeight: '800' },
-  loader: { marginTop: 30 }, error: { color: palette.danger, fontSize: 12, marginBottom: 8 }, filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000066' }, filterSheet: { minHeight: 400, maxHeight: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: palette.white, padding: 18 }, darkFilterSheet: { backgroundColor: '#18181B' }, filterScrollContent: { flexGrow: 1, paddingBottom: 40 }, filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: palette.line }, filterOptionSelected: { backgroundColor: '#10FF8512' }, filterOptionText: { flex: 1, color: palette.ink, fontSize: 15 }, filterOptionTextSelected: { color: palette.neon, fontWeight: '800' },
+  loader: { marginTop: 30 }, empty: { color: palette.muted, fontSize: 13, textAlign: 'center', marginTop: 30 }, maintenance: { color: '#F5B84B', fontSize: 11, fontWeight: '700', marginTop: 3 }, error: { color: palette.danger, fontSize: 12, marginBottom: 8 }, filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000066' }, filterSheet: { minHeight: 400, maxHeight: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: palette.white, padding: 18 }, darkFilterSheet: { backgroundColor: '#18181B' }, filterScrollContent: { flexGrow: 1, paddingBottom: 40 }, filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: palette.line }, filterOptionSelected: { backgroundColor: '#10FF8512' }, filterOptionText: { flex: 1, color: palette.ink, fontSize: 15 }, filterOptionTextSelected: { color: palette.neon, fontWeight: '800' },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000099' }, formCard: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: palette.white, padding: 20 }, darkCard: { backgroundColor: '#18181B' }, modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }, modalTitle: { color: palette.ink, fontSize: 20, fontWeight: '800' }, darkText: { color: '#F4F8F5' }, subtitle: { color: palette.muted, fontSize: 12, marginTop: 3 }, form: { gap: 12, paddingBottom: 18 }, label: { color: palette.ink, fontSize: 13, fontWeight: '700' }, input: { minHeight: 48, borderWidth: 1, borderColor: palette.line, borderRadius: 13, color: palette.ink, paddingHorizontal: 12 }, darkInput: { color: '#F4F8F5', backgroundColor: '#1E1E1E', borderColor: '#333' },
   metricsCard: { maxHeight: '88%', borderRadius: 24, backgroundColor: palette.white, padding: 20, margin: 16 }, metricsList: { gap: 14, paddingBottom: 14 }, metricRow: { gap: 7, borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 14 }, metricTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' }, metricSubtitle: { color: palette.muted, fontSize: 12 }, row: { flexDirection: 'row', gap: 8 }, field: { flex: 1, gap: 4 }, fieldLabel: { color: palette.muted, fontSize: 10, fontWeight: '700' }, smallInput: { minHeight: 42, borderWidth: 1, borderColor: palette.line, borderRadius: 10, color: palette.ink, paddingHorizontal: 9, fontSize: 13 },
 });

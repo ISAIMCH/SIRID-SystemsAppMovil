@@ -2,7 +2,7 @@ const { z } = require('zod');
 const Equipment = require('../models/equipment.model');
 const MaintenanceReport = require('../models/maintenance-report.model');
 const HttpError = require('../utils/http-error');
-const { inferEquipmentCategory } = require('../constants/equipment-families');
+const { inferEquipmentCategory, normalizeEquipmentCategory } = require('../constants/equipment-families');
 const { resolveTenant, resolveTargetGym, gymFilter } = require('../utils/tenant');
 
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID de sucursal inválido.');
@@ -74,6 +74,7 @@ async function updateEquipment(req, res) {
   assertId(req.params.id);
   const { gymId: _gymId, ...input } = equipmentSchema.partial().parse(req.body);
   if (Object.keys(input).length === 0) throw new HttpError(400, 'Envía al menos un campo para actualizar.');
+  if (input.equipmentCategory) input.equipmentCategory = normalizeEquipmentCategory(input.equipmentCategory);
 
   const equipment = await Equipment.findOneAndUpdate({ _id: req.params.id, ...gymFilter(req), isDeleted: { $ne: true } }, input, {
     new: true,

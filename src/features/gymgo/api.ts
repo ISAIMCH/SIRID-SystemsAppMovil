@@ -1,7 +1,7 @@
 import { create, isAxiosError } from 'axios';
 
 import { readAccessToken } from './token-storage';
-import type { CustomExercisePayload, CuratedExercise, EquipmentTraffic, Promotion } from './types';
+import type { CatalogExerciseDetail, CustomExercisePayload, CuratedExercise, EquipmentTraffic, ExerciseCatalogPage, Promotion } from './types';
 
 export const apiOrigin = (process.env.EXPO_PUBLIC_API_URL ?? 'https://sirid-systemsappmovil.onrender.com')
   .replace(/\/+$/, '');
@@ -84,6 +84,18 @@ export function getApiErrorMessage(error: unknown, fallback: string) {
 export async function getEquipmentTraffic() {
   const response = await api.get<{ traffic: EquipmentTraffic[] }>('/inventory/traffic');
   return response.data.traffic;
+}
+
+export type ExerciseCatalogQuery = { q?: string; muscleGroup?: string; category?: string; page?: number };
+
+export async function getExerciseCatalog(params: ExerciseCatalogQuery) {
+  const response = await api.get<ExerciseCatalogPage>('/exercises/catalog', { params });
+  return response.data;
+}
+
+export async function getCatalogExercise(id: string) {
+  const response = await api.get<{ exercise: CatalogExerciseDetail }>(`/exercises/catalog/${id}`);
+  return response.data.exercise;
 }
 
 export async function createExercise(payload: CustomExercisePayload) {

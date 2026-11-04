@@ -118,3 +118,24 @@ test('no pausa nada para plantillas sin cliente ni rutinas pausadas', async (t) 
   await pauseOtherRoutines({ _id: 'r1', assignedTo: 'client1', status: 'paused' });
   assert.equal(updateMany.mock.callCount(), 0);
 });
+
+test('conserva el catalogExerciseId del ejercicio global y lo guarda en el modelo', () => {
+  const catalogExerciseId = '507f1f77bcf86cd799439033';
+  const input = validRoutine();
+  input.blocks[0].exercises[0].catalogExerciseId = catalogExerciseId;
+  const parsed = routineSchema.parse(input);
+  assert.equal(parsed.blocks[0].exercises[0].catalogExerciseId, catalogExerciseId);
+  const routine = new Routine({ ...parsed, organizationId: '507f1f77bcf86cd799439044', createdBy: '507f1f77bcf86cd799439055' });
+  assert.equal(String(routine.blocks[0].exercises[0].catalogExerciseId), catalogExerciseId);
+
+  input.blocks[0].exercises[0].catalogExerciseId = 'no-es-un-id';
+  assert.equal(routineSchema.safeParse(input).success, false);
+});
+
+test('rechaza un catalogExerciseId que ya no existe en el catálogo', async (t) => {
+  const ExerciseDictionary = require('../src/models/exercise-dictionary.model');
+  const { ensureEligibleBlocks } = require('../src/controllers/routine.controller');
+  t.mock.method(ExerciseDictionary, 'countDocuments', async () => 0);
+  const blocks = [{ exercises: [{ name: 'Flexiones', bodyweight: true, catalogExerciseId: '507f1f77bcf86cd799439033' }] }];
+  await assert.rejects(ensureEligibleBlocks(blocks, '507f1f77bcf86cd799439044'), /ya no existe/);
+});

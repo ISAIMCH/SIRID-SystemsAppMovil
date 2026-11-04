@@ -8,9 +8,11 @@ export const EQUIPMENT_FAMILY_OPTIONS = [
   { value: 'Barras', label: 'Barras', icon: 'weight-lifter' },
   { value: 'Pesas / Mancuernas', label: 'Pesas / Mancuernas', icon: 'dumbbell' },
   { value: 'Máquinas', label: 'Máquinas', icon: 'seat' },
+  { value: 'Smith', label: 'Máquina Smith', icon: 'weight' },
   { value: 'Poleas / Cables', label: 'Poleas / Cables', icon: 'cable-data' },
   { value: 'Bandas', label: 'Bandas', icon: 'bandage' },
   { value: 'Pesas rusas', label: 'Pesas rusas', icon: 'kettlebell' },
+  { value: 'Balones / Accesorios', label: 'Balones / Accesorios', icon: 'basketball' },
   { value: 'Otro', label: 'Otro', icon: 'dots-horizontal-circle-outline' },
 ] as const satisfies readonly { value: string; label: string; icon: EquipmentIconName }[];
 
@@ -39,6 +41,15 @@ const EQUIPMENT_ALIASES: Record<string, EquipmentCategory> = {
   band: 'Bandas',
   'pesas rusas': 'Pesas rusas',
   kettlebell: 'Pesas rusas',
+  smith: 'Smith',
+  'smith machine': 'Smith',
+  'máquina smith': 'Smith',
+  'balones / accesorios': 'Balones / Accesorios',
+  'medicine ball': 'Balones / Accesorios',
+  'stability ball': 'Balones / Accesorios',
+  'bosu ball': 'Balones / Accesorios',
+  roller: 'Balones / Accesorios',
+  'wheel roller': 'Balones / Accesorios',
   otro: 'Otro',
   other: 'Otro',
 };
@@ -49,6 +60,8 @@ export function normalizeEquipmentCategory(value: string | null | undefined): Eq
   const direct = EQUIPMENT_ALIASES[normalized];
   if (direct) return direct;
   if (normalized.includes('body') || normalized.includes('corporal')) return 'Sin equipo';
+  if (normalized.includes('smith')) return 'Smith';
+  if (['ball', 'balón', 'balon', 'bosu', 'roller', 'rodillo'].some((word) => normalized.includes(word))) return 'Balones / Accesorios';
   if (normalized.includes('bar')) return 'Barras';
   if (normalized.includes('mancuer') || normalized.includes('dumbbell')) return 'Pesas / Mancuernas';
   if (normalized.includes('máquina') || normalized.includes('maquina') || normalized.includes('machine')) return 'Máquinas';
