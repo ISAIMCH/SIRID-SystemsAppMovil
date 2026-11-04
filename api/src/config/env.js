@@ -21,6 +21,10 @@ const envSchema = z.object({
   R2_ACCESS_KEY_ID: z.string().trim().default(''),
   R2_SECRET_ACCESS_KEY: z.string().trim().default(''),
   R2_BUCKET: z.string().trim().default(''),
+  // PUBLIC R2 bucket for the global catalog's GIFs and thumbnails, and the URL it is served from
+  // (custom domain or r2.dev). Without them the catalog keeps loading media from the dataset on GitHub.
+  EXERCISES_MEDIA_BUCKET: z.string().trim().default(''),
+  EXERCISES_MEDIA_PUBLIC_URL: z.string().trim().default(''),
 }).refine(
   (env) => env.NODE_ENV !== 'production' || env.CORS_ORIGINS.trim() !== '',
   { path: ['CORS_ORIGINS'], message: 'es obligatorio en producción (orígenes web separados por comas).' },
@@ -30,6 +34,18 @@ const envSchema = z.object({
     return configured === R2_KEYS.length || (configured === 0 && env.NODE_ENV !== 'production');
   },
   { path: ['R2'], message: `${R2_KEYS.join(', ')} son obligatorias en producción y van juntas.` },
+).refine(
+  (env) => (env.EXERCISES_MEDIA_BUCKET === '') === (env.EXERCISES_MEDIA_PUBLIC_URL === ''),
+  { path: ['EXERCISES_MEDIA'], message: 'EXERCISES_MEDIA_BUCKET y EXERCISES_MEDIA_PUBLIC_URL van juntas.' },
+).refine(
+  (env) => env.EXERCISES_MEDIA_BUCKET === '' || env.R2_BUCKET !== '',
+  { path: ['EXERCISES_MEDIA_BUCKET'], message: 'requiere las credenciales R2_* configuradas.' },
+).refine(
+  (env) => env.EXERCISES_MEDIA_BUCKET === '' || env.EXERCISES_MEDIA_BUCKET !== env.R2_BUCKET,
+  { path: ['EXERCISES_MEDIA_BUCKET'], message: 'debe ser distinto de R2_BUCKET: el de medios es público y el de documentos privado.' },
+).refine(
+  (env) => env.EXERCISES_MEDIA_PUBLIC_URL === '' || /^https:\/\/[^\s/]+(\/\S*)?$/i.test(env.EXERCISES_MEDIA_PUBLIC_URL),
+  { path: ['EXERCISES_MEDIA_PUBLIC_URL'], message: 'debe ser una URL https (dominio propio o r2.dev).' },
 );
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -43,6 +59,10 @@ if (!parsedEnv.success) {
 
 if (parsedEnv.data.JWT_SECRET === parsedEnv.data.QR_TOKEN_SECRET) {
   throw new Error('JWT_SECRET y QR_TOKEN_SECRET deben ser diferentes.');
+}
+
+if (parsedEnv.data.NODE_ENV === 'production' && !parsedEnv.data.EXERCISES_MEDIA_BUCKET) {
+  console.warn('EXERCISES_MEDIA_BUCKET no está configurado: los GIFs del catálogo se sirven desde GitHub.');
 }
 
 module.exports = parsedEnv.data;

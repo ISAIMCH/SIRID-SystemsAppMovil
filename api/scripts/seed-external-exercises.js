@@ -1,6 +1,7 @@
 // Carga el catálogo global desde https://github.com/hasaneyldrm/exercises-dataset (datos MIT, medios © Gym visual).
 // Uso: npm run seed:exercises -- <ruta a exercises-dataset-main>   (o EXERCISES_DATASET_PATH; sin ruta lo descarga)
-// EXERCISES_MEDIA_BASE_URL cambia de dónde se sirven las imágenes y GIFs (p. ej. R2); por defecto, el repo en GitHub.
+// Guarda las rutas de los medios como claves ("videos/0001-x.gif"); la API arma la URL con EXERCISES_MEDIA_PUBLIC_URL
+// (bucket público de R2) o, sin ella, con el repo en GitHub. Sube los archivos antes con `npm run media:upload`.
 const fs = require('node:fs');
 const path = require('node:path');
 const dotenv = require('dotenv');
@@ -8,13 +9,13 @@ const mongoose = require('mongoose');
 const ExerciseDictionary = require('../src/models/exercise-dictionary.model');
 const { normalizeEquipmentCategory } = require('../src/constants/equipment-families');
 const { translateText } = require('./translate-dictionary');
+const { isMediaKey, toMediaKey } = require('../src/utils/catalog-media');
 
 const apiRoot = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(apiRoot, '.env') });
 dotenv.config({ path: path.resolve(apiRoot, '..', '.env') });
 
 const DATASET_URL = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/data/exercises.json';
-const DEFAULT_MEDIA_BASE_URL = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/';
 const attribution = '© Gym visual — https://gymvisual.com/';
 const muscleAliases = {
   abdominals: 'Abdominales', abs: 'Abdominales', waist: 'Abdominales', abductors: 'Abductores', adductors: 'Aductores',
@@ -41,16 +42,15 @@ function canonical(value, aliases, fallback) {
   return aliases[key] ?? fallback;
 }
 
-function mediaUrl(relativePath, baseUrl = process.env.EXERCISES_MEDIA_BASE_URL || DEFAULT_MEDIA_BASE_URL) {
-  const value = String(relativePath ?? '').trim();
-  if (!value) return undefined;
-  if (/^https?:\/\//i.test(value)) return value;
-  return new URL(value.replace(/^\/+/, ''), baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString();
+// A bucket key, or an absolute URL when the record points somewhere else.
+function mediaKey(value) {
+  const key = toMediaKey(value);
+  return key && (isMediaKey(key) || /^https?:\/\//i.test(key)) ? key : undefined;
 }
 
-function mapExercise(record, baseUrl) {
+function mapExercise(record) {
   if (record?.id === undefined || record?.id === null || !record?.name) return null;
-  const gifUrl = mediaUrl(record.gif_url ?? record.gifUrl, baseUrl);
+  const gifUrl = mediaKey(record.gif_url ?? record.gifUrl);
   if (!gifUrl) return null;
   const targetMuscle = canonical(record.target ?? record.body_part ?? record.bodyPart, muscleAliases, 'Abdominales');
   const secondaryMuscles = [...new Set((record.secondary_muscles ?? [])
@@ -63,7 +63,7 @@ function mapExercise(record, baseUrl) {
     secondaryMuscles,
     equipment: normalizeEquipmentCategory(record.equipment),
     gifUrl,
-    imageUrl: mediaUrl(record.image, baseUrl),
+    imageUrl: mediaKey(record.image),
     mediaId: record.media_id ? String(record.media_id) : undefined,
     steps: (record.instruction_steps?.es ?? []).map((step) => String(step).trim()).filter(Boolean),
     metricType: targetMuscle === 'Cardio' ? 'cardio' : 'strength',
@@ -123,5 +123,5 @@ async function main() {
   }
 }
 
-module.exports = { mapExercise, fetchDataset, buildOperations, mediaUrl };
+module.exports = { mapExercise, fetchDataset, resolveDatasetFile, buildOperations, mediaKey };
 if (require.main === module) main().catch((error) => { console.error(`External exercise seed failed: ${error.message}`); process.exitCode = 1; });

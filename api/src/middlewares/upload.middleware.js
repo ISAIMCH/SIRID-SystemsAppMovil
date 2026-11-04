@@ -1,6 +1,7 @@
 const multer = require('multer');
 const HttpError = require('../utils/http-error');
 const { ALLOWED_MIME_TYPES } = require('../utils/documents');
+const { MAX_MEDIA_SIZE } = require('../utils/catalog-media');
 
 // Files stay in memory until they are checked and sent to R2; nothing is written to the server's disk.
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -27,4 +28,11 @@ const documentUpload = multer({
   limits: { files: 1, fileSize: MAX_FILE_SIZE },
 });
 
-module.exports = { MAX_FILE_SIZE, pdfUpload, documentUpload };
+// GIFs and thumbnails for the global catalog (SIRID's editor); the real type is checked in utils/catalog-media.js.
+const catalogMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: allowOnly(['image/gif', 'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/octet-stream'], 'Solo se permiten GIF, JPG, PNG o WebP.'),
+  limits: { files: 1, fileSize: MAX_MEDIA_SIZE },
+});
+
+module.exports = { MAX_FILE_SIZE, pdfUpload, documentUpload, catalogMediaUpload };

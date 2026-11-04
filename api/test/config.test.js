@@ -39,6 +39,17 @@ test('R2 variables go together and are required in production', () => {
   assert.equal(loadEnvIn({ ...production, ...r2 }).status, 0);
 });
 
+test('catalog media variables go together, need R2 and a separate https bucket', () => {
+  const r2 = { R2_ACCOUNT_ID: 'account', R2_ACCESS_KEY_ID: 'key', R2_SECRET_ACCESS_KEY: 'secret', R2_BUCKET: 'gymgo-docs' };
+  const media = { EXERCISES_MEDIA_BUCKET: 'gymgo-media', EXERCISES_MEDIA_PUBLIC_URL: 'https://media.gymgo.mx' };
+  const dev = { NODE_ENV: 'development' };
+  assert.equal(loadEnvIn({ ...dev, ...r2, ...media }).status, 0);
+  assert.match(loadEnvIn({ ...dev, ...r2, EXERCISES_MEDIA_BUCKET: 'gymgo-media' }).stderr, /van juntas/);
+  assert.match(loadEnvIn({ ...dev, ...media }).stderr, /credenciales R2/);
+  assert.match(loadEnvIn({ ...dev, ...r2, ...media, EXERCISES_MEDIA_BUCKET: 'gymgo-docs' }).stderr, /distinto de R2_BUCKET/);
+  assert.match(loadEnvIn({ ...dev, ...r2, ...media, EXERCISES_MEDIA_PUBLIC_URL: 'http://media.gymgo.mx' }).stderr, /https/);
+});
+
 test('body limit is 1 MB except on routes that accept images', async (t) => {
   const server = app.listen(0);
   t.after(() => server.close());

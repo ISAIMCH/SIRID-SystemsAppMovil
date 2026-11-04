@@ -31,7 +31,9 @@ function errorHandler(error, req, res, next) {
     message = 'El identificador o valor enviado no es válido.';
   } else if (error instanceof multer.MulterError) {
     statusCode = 400;
-    message = UPLOAD_ERRORS[error.code] ?? 'El archivo enviado no es válido.';
+    message = error.code === 'LIMIT_FILE_SIZE' && req.originalUrl?.includes('/platform/exercises/media')
+      ? 'El archivo supera el tamaño máximo de 5 MB.'
+      : UPLOAD_ERRORS[error.code] ?? 'El archivo enviado no es válido.';
   } else if (error.type === 'entity.too.large') {
     message = 'El contenido enviado es demasiado grande.';
   } else if (error.type === 'entity.parse.failed') {

@@ -6,6 +6,7 @@ const HttpError = require('../utils/http-error');
 const { normalizeMuscleGroup } = require('../constants/muscle-groups');
 const { EQUIPMENT_CATEGORIES, inferEquipmentCategory, normalizeEquipmentCategory } = require('../constants/equipment-families');
 const { gymFilter, organizationFilter } = require('../utils/tenant');
+const { resolveMediaUrl } = require('../utils/catalog-media');
 
 const BODYWEIGHT = 'Sin equipo';
 const LIST_FIELDS = 'name targetMuscle equipment gifUrl imageUrl metricType';
@@ -54,6 +55,7 @@ async function searchExercises(req, res) {
   res.json({
     exercises: exercises.map((exercise) => ({
       ...exercise,
+      gifUrl: resolveMediaUrl(exercise.gifUrl),
       targetMuscle: normalizeMuscleGroup(exercise.targetMuscle),
     })),
     availableEquipmentCategories: unlocked,
@@ -75,8 +77,8 @@ function serializeGlobal(exercise) {
     name: exercise.name,
     muscleGroup: normalizeMuscleGroup(exercise.targetMuscle),
     equipment: exercise.equipment,
-    gifUrl: exercise.gifUrl,
-    imageUrl: exercise.imageUrl ?? null,
+    gifUrl: resolveMediaUrl(exercise.gifUrl),
+    imageUrl: resolveMediaUrl(exercise.imageUrl),
     videoUrl: null,
     metricType: exercise.metricType,
     source: 'global',

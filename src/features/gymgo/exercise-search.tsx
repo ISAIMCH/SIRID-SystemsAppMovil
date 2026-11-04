@@ -1,7 +1,8 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, Image, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 
@@ -311,7 +312,7 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
             const category = normalizeEquipmentCategory(item.equipment);
             const thumbnail = item.imageUrl || item.gifUrl || item.videoUrl;
             return <Pressable onPress={() => toggle(item)} style={styles.exerciseRow}>
-              {thumbnail ? <Image source={{ uri: thumbnail }} style={styles.thumbnail} /> : <View style={styles.thumbnail}><MaterialCommunityIcons name="dumbbell" size={23} color={palette.green} /></View>}
+              {thumbnail ? <Image source={{ uri: thumbnail }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={item._id} autoplay={false} transition={120} /> : <View style={styles.thumbnail}><MaterialCommunityIcons name="dumbbell" size={23} color={palette.green} /></View>}
               <View style={styles.flex}>
                 <Text numberOfLines={1} style={styles.exerciseName}>{item.name}</Text>
                 <Text style={styles.exerciseMeta}>{normalizeMuscleGroup(item.muscleGroup)} · {category}</Text>
