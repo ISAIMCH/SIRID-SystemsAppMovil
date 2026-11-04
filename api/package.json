@@ -12,13 +12,13 @@
     "dev": "nodemon src/server.js",
     "test": "node --test",
     "seed": "node seed.js",
-    "import:exercises": "node scripts/import-exercises.js",
     "seed:exercises": "node scripts/seed-external-exercises.js",
     "translate:exercises": "node scripts/translate-dictionary.js",
     "migrate:payments": "node scripts/migrate-payment-statuses.js",
     "migrate:tenancy": "node scripts/migrate-tenancy.js",
     "migrate:documents": "node scripts/migrate-documents.js",
     "migrate:history": "node scripts/migrate-history-isolation.js",
+    "migrate:equipment-categories": "node scripts/migrate-equipment-categories.js",
     "platform:admin": "node scripts/set-platform-admin.js"
   },
   "dependencies": {

@@ -16,7 +16,7 @@ async function searchExercises(req, res) {
     availableOnly: z.preprocess((value) => value === undefined ? undefined : value === 'true', z.boolean().optional()),
   }).parse(req.query);
 
-  const query = {};
+  const query = { isActive: { $ne: false } };
   if (q.length >= 2) query.name = new RegExp(escapeRegex(q), 'i');
   if (muscleGroup) query.targetMuscle = new RegExp(`^${escapeRegex(muscleGroup)}$`, 'i');
   // Exercises are suggested from the equipment of the request's gyms.

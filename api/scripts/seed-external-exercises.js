@@ -1,18 +1,20 @@
+// Carga el catálogo global desde https://github.com/hasaneyldrm/exercises-dataset (datos MIT, medios © Gym visual).
+// Uso: npm run seed:exercises -- <ruta a exercises-dataset-main>   (o EXERCISES_DATASET_PATH; sin ruta lo descarga)
+// EXERCISES_MEDIA_BASE_URL cambia de dónde se sirven las imágenes y GIFs (p. ej. R2); por defecto, el repo en GitHub.
 const fs = require('node:fs');
 const path = require('node:path');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 const ExerciseDictionary = require('../src/models/exercise-dictionary.model');
+const { normalizeEquipmentCategory } = require('../src/constants/equipment-families');
 const { translateText } = require('./translate-dictionary');
 
 const apiRoot = path.resolve(__dirname, '..');
 dotenv.config({ path: path.join(apiRoot, '.env') });
 dotenv.config({ path: path.resolve(apiRoot, '..', '.env') });
 
-const DATASET_URLS = [
-  'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/master/exercises.json',
-  'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/exercises.json',
-];
+const DATASET_URL = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/data/exercises.json';
+const DEFAULT_MEDIA_BASE_URL = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/';
 const attribution = '© Gym visual — https://gymvisual.com/';
 const muscleAliases = {
   abdominals: 'Abdominales', abs: 'Abdominales', waist: 'Abdominales', abductors: 'Abductores', adductors: 'Aductores',
@@ -24,14 +26,14 @@ const muscleAliases = {
   'lower back': 'Lumbar', pectorals: 'Pecho', chest: 'Pecho', traps: 'Trapecio', trapezius: 'Trapecio',
   'levator scapulae': 'Trapecio', triceps: 'Tríceps',
 };
-const equipmentAliases = {
-  'body weight': 'Sin equipo', assisted: 'Sin equipo', barbell: 'Barras', 'ez barbell': 'Barras',
-  'olympic barbell': 'Barras', 'trap bar': 'Barras', dumbbell: 'Pesas / Mancuernas', weighted: 'Pesas / Mancuernas',
-  'leverage machine': 'Máquinas', 'smith machine': 'Máquinas', 'sled machine': 'Máquinas',
-  'assisted machine': 'Máquinas', 'stationary bike': 'Máquinas', 'elliptical machine': 'Máquinas',
-  'stepmill machine': 'Máquinas', 'skierg machine': 'Máquinas', 'upper body ergometer': 'Máquinas', hammer: 'Máquinas',
-  cable: 'Poleas / Cables', rope: 'Poleas / Cables', band: 'Bandas', 'resistance band': 'Bandas',
-  kettlebell: 'Pesas rusas',
+// Secondary muscles are display labels, so they may be more specific than MUSCLE_GROUPS.
+const secondaryMuscleLabels = {
+  ...muscleAliases,
+  'hip flexors': 'Flexores de cadera', obliques: 'Oblicuos', rhomboids: 'Romboides', 'ankle stabilizers': 'Estabilizadores del tobillo',
+  core: 'Core', 'rear deltoids': 'Deltoides posterior', ankles: 'Tobillos', feet: 'Pies', brachialis: 'Braquial', groin: 'Ingle',
+  wrists: 'Muñecas', 'rotator cuff': 'Manguito rotador', 'upper chest': 'Pecho superior', 'wrist flexors': 'Flexores de muñeca',
+  'wrist extensors': 'Extensores de muñeca', 'grip muscles': 'Agarre', 'lower abs': 'Abdomen bajo', 'inner thighs': 'Aductores',
+  hands: 'Manos', shins: 'Tibiales',
 };
 
 function canonical(value, aliases, fallback) {
@@ -39,63 +41,87 @@ function canonical(value, aliases, fallback) {
   return aliases[key] ?? fallback;
 }
 
-function gifUrl(record) {
-  const original = String(record.gifUrl ?? record.gif_url ?? '').trim();
-  if (/^https:\/\/raw\.githubusercontent\.com\//i.test(original)) return original;
-  if (original && !/d205bpvrqc9yn1\.cloudfront\.net/i.test(original)) return original;
-  if (record.id === undefined || record.id === null) return original;
-  return `https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/master/exercises/${String(record.id).padStart(4, '0')}.gif`;
+function mediaUrl(relativePath, baseUrl = process.env.EXERCISES_MEDIA_BASE_URL || DEFAULT_MEDIA_BASE_URL) {
+  const value = String(relativePath ?? '').trim();
+  if (!value) return undefined;
+  if (/^https?:\/\//i.test(value)) return value;
+  return new URL(value.replace(/^\/+/, ''), baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`).toString();
 }
 
-function mapExercise(record) {
+function mapExercise(record, baseUrl) {
   if (record?.id === undefined || record?.id === null || !record?.name) return null;
-  const targetMuscle = canonical(record.target ?? record.bodyPart ?? record.body_part, muscleAliases, 'Abdominales');
+  const gifUrl = mediaUrl(record.gif_url ?? record.gifUrl, baseUrl);
+  if (!gifUrl) return null;
+  const targetMuscle = canonical(record.target ?? record.body_part ?? record.bodyPart, muscleAliases, 'Abdominales');
+  const secondaryMuscles = [...new Set((record.secondary_muscles ?? [])
+    .map((muscle) => canonical(muscle, secondaryMuscleLabels, translateText(String(muscle).trim())))
+    .filter((muscle) => muscle && muscle !== targetMuscle))];
   return {
     sourceId: String(record.id),
     name: translateText(String(record.name).trim()),
     targetMuscle,
-    equipment: canonical(record.equipment, equipmentAliases, 'Otro'),
-    gifUrl: gifUrl(record),
+    secondaryMuscles,
+    equipment: normalizeEquipmentCategory(record.equipment),
+    gifUrl,
+    imageUrl: mediaUrl(record.image, baseUrl),
+    mediaId: record.media_id ? String(record.media_id) : undefined,
+    steps: (record.instruction_steps?.es ?? []).map((step) => String(step).trim()).filter(Boolean),
     metricType: targetMuscle === 'Cardio' ? 'cardio' : 'strength',
     attribution,
   };
 }
 
-async function fetchDataset(localPath = process.env.EXERCISES_DATASET_PATH) {
-  if (localPath) {
-    return JSON.parse(fs.readFileSync(path.resolve(localPath), 'utf8'));
-  }
-  for (const url of DATASET_URLS) {
-    try {
-      const response = await fetch(url);
-      if (response.ok) return response.json();
-    } catch {
-      // Try the next branch before reporting a network failure.
-    }
-  }
-  throw new Error('No se pudo descargar el dataset. Define EXERCISES_DATASET_PATH para usar un JSON local.');
+// Accepts the dataset folder (as downloaded from GitHub) or the exercises.json file itself.
+function resolveDatasetFile(localPath) {
+  const resolved = path.resolve(localPath);
+  return fs.statSync(resolved).isDirectory() ? path.join(resolved, 'data', 'exercises.json') : resolved;
+}
+
+async function fetchDataset(localPath) {
+  if (localPath) return JSON.parse(fs.readFileSync(resolveDatasetFile(localPath), 'utf8'));
+  const response = await fetch(DATASET_URL);
+  if (!response.ok) throw new Error(`No se pudo descargar el dataset (${response.status}). Pasa la ruta de la carpeta descargada.`);
+  return response.json();
+}
+
+// Builds upserts that leave hand-edited fields (lockedFields) and platform-made records untouched.
+function buildOperations(exercises, existingBySourceId) {
+  return exercises.flatMap((exercise) => {
+    const existing = existingBySourceId.get(exercise.sourceId);
+    if (existing?.origin === 'sirid') return [];
+    const update = { ...exercise };
+    for (const field of existing?.lockedFields ?? []) delete update[field];
+    return [{
+      updateOne: {
+        filter: { sourceId: exercise.sourceId },
+        update: { $set: update, $setOnInsert: { origin: 'dataset', isActive: true } },
+        upsert: true,
+      },
+    }];
+  });
 }
 
 async function main() {
   if (!process.env.MONGO_URI || process.env.MONGO_URI.includes('<')) throw new Error('MONGO_URI no está definida o todavía contiene un placeholder.');
   const records = await fetchDataset(process.argv[2] ?? process.env.EXERCISES_DATASET_PATH);
   if (!Array.isArray(records) || !records.length) throw new Error('El dataset no contiene registros de ejercicios.');
-  const operations = records.map(mapExercise).filter(Boolean).map((exercise) => ({
-    updateOne: { filter: { sourceId: exercise.sourceId }, update: { $set: exercise }, upsert: true },
-  }));
-  if (!operations.length) throw new Error('No se encontraron registros válidos para importar.');
+  const exercises = records.map((record) => mapExercise(record)).filter(Boolean);
+  if (!exercises.length) throw new Error('No se encontraron registros válidos para importar.');
   await mongoose.connect(process.env.MONGO_URI, { serverSelectionTimeoutMS: 15000 });
   try {
+    const existing = await ExerciseDictionary.find({ sourceId: { $in: exercises.map((exercise) => exercise.sourceId) } })
+      .select('sourceId origin lockedFields').lean();
+    const operations = buildOperations(exercises, new Map(existing.map((item) => [item.sourceId, item])));
     let inserted = 0; let modified = 0;
     for (let index = 0; index < operations.length; index += 500) {
       const result = await ExerciseDictionary.bulkWrite(operations.slice(index, index + 500), { ordered: false });
       inserted += result.upsertedCount; modified += result.modifiedCount;
     }
-    console.log(`External exercise seed complete: ${operations.length} processed, ${inserted} inserted, ${modified} updated.`);
+    console.log(`External exercise seed complete: ${operations.length} processed, ${inserted} inserted, ${modified} updated, ${exercises.length - operations.length} skipped.`);
   } finally {
     await mongoose.disconnect();
   }
 }
 
-module.exports = { mapExercise, fetchDataset };
+module.exports = { mapExercise, fetchDataset, buildOperations, mediaUrl };
 if (require.main === module) main().catch((error) => { console.error(`External exercise seed failed: ${error.message}`); process.exitCode = 1; });
