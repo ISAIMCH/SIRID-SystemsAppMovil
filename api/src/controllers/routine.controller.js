@@ -3,6 +3,7 @@ const { z } = require('zod');
 const Routine = require('../models/routine.model');
 const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
+const ExerciseDictionary = require('../models/exercise-dictionary.model');
 const HttpError = require('../utils/http-error');
 const { emitRealtime, emitToStaff } = require('../utils/realtime');
 const { resolveTenant, organizationFilter } = require('../utils/tenant');
@@ -15,6 +16,7 @@ const exerciseSchema = z.object({
   muscleGroup: z.enum(MUSCLE_GROUPS),
   equipment: z.string().trim().max(100).optional(),
   equipmentId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
+  catalogExerciseId: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   gifUrl: z.string().url().max(500).optional(),
   videoUrl: z.string().url().max(500).optional(),
   bodyweight: z.boolean().default(false),
@@ -274,6 +276,10 @@ async function ensureEligibleBlocks(blocks, organizationId) {
     : [];
   if (equipment.length !== equipmentIds.length) {
     throw new HttpError(400, 'Selecciona equipos existentes que no estén fuera de servicio en el inventario.');
+  }
+  const catalogIds = [...new Set(exercises.filter((exercise) => exercise.catalogExerciseId).map((exercise) => String(exercise.catalogExerciseId)))];
+  if (catalogIds.length && await ExerciseDictionary.countDocuments({ _id: { $in: catalogIds } }) !== catalogIds.length) {
+    throw new HttpError(400, 'Uno de los ejercicios del catálogo ya no existe.');
   }
   const byId = new Map(equipment.map((item) => [String(item._id), {
     ...item,

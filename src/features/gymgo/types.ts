@@ -65,6 +65,7 @@ export type Exercise = {
     type: 'strength' | 'cardio';
   };
   equipment?: string;
+  catalogExerciseId?: string;
   gifUrl?: string;
   videoUrl?: string;
   bodyweight?: boolean;
@@ -96,8 +97,27 @@ export type CuratedExercise = {
   muscleGroup: MuscleGroup;
   equipment: string | null;
   gifUrl?: string | null;
-  videoUrl: string;
+  imageUrl?: string | null;
+  videoUrl: string | null;
+  metricType?: 'strength' | 'cardio';
+  source?: 'global' | 'custom';
   isCustom?: boolean;
+};
+
+export type ExerciseCatalogPage = {
+  exercises: CuratedExercise[];
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+  unlockedCategories: string[];
+  outOfServiceCategories: string[];
+};
+
+export type CatalogExerciseDetail = CuratedExercise & {
+  secondaryMuscles: string[];
+  steps: string[];
+  attribution: string | null;
 };
 
 export type CustomExercisePayload = {

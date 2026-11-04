@@ -6,6 +6,7 @@ const exerciseSchema = new mongoose.Schema({
   muscleGroup: { type: String, required: true, enum: MUSCLE_GROUPS },
   equipment: { type: String, trim: true, maxlength: 100 },
   equipmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Equipment' },
+  catalogExerciseId: { type: mongoose.Schema.Types.ObjectId, ref: 'ExerciseDictionary' },
   gifUrl: { type: String, trim: true, maxlength: 500 },
   bodyweight: { type: Boolean, default: false },
   metricType: { type: String, enum: ['strength', 'cardio'], default: 'strength', required: true },
