@@ -5,6 +5,7 @@ const User = require('../models/user.model');
 const Equipment = require('../models/equipment.model');
 const ExerciseDictionary = require('../models/exercise-dictionary.model');
 const HttpError = require('../utils/http-error');
+const { resolveMediaUrl } = require('../utils/catalog-media');
 const { emitRealtime, emitToStaff } = require('../utils/realtime');
 const { resolveTenant, organizationFilter } = require('../utils/tenant');
 const { findClientMember, findOrganizationMember, isAssignedCoach, coachClientIds } = require('../utils/members');
@@ -242,6 +243,8 @@ function routineResponse(routine) {
     exercises: block.exercises.map((exercise) => ({
       ...exercise,
       muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
+      // Snapshots saved with the dataset's GitHub URL are served from the media bucket once it exists.
+      ...(exercise.gifUrl ? { gifUrl: resolveMediaUrl(exercise.gifUrl) } : {}),
     })),
   }));
   const exercises = blocks.flatMap((block) => block.exercises.map((exercise) => ({

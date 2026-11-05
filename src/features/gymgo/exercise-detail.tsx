@@ -1,6 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { getApiErrorMessage, getCatalogExercise } from './api';
 import { palette } from './theme';
@@ -45,7 +46,7 @@ export function ExerciseDetailModal({ exercise, onClose }: { exercise: ExerciseD
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.body}>
-            {gifUrl ? <Image source={{ uri: gifUrl }} resizeMode="contain" style={styles.gif} /> : null}
+            {gifUrl ? <Image source={{ uri: gifUrl }} contentFit="contain" cachePolicy="memory-disk" transition={150} accessibilityLabel={`Animación de ${exercise?.name ?? 'ejercicio'}`} style={styles.gif} /> : null}
             {current ? (
               <>
                 <View style={styles.chips}>

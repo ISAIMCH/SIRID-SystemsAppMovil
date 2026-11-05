@@ -9,15 +9,21 @@ const env = () => require('../config/env');
 
 let client = null;
 
-function getClient() {
-  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = env();
-  if (!R2_BUCKET) throw new HttpError(503, 'El almacenamiento de documentos no está configurado.');
+// One client for both buckets (documents and catalog media); credentials come from the same R2 account.
+function r2Client() {
+  const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = env();
+  if (!R2_ACCOUNT_ID) throw new HttpError(503, 'Cloudflare R2 no está configurado.');
   client ??= new S3Client({
     region: 'auto',
     endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
   });
   return client;
+}
+
+function getClient() {
+  if (!env().R2_BUCKET) throw new HttpError(503, 'El almacenamiento de documentos no está configurado.');
+  return r2Client();
 }
 
 async function putObject(key, body, contentType) {
@@ -52,4 +58,4 @@ async function signedUrl(key, { filename, contentType, download = false }) {
   return { url, expiresAt: new Date(Date.now() + SIGNED_URL_TTL_SECONDS * 1000) };
 }
 
-module.exports = { SIGNED_URL_TTL_SECONDS, putObject, getObjectStream, deleteObject, signedUrl, contentDisposition };
+module.exports = { SIGNED_URL_TTL_SECONDS, r2Client, putObject, getObjectStream, deleteObject, signedUrl, contentDisposition };

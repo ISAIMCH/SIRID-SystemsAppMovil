@@ -13,6 +13,7 @@
     "test": "node --test",
     "seed": "node seed.js",
     "seed:exercises": "node scripts/seed-external-exercises.js",
+    "media:upload": "node scripts/upload-exercise-media.js",
     "translate:exercises": "node scripts/translate-dictionary.js",
     "migrate:payments": "node scripts/migrate-payment-statuses.js",
     "migrate:tenancy": "node scripts/migrate-tenancy.js",

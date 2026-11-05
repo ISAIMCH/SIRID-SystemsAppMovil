@@ -4,6 +4,7 @@ const ExerciseDictionary = require('../models/exercise-dictionary.model');
 const HttpError = require('../utils/http-error');
 const { MUSCLE_GROUPS, normalizeMuscleGroup } = require('../constants/muscle-groups');
 const { EQUIPMENT_CATEGORIES } = require('../constants/equipment-families');
+const { isMediaKey, resolveMediaUrl, toMediaKey, uploadPlatformMedia } = require('../utils/catalog-media');
 
 // Fields SIRID can edit; editing one on a dataset record locks it so the seed script keeps the hand-made value.
 const EDITABLE_FIELDS = ['name', 'targetMuscle', 'secondaryMuscles', 'equipment', 'gifUrl', 'imageUrl', 'steps', 'metricType'];
@@ -12,7 +13,9 @@ function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const url = z.string().trim().url().max(500);
+// An external http(s) URL or a key in the media bucket; our own public URLs are stored back as keys.
+const url = z.string().trim().max(500).transform(toMediaKey)
+  .refine((value) => isMediaKey(value) || /^https?:\/\/\S+$/i.test(value), 'Debe ser una URL http(s) o un archivo subido al catálogo.');
 // No defaults here: a partial update must not reset the fields it does not send.
 const fields = {
   name: z.string().trim().min(2).max(160),
@@ -58,8 +61,8 @@ function serialize(exercise) {
     targetMuscle: normalizeMuscleGroup(exercise.targetMuscle),
     secondaryMuscles: exercise.secondaryMuscles ?? [],
     equipment: exercise.equipment,
-    gifUrl: exercise.gifUrl,
-    imageUrl: exercise.imageUrl ?? null,
+    gifUrl: resolveMediaUrl(exercise.gifUrl),
+    imageUrl: resolveMediaUrl(exercise.imageUrl),
     steps: exercise.steps ?? [],
     metricType: exercise.metricType,
     attribution: exercise.attribution ?? null,
@@ -123,4 +126,13 @@ async function updateExercise(req, res) {
   res.json({ exercise: serialize(exercise.toObject()) });
 }
 
-module.exports = { EDITABLE_FIELDS, listExercises, createExercise, updateExercise };
+const mediaKindSchema = z.object({ kind: z.enum(['gif', 'image']) });
+
+// Uploads a GIF or thumbnail to the public bucket; the editor then saves the returned key in gifUrl/imageUrl.
+async function uploadMedia(req, res) {
+  const { kind } = mediaKindSchema.parse(req.body ?? {});
+  if (!req.file) throw new HttpError(400, 'Adjunta un archivo en el campo file.');
+  res.status(201).json(await uploadPlatformMedia(req.file, kind));
+}
+
+module.exports = { EDITABLE_FIELDS, listExercises, createExercise, updateExercise, uploadMedia };

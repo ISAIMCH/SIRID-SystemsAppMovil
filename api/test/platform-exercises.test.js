@@ -71,3 +71,21 @@ test('la lista del editor incluye inactivos salvo que se filtre', async (t) => {
   assert.deepEqual(filters[0], {});
   assert.deepEqual(filters[1], { isActive: false, origin: 'sirid' });
 });
+
+test('guarda como clave los medios del bucket y devuelve la URL pública', async (t) => {
+  const previous = process.env.EXERCISES_MEDIA_PUBLIC_URL;
+  process.env.EXERCISES_MEDIA_PUBLIC_URL = 'https://media.gymgo.mx';
+  t.after(() => {
+    if (previous === undefined) delete process.env.EXERCISES_MEDIA_PUBLIC_URL;
+    else process.env.EXERCISES_MEDIA_PUBLIC_URL = previous;
+  });
+  let created;
+  t.mock.method(ExerciseDictionary, 'create', async (value) => { created = value; return new ExerciseDictionary(value); });
+  const res = response();
+  await createExercise({ body: { ...valid, gifUrl: 'https://media.gymgo.mx/sirid/videos/a.gif', imageUrl: 'sirid/images/a.png' } }, res);
+  assert.equal(created.gifUrl, 'sirid/videos/a.gif');
+  assert.equal(created.imageUrl, 'sirid/images/a.png');
+  assert.equal(res.body.exercise.gifUrl, 'https://media.gymgo.mx/sirid/videos/a.gif');
+  assert.equal(res.body.exercise.imageUrl, 'https://media.gymgo.mx/sirid/images/a.png');
+  await assert.rejects(createExercise({ body: { ...valid, gifUrl: '../.env' } }, response()));
+});

@@ -17,14 +17,15 @@ const record = {
 };
 
 test('maps a dataset record into the global catalog shape', () => {
-  const exercise = mapExercise(record, 'https://media.example.com/catalog');
+  const exercise = mapExercise(record);
   assert.equal(exercise.sourceId, '0001');
   assert.equal(exercise.name, 'Press de banca con mancuerna');
   assert.equal(exercise.targetMuscle, 'Pecho');
   assert.deepEqual(exercise.secondaryMuscles, ['Tríceps', 'Deltoides posterior']);
   assert.equal(exercise.equipment, 'Pesas / Mancuernas');
-  assert.equal(exercise.gifUrl, 'https://media.example.com/catalog/videos/0001-2gPfomN.gif');
-  assert.equal(exercise.imageUrl, 'https://media.example.com/catalog/images/0001-2gPfomN.jpg');
+  // Keys, not URLs: the API builds the URL from the media bucket when serving.
+  assert.equal(exercise.gifUrl, 'videos/0001-2gPfomN.gif');
+  assert.equal(exercise.imageUrl, 'images/0001-2gPfomN.jpg');
   assert.deepEqual(exercise.steps, ['Túmbate en el banco.', 'Empuja hacia arriba.']);
   assert.equal(exercise.metricType, 'strength');
 });
@@ -32,6 +33,8 @@ test('maps a dataset record into the global catalog shape', () => {
 test('skips records without id, name or animation', () => {
   assert.equal(mapExercise({ ...record, id: undefined }), null);
   assert.equal(mapExercise({ ...record, gif_url: '' }), null);
+  assert.equal(mapExercise({ ...record, gif_url: '../secrets.gif' }), null);
+  assert.equal(mapExercise({ ...record, gif_url: 'https://cdn.example.com/a.gif' }).gifUrl, 'https://cdn.example.com/a.gif');
 });
 
 test('maps every dataset equipment to a category a gym can register', () => {
