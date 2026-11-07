@@ -430,6 +430,8 @@ function serializeDirectoryUser(user, member, gymIds, { canEditCredentials = tru
     availableTrainingDays: user.availableTrainingDays,
     observations: member?.observations ?? '',
     membership,
+    // When the person joined this organization (the dashboard counts new signups and growth with it).
+    joinedAt: member?.createdAt ?? null,
     assignedCoach: coach ? {
       id: String(coach._id),
       name: coach.name,

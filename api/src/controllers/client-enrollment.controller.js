@@ -6,10 +6,10 @@ const HttpError = require('../utils/http-error');
 const withTransaction = require('../utils/transaction');
 const { addClientToGym } = require('../utils/join-gym');
 const { emitToOrganizationStaff } = require('../utils/realtime');
-const { belongsOnlyTo, findClientMember } = require('../utils/members');
+const { assertCoachInGyms, belongsOnlyTo, findClientMember } = require('../utils/members');
 const { resolveTargetGym, resolveTenant } = require('../utils/tenant');
 const { createActivation, isActivationUsable, verifyActivationCode, unusablePassword } = require('../utils/client-activation');
-const { authResponse, credentialsSchema, emitDirectoryUpdate, membershipsByUser, phoneSchema, serializeDirectoryUser, DIRECTORY_FIELDS } = require('./auth.controller');
+const { authResponse, credentialsSchema, emitDirectoryUpdate, membershipsByUser, phoneSchema, registrationSchema, serializeDirectoryUser, DIRECTORY_FIELDS } = require('./auth.controller');
 
 const objectIdSchema = z.string().regex(/^[a-f\d]{24}$/i, 'ID inválido.');
 
@@ -30,6 +30,14 @@ function activationBody({ code, expiresAt }) {
   return { code, expiresAt };
 }
 
+// The coach and the notes belong to the client's place in this organization, so they apply to new and linked accounts.
+async function saveMemberProfile(userId, organizationId, input, session) {
+  const profile = {};
+  if (input.assignedCoach) profile.assignedCoach = input.assignedCoach;
+  if (input.observations) profile.observations = input.observations;
+  if (Object.keys(profile).length) await OrganizationMember.updateOne({ userId, organizationId }, { $set: profile }, { session });
+}
+
 // Reception registers a client who came without the app, so a plan can be sold right away. A new account gets a
 // one-time activation code for the app; an existing GymGo account is linked and its holder sees a notice in the app.
 async function enrollClient(req, res) {
@@ -40,7 +48,14 @@ async function enrollClient(req, res) {
     phone: phoneSchema,
     // The client's home gym; defaults to the selected or main gym.
     gymId: z.union([objectIdSchema, z.literal('')]).transform((value) => value || undefined).optional(),
+    // Optional training profile, as in the Admin's user form.
+    goal: registrationSchema.shape.goal,
+    experienceLevel: registrationSchema.shape.experienceLevel,
+    availableTrainingDays: registrationSchema.shape.availableTrainingDays,
+    observations: registrationSchema.shape.observations,
+    assignedCoach: z.union([objectIdSchema, z.literal('')]).transform((value) => value || undefined).optional(),
   }).parse(req.body);
+  if (input.assignedCoach) await assertCoachInGyms(req, input.assignedCoach);
   const { organizationId } = resolveTenant(req);
   const gym = await Gym.findOne({ _id: resolveTargetGym(req, input.gymId), organizationId, isActive: true });
   if (!gym) throw new HttpError(404, 'Sucursal no encontrada.');
@@ -53,6 +68,9 @@ async function enrollClient(req, res) {
       lastName: input.lastName,
       email: input.email,
       phone: input.phone,
+      goal: input.goal,
+      experienceLevel: input.experienceLevel || undefined,
+      availableTrainingDays: input.availableTrainingDays ?? [],
       role: 'Cliente',
       membership: { status: 'pending' },
       pendingActivation: true,
@@ -62,6 +80,7 @@ async function enrollClient(req, res) {
     await withTransaction(async (session) => {
       await user.save({ session });
       await addClientToGym(user._id, gym, { session });
+      await saveMemberProfile(user._id, organizationId, input, session);
     });
     emitDirectoryUpdate(req, 'created', user._id);
     return res.status(201).json({ user: await directoryEntry(req, user._id), linkedExisting: false, activation: activationBody(activation) });
@@ -74,8 +93,10 @@ async function enrollClient(req, res) {
 
   // An account another gym opened and nobody activated yet gets a new code; the previous one stops working.
   const activation = existing.pendingActivation ? await createActivation() : null;
+  // The account's own profile (goal, level, days) stays as its holder left it.
   await withTransaction(async (session) => {
     await addClientToGym(existing._id, gym, { session });
+    await saveMemberProfile(existing._id, organizationId, input, session);
     if (activation) {
       await User.updateOne({ _id: existing._id }, { $set: { activation: activation.activation } }, { session });
     } else {
