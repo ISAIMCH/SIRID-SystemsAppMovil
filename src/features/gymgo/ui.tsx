@@ -1,5 +1,5 @@
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '@/hooks/haptics';
 import { createContext, useContext, type PropsWithChildren, type ReactNode } from 'react';
 import {
     Pressable,

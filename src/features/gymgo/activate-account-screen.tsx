@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '@/hooks/haptics';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  type TextInputInstance,
   View,
 } from 'react-native';
 
@@ -41,6 +42,9 @@ export default function ActivateAccountScreen() {
   const [focused, setFocused] = useState<Field | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const codeRef = useRef<TextInputInstance>(null);
+  const passwordRef = useRef<TextInputInstance>(null);
+  const confirmationRef = useRef<TextInputInstance>(null);
 
   async function submit() {
     setError('');
@@ -81,8 +85,9 @@ export default function ActivateAccountScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined} enabled={Platform.OS === 'ios'}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bounces={false}>
+    // iOS only, same as the login: Android already pans the window to the focused input.
+    <KeyboardAvoidingView style={styles.screen} behavior="padding" enabled={Platform.OS === 'ios'}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bounces={false}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={goBack} hitSlop={12} style={styles.back}>
           <MaterialIcons name="arrow-back" size={22} color={primaryText} />
         </Pressable>
@@ -93,6 +98,8 @@ export default function ActivateAccountScreen() {
             Tu gimnasio ya te registró. Usa el correo que diste en recepción, el código que te entregaron y crea tu contraseña.
           </Text>
 
+          {/* Autofill is off: the pair of new-password fields only invites the system to fill and move between them.
+              The code is uppercased on submit, not per keystroke, so Android never rewrites text the keyboard is composing. */}
           <View style={styles.form}>
             <LoginInput
               icon="mail-outline"
@@ -102,24 +109,33 @@ export default function ActivateAccountScreen() {
               onFocus={() => setFocused('email')}
               focused={focused === 'email'}
               autoCapitalize="none"
-              autoComplete="email"
+              autoCorrect={false}
+              autoComplete="off"
+              importantForAutofill="no"
               keyboardType="email-address"
               returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => codeRef.current?.focus()}
             />
             <LoginInput
+              inputRef={codeRef}
               icon="confirmation-number"
               label="Código de activación"
               value={code}
-              onChangeText={(value) => setCode(value.toUpperCase())}
+              onChangeText={setCode}
               onFocus={() => setFocused('code')}
               focused={focused === 'code'}
               autoCapitalize="characters"
               autoCorrect={false}
               autoComplete="off"
+              importantForAutofill="no"
               maxLength={12}
               returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => passwordRef.current?.focus()}
             />
             <LoginInput
+              inputRef={passwordRef}
               icon="vpn-key"
               label="Contraseña nueva (mínimo 10)"
               value={password}
@@ -127,11 +143,15 @@ export default function ActivateAccountScreen() {
               onFocus={() => setFocused('password')}
               focused={focused === 'password'}
               autoCapitalize="none"
-              autoComplete="new-password"
+              autoComplete="off"
+              importantForAutofill="no"
               secureTextEntry
               returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => confirmationRef.current?.focus()}
             />
             <LoginInput
+              inputRef={confirmationRef}
               icon="vpn-key"
               label="Repite la contraseña"
               value={confirmation}
@@ -139,7 +159,8 @@ export default function ActivateAccountScreen() {
               onFocus={() => setFocused('confirmation')}
               focused={focused === 'confirmation'}
               autoCapitalize="none"
-              autoComplete="new-password"
+              autoComplete="off"
+              importantForAutofill="no"
               secureTextEntry
               onSubmitEditing={() => void submit()}
               returnKeyType="done"
