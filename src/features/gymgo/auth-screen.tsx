@@ -1,5 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '@/hooks/haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -14,6 +14,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    type TextInputInstance,
     View,
 } from 'react-native';
 
@@ -116,7 +117,7 @@ export default function AuthScreen() {
               icon="fitness-center"
               label="Correo electrónico"
               value={email}
-              onChangeText={(value) => { setEmail(value); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              onChangeText={setEmail}
               onFocus={() => setEmailFocused(true)}
               focused={emailFocused}
               autoCapitalize="none"
@@ -128,7 +129,7 @@ export default function AuthScreen() {
               icon="vpn-key"
               label="Contraseña"
               value={password}
-              onChangeText={(value) => { setPassword(value); void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
+              onChangeText={setPassword}
               onFocus={() => setPasswordFocused(true)}
               focused={passwordFocused}
               autoCapitalize="none"
@@ -162,11 +163,11 @@ export default function AuthScreen() {
   );
 }
 
-export function LoginInput({ icon, label, focused, ...props }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; focused: boolean } & React.ComponentProps<typeof TextInput>) {
+export function LoginInput({ icon, label, focused, inputRef, ...props }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; focused: boolean; inputRef?: React.Ref<TextInputInstance> } & React.ComponentProps<typeof TextInput>) {
   return (
     <View style={[styles.inputShell, focused && styles.inputFocused]}>
       <MaterialIcons name={icon} size={18} color={focused ? neon : mutedText} />
-      <TextInput {...props} placeholder={label} placeholderTextColor={mutedText} style={styles.input} />
+      <TextInput {...props} ref={inputRef} placeholder={label} placeholderTextColor={mutedText} style={styles.input} />
     </View>
   );
 }
@@ -230,7 +231,10 @@ const styles = StyleSheet.create({
   subtitle: { color: mutedText, fontSize: 14, lineHeight: 21, maxWidth: 330 },
   form: { gap: 12, marginTop: 4 },
   inputShell: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#1E1E1E', borderRadius: 14, backgroundColor: 'rgba(13, 16, 14, 0.8)', paddingHorizontal: 16 },
-  inputFocused: { borderColor: neon, shadowColor: neon, shadowOpacity: 0.2, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
+  // Only the border color may change on focus. A shadowColor turns the shell into a native "stacking context", so
+  // toggling it re-parents the TextInput's native view on Android; the input loses focus, Android hands it to
+  // another input, that one re-parents too... an endless focus loop between the fields.
+  inputFocused: { borderColor: neon },
   input: { flex: 1, color: primaryText, fontSize: 15, minHeight: 54 },
   error: { color: '#FF8A80', fontSize: 12, lineHeight: 18 },
   submitButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
