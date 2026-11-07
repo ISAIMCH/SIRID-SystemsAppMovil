@@ -56,8 +56,8 @@ function RootNavigator() {
     <>
       <StatusBar style="dark" />
       {/* Here rather than in (main), so an account that has not joined any gym hears about invitations too. */}
-      {user ? <StaffInvitationNotifier key={user.id} /> : null}
-      {user ? <EnrollmentNotifier key={user.id} /> : null}
+      {user ? <StaffInvitationNotifier key={`staff-${user.id}`} /> : null}
+      {user ? <EnrollmentNotifier key={`enrollment-${user.id}`} /> : null}
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.paper } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />

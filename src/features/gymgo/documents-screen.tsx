@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '@/hooks/haptics';
 import * as ImagePicker from 'expo-image-picker';
 import { Redirect, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';

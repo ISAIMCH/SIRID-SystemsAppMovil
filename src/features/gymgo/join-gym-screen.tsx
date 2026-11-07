@@ -1,5 +1,5 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
+import * as Haptics from '@/hooks/haptics';
 import { Redirect, router, useLocalSearchParams, type Href } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
