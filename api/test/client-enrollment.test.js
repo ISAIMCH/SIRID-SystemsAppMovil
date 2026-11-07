@@ -249,3 +249,59 @@ test('an account waiting for activation is told so at login instead of a wrong-p
     restore();
   }
 });
+
+test('reception can register the training profile with the client: goal, level and days on the account, notes in the gym', async () => {
+  const { writes, restore } = stubEnrollment();
+  try {
+    const fields = { ...body, goal: 'Bajar de peso', experienceLevel: 'principiante', availableTrainingDays: [1, 3, 5], observations: 'Lesión de rodilla' };
+    const result = await call(controller.enrollClient, receptionRequest(fields));
+    assert.equal(result.error, undefined);
+    assert.equal(result.status, 201);
+    const [user] = writes.saved;
+    assert.equal(user.goal, 'Bajar de peso');
+    assert.equal(user.experienceLevel, 'principiante');
+    assert.deepEqual([...user.availableTrainingDays], [1, 3, 5]);
+    assert.deepEqual(writes.memberUpdates.map((update) => update.$set), [{ observations: 'Lesión de rodilla' }]);
+  } finally {
+    restore();
+  }
+});
+
+test('an empty level is left unset instead of failing the enrollment', async () => {
+  const { writes, restore } = stubEnrollment();
+  try {
+    const result = await call(controller.enrollClient, receptionRequest({ ...body, experienceLevel: '', assignedCoach: '' }));
+    assert.equal(result.error, undefined);
+    assert.equal(writes.saved[0].experienceLevel, undefined);
+    assert.equal(writes.memberUpdates.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('a coach who is not staff of the gym cannot be assigned at enrollment', async () => {
+  const { writes, restore } = stubEnrollment();
+  const restoreExists = stub(User, 'exists', async () => null);
+  try {
+    const result = await call(controller.enrollClient, receptionRequest({ ...body, assignedCoach: String(id()) }));
+    assert.equal(result.error?.status ?? result.error?.statusCode, 400);
+    assert.equal(writes.saved.length, 0);
+  } finally {
+    restoreExists();
+    restore();
+  }
+});
+
+test('linking an existing account keeps its own profile and only saves the gym notes', async () => {
+  const existing = { _id: id(), email: body.email, pendingActivation: false, goal: 'Su objetivo' };
+  const { writes, restore } = stubEnrollment({ existing });
+  try {
+    const fields = { ...body, goal: 'Otro objetivo', observations: 'Prefiere mañanas' };
+    const result = await call(controller.enrollClient, receptionRequest(fields));
+    assert.equal(result.status, 201);
+    assert.equal(writes.saved.length, 0);
+    assert.deepEqual(writes.memberUpdates[0].$set, { observations: 'Prefiere mañanas' });
+  } finally {
+    restore();
+  }
+});
