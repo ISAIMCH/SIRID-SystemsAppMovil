@@ -2,6 +2,41 @@ const mongoose = require('mongoose');
 
 const ORGANIZATION_STATUSES = ['pending', 'active', 'rejected', 'suspended'];
 const DEFAULT_GYM_LIMIT = 3;
+const SUBSCRIPTION_STATUSES = ['trialing', 'active', 'past_due', 'canceled', 'incomplete', 'manual'];
+
+// The owner's GymGo plan (see utils/subscription.js). Separate from `status`, which is SIRID's own decision:
+// an active organization whose trial or payment lapsed keeps working for a grace period, then closes.
+// Organizations created before billing have no subscription and keep every feature.
+const subscriptionSchema = new mongoose.Schema({
+  planCode: { type: String, trim: true, lowercase: true },
+  status: { type: String, enum: SUBSCRIPTION_STATUSES },
+  interval: { type: String, enum: ['month', 'year'] },
+  provider: { type: String, enum: ['stripe', 'paypal', 'manual'] },
+  // card renews with Stripe each period; oxxo, paypal and manual pay one period at a time.
+  method: { type: String, enum: ['card', 'oxxo', 'paypal', 'manual'] },
+  renews: { type: Boolean, default: false },
+  trialEndsAt: Date,
+  currentPeriodEnd: Date,
+  // When the trial or the last paid period ended, or a renewal failed; the grace period counts from here.
+  lapsedAt: Date,
+  stripeCustomerId: { type: String, index: true },
+  stripeSubscriptionId: { type: String, index: true },
+  // An OXXO voucher waiting to be paid at the store.
+  pendingPayment: {
+    type: new mongoose.Schema({
+      method: { type: String, enum: ['oxxo'] },
+      reference: String,
+      planCode: String,
+      interval: String,
+      voucherUrl: String,
+      expiresAt: Date,
+    }, { _id: false }),
+    default: undefined,
+  },
+  // One free trial per email and per phone.
+  trialEmail: { type: String, lowercase: true, trim: true, index: true },
+  trialPhone: { type: String, trim: true, index: true },
+}, { _id: false });
 
 const organizationSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
@@ -17,6 +52,7 @@ const organizationSchema = new mongoose.Schema({
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   // How many active gyms the owner may open; SIRID raises it from the platform panel.
   gymLimit: { type: Number, min: 1, max: 100, default: DEFAULT_GYM_LIMIT },
+  subscription: { type: subscriptionSchema, default: undefined },
   // Owns every request that does not carry an organization yet (etapa 2 removes this fallback).
   isDefault: { type: Boolean, default: false },
 }, { timestamps: true });
@@ -26,3 +62,4 @@ organizationSchema.index({ isDefault: 1 }, { unique: true, partialFilterExpressi
 module.exports = mongoose.model('Organization', organizationSchema);
 module.exports.ORGANIZATION_STATUSES = ORGANIZATION_STATUSES;
 module.exports.DEFAULT_GYM_LIMIT = DEFAULT_GYM_LIMIT;
+module.exports.SUBSCRIPTION_STATUSES = SUBSCRIPTION_STATUSES;

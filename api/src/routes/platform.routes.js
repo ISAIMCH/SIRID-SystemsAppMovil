@@ -12,6 +12,7 @@ router.use(authenticate, requirePlatformAdmin);
 router.get('/organizations', asyncHandler(controller.listOrganizations));
 router.get('/organizations/:id', asyncHandler(controller.getOrganization));
 router.patch('/organizations/:id/status', asyncHandler(controller.updateOrganizationStatus));
+router.patch('/organizations/:id/subscription', asyncHandler(controller.updateOrganizationSubscription));
 router.patch('/organizations/:id', asyncHandler(controller.updateOrganization));
 
 // The global exercise catalog every gym builds routines from.
