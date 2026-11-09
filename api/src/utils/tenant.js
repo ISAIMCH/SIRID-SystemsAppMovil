@@ -4,6 +4,7 @@ const Gym = require('../models/gym.model');
 const OrganizationMember = require('../models/organization-member.model');
 const Membership = require('../models/membership.model');
 const HttpError = require('./http-error');
+const { subscriptionState, subscriptionLapsedError } = require('./subscription');
 
 // Roles that routes authorize, strongest first. Propietario and Gerente act as the 'Admin' the dashboard knows.
 const ROUTE_ROLES = ['Admin', 'Recepcion', 'Coach', 'Cliente'];
@@ -128,15 +129,21 @@ async function loadTenantContext(user, requestedGymId = null) {
   }
 
   const [organization, gyms, membership] = await Promise.all([
-    Organization.findById(member.organizationId).select('name status statusReason').lean(),
+    Organization.findById(member.organizationId).select('name status statusReason subscription gymLimit').lean(),
     Gym.find({ organizationId: member.organizationId, isActive: true }).sort({ createdAt: 1 }).select('_id name').lean(),
     member.roles.includes('Cliente')
       ? Membership.findOne({ userId: user._id, organizationId: member.organizationId }).select('homeGymId').lean()
       : null,
   ]);
-  if (organization?.status !== 'active' && !user.isPlatformAdmin) throw organizationInactiveError(organization, { includeReason: member.roles.includes('Propietario') });
+  const isOwner = member.roles.includes('Propietario');
+  if (organization?.status !== 'active' && !user.isPlatformAdmin) throw organizationInactiveError(organization, { includeReason: isOwner });
 
-  return { organizationId: member.organizationId, organization, member, gyms, homeGymId: membership?.homeGymId ?? null, requestedGymId };
+  // Unpaid plan: the owner can only pay (see authenticate); staff and clients keep working until the grace ends.
+  const { phase } = subscriptionState(organization);
+  if (phase === 'expired' && !isOwner && !user.isPlatformAdmin) throw subscriptionLapsedError(organization);
+  const billingOnly = phase !== 'ok' && isOwner && !user.isPlatformAdmin;
+
+  return { organizationId: member.organizationId, organization, member, gyms, homeGymId: membership?.homeGymId ?? null, requestedGymId, billingOnly };
 }
 
 function resolveTenant(req) {

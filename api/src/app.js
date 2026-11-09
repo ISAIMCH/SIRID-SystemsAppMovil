@@ -30,6 +30,9 @@ const organizationRoutes = require('./routes/organization.routes');
 const platformRoutes = require('./routes/platform.routes');
 const historyShareRoutes = require('./routes/history-share.routes');
 const staffInvitationRoutes = require('./routes/staff-invitation.routes');
+const { router: subscriptionRoutes, publicRouter: saasPlanRoutes } = require('./routes/subscription.routes');
+const subscriptionController = require('./controllers/subscription.controller');
+const asyncHandler = require('./utils/async-handler');
 const { notFound, errorHandler } = require('./middlewares/error.middleware');
 
 const app = express();
@@ -49,14 +52,18 @@ app.use(cors({
     return callback(error);
   },
 }));
-// Rate limits run before body parsing so rejected requests are never read.
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false }));
+const STRIPE_WEBHOOK_PATH = '/api/subscription/webhook';
+// Rate limits run before body parsing so rejected requests are never read. Stripe's webhook is signed and
+// arrives in bursts from shared IPs, so the general limit doesn't apply to it.
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: 'draft-8', legacyHeaders: false, skip: (req) => req.path === STRIPE_WEBHOOK_PATH }));
 app.use('/api/auth/login', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/activate', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/auth/bootstrap-admin', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false }));
 app.use('/api/organizations/signup', rateLimit({ windowMs: 60 * 60 * 1000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false }));
 // Join codes are short, so guessing them is rate limited like the login.
 app.use('/api/gyms/join', rateLimit({ windowMs: 15 * 60 * 1000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false }));
+// Stripe signs the raw bytes it sends, so its webhook reads the body before the JSON parser does.
+app.post(STRIPE_WEBHOOK_PATH, express.raw({ type: 'application/json', limit: '1mb' }), asyncHandler(subscriptionController.stripeWebhook));
 // Only routes that accept base64 images (up to 4 MB) get a larger body limit.
 app.use(['/api/store', '/api/inventory', '/api/products', '/api/promotions', '/api/equipment'], express.json({ limit: '6mb' }));
 app.use(express.json({ limit: '1mb' }));
@@ -91,6 +98,8 @@ app.use('/api/organizations', organizationRoutes);
 app.use('/api/platform', platformRoutes);
 app.use('/api/history-shares', historyShareRoutes);
 app.use('/api/staff-invitations', staffInvitationRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/saas-plans', saasPlanRoutes);
 app.use('/api', accessRoutes);
 app.use(notFound);
 app.use(errorHandler);

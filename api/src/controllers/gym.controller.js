@@ -85,7 +85,7 @@ async function createGym(req, res) {
   ]);
   const gymLimit = organization?.gymLimit ?? Organization.DEFAULT_GYM_LIMIT;
   if (activeGyms >= gymLimit) {
-    throw new HttpError(409, `Tu plan permite ${gymLimit} sucursales. Contacta a SIRID para ampliarlo.`, { code: 'gym_limit_reached', gymLimit });
+    throw new HttpError(409, `Tu plan permite ${gymLimit} sucursales. Cambia de plan o contacta a SIRID para ampliarlo.`, { code: 'gym_limit_reached', gymLimit });
   }
   if (await Gym.exists({ organizationId, name: input.name })) throw new HttpError(409, 'Ya existe una sucursal con ese nombre.');
 

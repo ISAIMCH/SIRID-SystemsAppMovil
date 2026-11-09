@@ -4,6 +4,7 @@ const env = require('../config/env');
 const HttpError = require('../utils/http-error');
 const asyncHandler = require('../utils/async-handler');
 const { ROUTE_ROLES, loadTenantContext, resolveAccess } = require('../utils/tenant');
+const { subscriptionRequiredError } = require('../utils/subscription');
 
 async function resolveUserFromToken(token) {
   if (!token) throw new HttpError(401, 'Se requiere autenticación.');
@@ -22,6 +23,14 @@ async function resolveUserFromToken(token) {
   return user;
 }
 
+// What an owner with an unpaid plan can still reach: the session and the billing routes.
+const BILLING_ONLY_PATHS = ['/api/subscription', '/api/auth/me'];
+
+function allowedWhileUnpaid(req) {
+  const path = req.originalUrl.split('?')[0];
+  return BILLING_ONLY_PATHS.some((allowed) => path === allowed || path.startsWith(`${allowed}/`));
+}
+
 // Besides the user, loads the organization and gyms the request works in (see utils/tenant.js).
 const authenticate = asyncHandler(async (req, res, next) => {
   const authorization = req.get('authorization');
@@ -34,6 +43,7 @@ const authenticate = asyncHandler(async (req, res, next) => {
   req.user = await resolveUserFromToken(token);
   const requestedGymId = req.get('x-gym-id') || null;
   req.tenantContext = await loadTenantContext(req.user, requestedGymId);
+  if (req.tenantContext?.billingOnly && !allowedWhileUnpaid(req)) throw await subscriptionRequiredError(req.tenantContext.organization);
   req.tenant = req.tenantContext && resolveAccess(req.tenantContext, ROUTE_ROLES, requestedGymId);
   if (requestedGymId && !req.tenant) throw new HttpError(403, 'No tienes acceso a esa sucursal.');
   next();
@@ -58,4 +68,4 @@ function requirePlatformAdmin(req, res, next) {
   return next();
 }
 
-module.exports = { authenticate, authorize, requirePlatformAdmin, resolveUserFromToken };
+module.exports = { authenticate, authorize, requirePlatformAdmin, resolveUserFromToken, allowedWhileUnpaid };

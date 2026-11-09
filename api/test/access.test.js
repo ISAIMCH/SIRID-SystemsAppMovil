@@ -119,7 +119,7 @@ test('a registered device enters at its own gym', async () => {
     stub(AccessDevice, 'findOne', (filter) => lean(filter.keyHash === hashDeviceKey(key) && filter.revokedAt === null ? device : null)),
     stub(AccessDevice, 'updateOne', async () => ({})),
     stub(Gym, 'exists', async () => ({ _id: northGym })),
-    stub(Organization, 'exists', async (filter) => (filter.status === 'active' ? { _id: organizationId } : null)),
+    stub(Organization, 'findOne', (filter) => lean(filter.status === 'active' ? { _id: organizationId } : null)),
   ];
   try {
     const req = deviceRequest(key);
@@ -136,7 +136,7 @@ test('a device of an organization that is not active is rejected', async () => {
   const restore = [
     stub(AccessDevice, 'findOne', () => lean(device)),
     stub(Gym, 'exists', async () => ({ _id: northGym })),
-    stub(Organization, 'exists', async () => null),
+    stub(Organization, 'findOne', () => lean(null)),
   ];
   try {
     const error = await run(authenticateIotDevice, deviceRequest(key));

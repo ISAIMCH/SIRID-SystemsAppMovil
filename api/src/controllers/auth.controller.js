@@ -38,6 +38,7 @@ const {
 } = require('../utils/members');
 const { storeLegacyUploads, applyLegacyDocumentList } = require('../utils/documents');
 const { emitToOrganizationStaff } = require('../utils/realtime');
+const { serializeSubscription } = require('../utils/subscription');
 
 const phoneSchema = z.string().trim()
   .transform((value) => value.replace(/[\s()+-]/g, ''))
@@ -179,12 +180,17 @@ async function sessionResponse(user, requestedGymId = null) {
   const membership = context?.member.roles.includes('Cliente') ? await membershipSummary(user._id, context.organizationId) : {};
   // The client's Coach is the one of the session's organization.
   const assignedCoach = context?.member.assignedCoach ? String(context.member.assignedCoach) : null;
+  // Only the owner sees the GymGo plan; billingOnly tells the dashboard to open nothing but billing.
+  const subscription = context?.member.roles.includes('Propietario') && !user.isPlatformAdmin
+    ? { ...(await serializeSubscription(context.organization)), billingOnly: Boolean(context.billingOnly) }
+    : null;
   return {
     user: { ...user.toSafeJSON(), isPlatformAdmin: user.isPlatformAdmin, ...(context ? { role: legacyRole(context.member) } : {}), assignedCoach, ...membership },
     organization: context ? { id: String(context.organizationId), name: context.organization.name } : null,
     gyms,
     defaultGymId: access ? String(access.gymId) : null,
     organizationApplications,
+    subscription,
   };
 }
 

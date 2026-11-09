@@ -2,6 +2,7 @@ const express = require('express');
 const asyncHandler = require('../utils/async-handler');
 const { authenticate, authorize } = require('../middlewares/auth.middleware');
 const controller = require('../controllers/history-share.controller');
+const { requireFeature } = require('../middlewares/subscription.middleware');
 
 // Recepcion never takes part: only owners, managers and Coaches ask for or read a shared history.
 const router = express.Router();
@@ -14,10 +15,11 @@ router.post('/me/:id/approve', asyncHandler(controller.approveHistoryShare));
 router.post('/me/:id/reject', asyncHandler(controller.rejectHistoryShare));
 router.post('/me/:id/revoke', asyncHandler(controller.revokeHistoryShare));
 router.patch('/me/:id', asyncHandler(controller.updateHistoryShare));
-// Staff of the gym, from the dashboard.
-router.get('/logs', authorize('Admin'), asyncHandler(controller.listAccessLogs));
-router.get('/', authorize('Admin', 'Coach'), asyncHandler(controller.listHistoryShares));
-router.post('/', authorize('Admin', 'Coach'), asyncHandler(controller.requestHistoryShare));
-router.get('/:id/history', authorize('Admin', 'Coach'), asyncHandler(controller.getSharedHistory));
+// Staff of the gym, from the dashboard (Pro plan).
+const shareFeature = requireFeature('historyShare');
+router.get('/logs', authorize('Admin'), shareFeature, asyncHandler(controller.listAccessLogs));
+router.get('/', authorize('Admin', 'Coach'), shareFeature, asyncHandler(controller.listHistoryShares));
+router.post('/', authorize('Admin', 'Coach'), shareFeature, asyncHandler(controller.requestHistoryShare));
+router.get('/:id/history', authorize('Admin', 'Coach'), shareFeature, asyncHandler(controller.getSharedHistory));
 
 module.exports = router;

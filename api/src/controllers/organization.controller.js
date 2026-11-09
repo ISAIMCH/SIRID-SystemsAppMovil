@@ -7,7 +7,9 @@ const OrganizationMember = require('../models/organization-member.model');
 const Gym = require('../models/gym.model');
 const HttpError = require('../utils/http-error');
 const withTransaction = require('../utils/transaction');
-const { registrationSchema } = require('./auth.controller');
+const { registrationSchema, authResponse } = require('./auth.controller');
+const { TRIAL_DAYS, trialAvailable, initialSubscription } = require('../utils/subscription');
+const { getPlan } = require('../utils/saas-plans');
 
 const optionalText = (max) => z.string().trim().max(max).transform((value) => value || undefined).optional();
 
@@ -55,8 +57,10 @@ function serializeApplication(organization) {
   return { id: String(organization._id), name: organization.name, status: organization.status };
 }
 
-// Public signup: the owner, the organization and its first gym wait as pending until SIRID approves them.
-// A rejected owner signs up again with the same account and the request goes back to review.
+// Public signup: the owner, the organization and its first gym open at once with a 14-day trial of Esencial
+// (one per email and phone; without it the owner pays before using the dashboard). The response carries a
+// session so the web can go straight to checkout. A rejected owner signs up again with the same account and
+// the request goes back to SIRID's review, without a new trial.
 async function signupOwner(req, res) {
   const input = signupSchema.parse(req.body);
   const existingUser = await findSignupUser(input);
@@ -88,16 +92,39 @@ async function signupOwner(req, res) {
       await user.setPassword(input.password);
       await user.save({ session });
     }
-    const [created] = await Organization.create([{ ...organizationData, slug: await uniqueSlug(input.organizationName) }], { session });
+    const now = new Date();
+    const subscription = initialSubscription({ email: input.email, phone: input.phone, trial: await trialAvailable(input), now });
+    const [created] = await Organization.create([{
+      ...organizationData,
+      slug: await uniqueSlug(input.organizationName),
+      status: 'active',
+      approvedAt: now,
+      gymLimit: (await getPlan(subscription.planCode))?.gymLimit ?? 1,
+      subscription,
+    }], { session });
     await Gym.create([{ ...gymData, organizationId: created._id }], { session });
     await OrganizationMember.create([{ userId: user._id, organizationId: created._id, roles: ['Propietario'] }], { session });
     return created;
   });
 
+  if (organization.status !== 'active') {
+    res.status(201).json({
+      organization: serializeApplication(organization),
+      existingAccount: Boolean(existingUser),
+      message: 'Recibimos tu solicitud. Inicia sesión más tarde para ver si SIRID ya la aprobó.',
+    });
+    return;
+  }
+
+  const user = existingUser ?? await User.findOne({ email: input.email });
+  const trialing = organization.subscription?.status === 'trialing';
   res.status(201).json({
     organization: serializeApplication(organization),
     existingAccount: Boolean(existingUser),
-    message: 'Recibimos tu solicitud. Inicia sesión más tarde para ver si SIRID ya la aprobó.',
+    message: trialing
+      ? `Tu prueba gratuita de ${TRIAL_DAYS} días ya está activa.`
+      : 'Ya usaste tu prueba gratuita: elige un plan para activar tu gimnasio.',
+    ...(await authResponse(user)),
   });
 }
 
