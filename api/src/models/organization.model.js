@@ -33,6 +33,8 @@ const subscriptionSchema = new mongoose.Schema({
     }, { _id: false }),
     default: undefined,
   },
+  // PayPal simulado (evaluación escolar): la prueba de 5 días se da una sola vez.
+  demoTrialUsedAt: Date,
   // One free trial per email and per phone.
   trialEmail: { type: String, lowercase: true, trim: true, index: true },
   trialPhone: { type: String, trim: true, index: true },

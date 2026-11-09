@@ -13,8 +13,10 @@ router.get('/', asyncHandler(controller.getMySubscription));
 router.get('/payments', asyncHandler(controller.listMyPayments));
 router.post('/checkout', asyncHandler(controller.createCheckout));
 router.post('/portal', asyncHandler(controller.createPortal));
-router.post('/paypal/orders', asyncHandler(controller.createPaypalOrder));
-router.post('/paypal/orders/:orderId/capture', asyncHandler(controller.capturePaypalOrder));
+// PayPal simulado para la evaluación escolar (sin llaves ni llamadas a PayPal).
+router.post('/paypal/demo', asyncHandler(controller.startPaypalDemo));
+// router.post('/paypal/orders', asyncHandler(controller.createPaypalOrder));
+// router.post('/paypal/orders/:orderId/capture', asyncHandler(controller.capturePaypalOrder));
 
 // Public: plans and prices for the web.
 const publicRouter = express.Router();

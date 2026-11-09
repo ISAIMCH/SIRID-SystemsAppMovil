@@ -4,9 +4,10 @@ const Organization = require('../models/organization.model');
 const SubscriptionPayment = require('../models/subscription-payment.model');
 const HttpError = require('../utils/http-error');
 const { resolveTenant } = require('../utils/tenant');
-const { TRIAL_DAYS, GRACE_DAYS, serializeSubscription, emitSubscriptionUpdate, applyPrepaidPayment, syncStripeSubscription, stripeInvoiceSubscriptionId, addDays } = require('../utils/subscription');
+const { TRIAL_DAYS, GRACE_DAYS, serializeSubscription, subscriptionState, emitSubscriptionUpdate, applyPrepaidPayment, syncStripeSubscription, stripeInvoiceSubscriptionId, addDays } = require('../utils/subscription');
 const { listPlans, getPlan, planAmountCents, serializePlan } = require('../utils/saas-plans');
-const { isStripeConfigured, getStripe, stripeCall, isPaypalConfigured, paypalRequest } = require('../utils/payment-providers');
+// isPaypalConfigured y paypalRequest siguen en payment-providers para el flujo real comentado.
+const { isStripeConfigured, getStripe, stripeCall } = require('../utils/payment-providers');
 
 const OXXO_DAYS = 3;
 const intervalSchema = z.enum(['month', 'year']).default('month');
@@ -16,10 +17,11 @@ function paymentOptions() {
   return {
     card: stripe,
     oxxo: stripe && env.STRIPE_ENABLE_OXXO,
-    paypal: isPaypalConfigured(),
-    // Public by design: the PayPal button in the browser needs it.
-    paypalClientId: isPaypalConfigured() ? env.PAYPAL_CLIENT_ID : null,
-    testMode: env.STRIPE_SECRET_KEY.startsWith('sk_test_') || env.PAYPAL_ENV === 'sandbox',
+    // PayPal simulado: el botón siempre aparece y no usa llaves (ver startPaypalDemo).
+    paypal: true,
+    paypalDemo: true,
+    paypalClientId: null,
+    testMode: env.STRIPE_SECRET_KEY.startsWith('sk_test_'),
   };
 }
 
@@ -150,14 +152,14 @@ async function createCheckout(req, res) {
     const paidUntil = current.status === 'active' && current.currentPeriodEnd > addDays(new Date(), 2) ? current.currentPeriodEnd : null;
     Object.assign(params, {
       mode: 'subscription',
-      payment_method_types: ['card'],
       line_items: [{ quantity: 1, price_data: { ...priceData, recurring: { interval: input.interval } } }],
       subscription_data: { metadata, ...(paidUntil ? { trial_end: Math.floor(paidUntil.getTime() / 1000) } : {}) },
     });
   } else {
     Object.assign(params, {
       mode: 'payment',
-      payment_method_types: ['oxxo'],
+      // Stripe picks methods from the Dashboard (payment_method_types is no longer accepted); this session is the OXXO one.
+      excluded_payment_method_types: ['card'],
       payment_method_options: { oxxo: { expires_after_days: OXXO_DAYS } },
       payment_intent_data: { metadata },
       line_items: [{ quantity: 1, price_data: priceData }],
@@ -184,63 +186,103 @@ async function finishPayment(req, organization) {
   return serializeSubscription(organization);
 }
 
-/* ===== PayPal: the browser approves, the API captures and checks the order with PayPal. ===== */
+/* ===== PayPal (simulado) =====
+ * Solo para la evaluación escolar: no hay cuenta de PayPal Developer y PayPal se quitará después.
+ * El botón de la web no habla con PayPal; esta ruta da una prueba de 5 días del plan elegido, una vez por
+ * organización y sin registrar ningún pago. El flujo real (crear y capturar órdenes) quedó comentado abajo.
+ */
+const PAYPAL_DEMO_DAYS = 5;
 
-async function createPaypalOrder(req, res) {
-  const input = z.object({ planCode: z.string().trim().toLowerCase().min(2).max(30), interval: intervalSchema }).parse(req.body);
+async function startPaypalDemo(req, res) {
+  const { planCode } = z.object({ planCode: z.string().trim().toLowerCase().min(2).max(30) }).parse(req.body);
   const organization = await loadOrganization(req);
-  const plan = await assertCanBuy(organization, input.planCode);
-  const total = (planAmountCents(plan, input.interval) / 100).toFixed(2);
-  const order = await paypalRequest('/v2/checkout/orders', {
-    body: {
-      intent: 'CAPTURE',
-      purchase_units: [{
-        reference_id: String(organization._id),
-        custom_id: `${organization._id}:${plan.code}:${input.interval}`,
-        description: `GymGo ${plan.name} (${input.interval === 'year' ? 'anual' : 'mensual'}), IVA incluido`,
-        amount: { currency_code: 'MXN', value: total },
-      }],
-      payment_source: { paypal: { experience_context: { brand_name: 'GymGo', shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', locale: 'es-MX' } } },
+  const plan = await assertCanBuy(organization, planCode);
+  const current = organization.subscription ?? {};
+  if (current.demoTrialUsedAt) {
+    throw new HttpError(409, 'Tu organización ya usó la prueba de PayPal. Paga con tarjeta u OXXO para continuar.', { code: 'paypal_demo_used' });
+  }
+  if (current.status === 'active' && subscriptionState(organization).phase === 'ok') {
+    throw new HttpError(409, 'Tu plan ya está pagado; no necesitas la prueba de PayPal.', { code: 'subscription_active' });
+  }
+  const now = new Date();
+  const updated = await Organization.findOneAndUpdate(
+    { _id: organization._id, 'subscription.demoTrialUsedAt': { $exists: false } },
+    {
+      $set: {
+        'subscription.planCode': plan.code,
+        'subscription.status': 'trialing',
+        'subscription.provider': 'paypal',
+        'subscription.method': 'paypal',
+        'subscription.renews': false,
+        'subscription.trialEndsAt': addDays(now, PAYPAL_DEMO_DAYS),
+        'subscription.demoTrialUsedAt': now,
+      },
+      $unset: { 'subscription.lapsedAt': '', 'subscription.currentPeriodEnd': '', 'subscription.interval': '' },
     },
-  });
-  res.status(201).json({ orderId: order.id });
+    { new: true },
+  );
+  if (!updated) throw new HttpError(409, 'Tu organización ya usó la prueba de PayPal.', { code: 'paypal_demo_used' });
+  res.json({ simulated: true, trialDays: PAYPAL_DEMO_DAYS, subscription: await finishPayment(req, updated) });
 }
 
-async function capturePaypalOrder(req, res) {
-  const { orderId } = z.object({ orderId: z.string().regex(/^[A-Z0-9]{8,40}$/, 'Orden de PayPal inválida.') }).parse(req.params);
-  const organization = await loadOrganization(req);
-
-  let order;
-  try {
-    order = await paypalRequest(`/v2/checkout/orders/${orderId}/capture`, { body: {} });
-  } catch (error) {
-    // Captured on an earlier try (e.g. the browser lost the response): read it instead.
-    if (error.extra?.issue !== 'ORDER_ALREADY_CAPTURED') throw error;
-    order = await paypalRequest(`/v2/checkout/orders/${orderId}`, { method: 'GET' });
-  }
-
-  const unit = order.purchase_units?.[0];
-  const capture = unit?.payments?.captures?.find((item) => item.status === 'COMPLETED');
-  const [organizationId, planCode, interval] = String(capture?.custom_id ?? unit?.custom_id ?? '').split(':');
-  if (order.status !== 'COMPLETED' || !capture) throw new HttpError(402, 'PayPal no confirmó el pago.', { code: 'paypal_not_completed' });
-  if (organizationId !== String(organization._id)) throw new HttpError(403, 'Esa orden de PayPal no es de tu organización.');
-  const plan = await getPlan(planCode);
-  const expected = plan && (planAmountCents(plan, interval) / 100).toFixed(2);
-  if (!expected || capture.amount?.currency_code !== 'MXN' || capture.amount?.value !== expected) {
-    throw new HttpError(409, 'El monto pagado en PayPal no coincide con el plan.', { code: 'paypal_amount_mismatch' });
-  }
-
-  const updated = await applyPrepaidPayment({
-    organizationId: organization._id,
-    planCode,
-    interval,
-    provider: 'paypal',
-    method: 'paypal',
-    reference: capture.id,
-    amount: Number(capture.amount.value),
-  });
-  res.json({ subscription: await finishPayment(req, updated ?? await loadOrganization(req)) });
-}
+/* ===== PayPal real (desactivado; requiere PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET) ===== */
+// /* ===== PayPal: the browser approves, the API captures and checks the order with PayPal. ===== */
+//
+// async function createPaypalOrder(req, res) {
+//   const input = z.object({ planCode: z.string().trim().toLowerCase().min(2).max(30), interval: intervalSchema }).parse(req.body);
+//   const organization = await loadOrganization(req);
+//   const plan = await assertCanBuy(organization, input.planCode);
+//   const total = (planAmountCents(plan, input.interval) / 100).toFixed(2);
+//   const order = await paypalRequest('/v2/checkout/orders', {
+//     body: {
+//       intent: 'CAPTURE',
+//       purchase_units: [{
+//         reference_id: String(organization._id),
+//         custom_id: `${organization._id}:${plan.code}:${input.interval}`,
+//         description: `GymGo ${plan.name} (${input.interval === 'year' ? 'anual' : 'mensual'}), IVA incluido`,
+//         amount: { currency_code: 'MXN', value: total },
+//       }],
+//       payment_source: { paypal: { experience_context: { brand_name: 'GymGo', shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW', locale: 'es-MX' } } },
+//     },
+//   });
+//   res.status(201).json({ orderId: order.id });
+// }
+//
+// async function capturePaypalOrder(req, res) {
+//   const { orderId } = z.object({ orderId: z.string().regex(/^[A-Z0-9]{8,40}$/, 'Orden de PayPal inválida.') }).parse(req.params);
+//   const organization = await loadOrganization(req);
+//
+//   let order;
+//   try {
+//     order = await paypalRequest(`/v2/checkout/orders/${orderId}/capture`, { body: {} });
+//   } catch (error) {
+//     // Captured on an earlier try (e.g. the browser lost the response): read it instead.
+//     if (error.extra?.issue !== 'ORDER_ALREADY_CAPTURED') throw error;
+//     order = await paypalRequest(`/v2/checkout/orders/${orderId}`, { method: 'GET' });
+//   }
+//
+//   const unit = order.purchase_units?.[0];
+//   const capture = unit?.payments?.captures?.find((item) => item.status === 'COMPLETED');
+//   const [organizationId, planCode, interval] = String(capture?.custom_id ?? unit?.custom_id ?? '').split(':');
+//   if (order.status !== 'COMPLETED' || !capture) throw new HttpError(402, 'PayPal no confirmó el pago.', { code: 'paypal_not_completed' });
+//   if (organizationId !== String(organization._id)) throw new HttpError(403, 'Esa orden de PayPal no es de tu organización.');
+//   const plan = await getPlan(planCode);
+//   const expected = plan && (planAmountCents(plan, interval) / 100).toFixed(2);
+//   if (!expected || capture.amount?.currency_code !== 'MXN' || capture.amount?.value !== expected) {
+//     throw new HttpError(409, 'El monto pagado en PayPal no coincide con el plan.', { code: 'paypal_amount_mismatch' });
+//   }
+//
+//   const updated = await applyPrepaidPayment({
+//     organizationId: organization._id,
+//     planCode,
+//     interval,
+//     provider: 'paypal',
+//     method: 'paypal',
+//     reference: capture.id,
+//     amount: Number(capture.amount.value),
+//   });
+//   res.json({ subscription: await finishPayment(req, updated ?? await loadOrganization(req)) });
+// }
 
 /* ===== Stripe webhook ===== */
 
@@ -373,8 +415,9 @@ module.exports = {
   listMyPayments,
   createCheckout,
   createPortal,
-  createPaypalOrder,
-  capturePaypalOrder,
+  startPaypalDemo,
+  // createPaypalOrder,
+  // capturePaypalOrder,
   handleStripeEvent,
   stripeWebhook,
 };
