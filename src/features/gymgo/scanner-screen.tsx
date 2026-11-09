@@ -1,12 +1,19 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Redirect, useIsFocused } from 'expo-router';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { Button } from '@/components/sirid';
+import * as Haptics from '@/hooks/haptics';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import { ActionButton, AppHeader, Notice } from './ui';
-import { palette } from './theme';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 type ScanResult = { kind: 'success' | 'error'; message: string; event?: 'check-in' | 'check-out' };
 type AccessResponse = {
@@ -32,6 +39,8 @@ function extractQrToken(data: string) {
 }
 
 export default function ScannerScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const isFocused = useIsFocused();
   const [permission, requestPermission] = useCameraPermissions();
@@ -41,6 +50,7 @@ export default function ScannerScreen() {
   const [cameraError, setCameraError] = useState('');
   const scanLocked = useRef(false);
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => () => {
     if (resetTimer.current) clearTimeout(resetTimer.current);
@@ -65,12 +75,14 @@ export default function ScannerScreen() {
         deviceId: 'app-recepcion',
       });
       const { event, userName } = response.data.access;
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setResult({
         kind: 'success',
         event,
         message: `${event === 'check-in' ? 'Entrada' : 'Salida'} registrada: ${userName || 'Cliente'}`,
       });
     } catch (error) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setResult({ kind: 'error', message: getApiErrorMessage(error, 'QR inválido o expirado.') });
     } finally {
       setIsProcessing(false);
@@ -85,7 +97,7 @@ export default function ScannerScreen() {
   if (!permission) {
     return (
       <View style={styles.permissionScreen}>
-        <ActivityIndicator color={palette.lime} size="large" />
+        <ActivityIndicator color={colors.accent} size="large" />
         <Text style={styles.permissionText}>Comprobando permiso de cámara…</Text>
       </View>
     );
@@ -95,12 +107,13 @@ export default function ScannerScreen() {
     return (
       <View style={styles.permissionScreen}>
         <View style={styles.permissionContent}>
-          <Text style={styles.permissionEyebrow}>ESCÁNER DE RECEPCIÓN</Text>
+          <View style={styles.permissionIcon}><MaterialIcons name="photo-camera" size={36} color={colors.accent} /></View>
+          <Text style={styles.permissionEyebrow}>Escáner de recepción</Text>
           <Text style={styles.permissionTitle}>Permite el acceso a la cámara</Text>
           <Text style={styles.permissionText}>
             GymGo necesita la cámara trasera para leer el QR de acceso de los clientes.
           </Text>
-          <ActionButton onPress={() => void requestPermission()}>Permitir cámara</ActionButton>
+          <Button size="large" icon="photo-camera" onPress={() => void requestPermission()}>Permitir cámara</Button>
           {!permission.canAskAgain ? (
             <Text style={styles.permissionHint}>El permiso está bloqueado. Habilita la cámara para GymGo desde la configuración del dispositivo.</Text>
           ) : null}
@@ -121,56 +134,113 @@ export default function ScannerScreen() {
         />
       ) : null}
 
-      <View style={styles.topOverlay}>
-        <AppHeader title="Escáner de recepción" detail="Simulación de lector IoT · Solo códigos QR" />
+      <View style={[styles.topOverlay, { paddingTop: insets.top + space.md }]}>
+        <Text style={styles.cameraEyebrow}>Recepción</Text>
+        <Text style={styles.cameraTitle}>Escanear acceso</Text>
+        <Text style={styles.cameraSubtitle}>Lector de entrada y salida · solo códigos QR</Text>
       </View>
 
       <View pointerEvents="none" style={styles.scanGuide}>
-        <View style={styles.scanFrame} />
+        <ScanFrame state={result?.kind ?? (isProcessing ? 'processing' : 'idle')} />
         <Text style={styles.guideText}>Centra el código QR dentro del marco</Text>
       </View>
 
       <View style={styles.bottomOverlay}>
-        {cameraError ? <Notice error>{cameraError}</Notice> : null}
+        {cameraError ? (
+          <View style={[styles.resultPanel, styles.resultError]}>
+            <MaterialIcons name="videocam-off" size={26} color={CAMERA.danger} />
+            <Text style={styles.resultMessage}>{cameraError}</Text>
+          </View>
+        ) : null}
         {isProcessing ? (
           <View style={styles.processing}>
-            <ActivityIndicator color={palette.lime} />
+            <ActivityIndicator color={CAMERA.volt} />
             <Text style={styles.processingText}>Validando acceso…</Text>
           </View>
         ) : null}
         {result ? (
-          <View style={[styles.resultPanel, result.kind === 'error' && styles.resultError]}>
-            <Text style={styles.resultSymbol}>{result.kind === 'success' ? '✓' : '!'}</Text>
-            <Text style={styles.resultMessage}>{result.message}</Text>
-            <Text style={styles.resultHint}>El escáner se reactivará en 3 segundos.</Text>
+          <View accessibilityRole="alert" style={[styles.resultPanel, result.kind === 'error' && styles.resultError]}>
+            <MaterialIcons
+              name={result.kind === 'success' ? (result.event === 'check-out' ? 'logout' : 'login') : 'error-outline'}
+              size={30}
+              color={result.kind === 'success' ? CAMERA.volt : CAMERA.danger}
+            />
+            <View style={styles.resultText}>
+              <Text style={styles.resultMessage}>{result.message}</Text>
+              <Text style={styles.resultHint}>El escáner se reactivará en 3 segundos.</Text>
+            </View>
           </View>
-        ) : (
-          <Text style={styles.secureLabel}>LECTOR ADMINISTRATIVO · SESIÓN SEGURA</Text>
-        )}
+        ) : !isProcessing && !cameraError ? (
+          <View style={styles.secureRow}>
+            <MaterialIcons name="verified-user" size={16} color={CAMERA.muted} />
+            <Text style={styles.secureLabel}>Lector administrativo · sesión segura</Text>
+          </View>
+        ) : null}
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#101B18', justifyContent: 'space-between' },
-  permissionScreen: { flex: 1, backgroundColor: palette.deepGreen, alignItems: 'center', justifyContent: 'center', padding: 24 },
-  permissionContent: { width: '100%', maxWidth: 430, gap: 16 },
-  permissionEyebrow: { color: palette.lime, fontSize: 11, fontWeight: '800' },
-  permissionTitle: { color: palette.white, fontSize: 28, lineHeight: 34, fontWeight: '800' },
-  permissionText: { color: '#E2E9E1', fontSize: 14, lineHeight: 21, textAlign: 'center' },
-  permissionHint: { color: '#D5DFD4', fontSize: 12, lineHeight: 18, textAlign: 'center' },
-  topOverlay: { paddingTop: 58, paddingHorizontal: 18, paddingBottom: 16, backgroundColor: 'rgba(16,27,24,0.88)' },
-  scanGuide: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 18 },
-  scanFrame: { width: 260, height: 260, maxWidth: '72%', borderWidth: 3, borderColor: palette.lime, borderRadius: 20, backgroundColor: 'transparent' },
-  guideText: { color: palette.white, backgroundColor: 'rgba(16,27,24,0.72)', overflow: 'hidden', borderRadius: 7, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, fontWeight: '700' },
-  bottomOverlay: { minHeight: 118, paddingHorizontal: 18, paddingTop: 18, paddingBottom: 34, gap: 10, backgroundColor: 'rgba(16,27,24,0.9)' },
-  processing: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  processingText: { color: palette.white, fontSize: 14, fontWeight: '700' },
-  resultPanel: { alignItems: 'center', gap: 5, borderRadius: 9, backgroundColor: '#DDEFD9', paddingHorizontal: 14, paddingVertical: 12 },
-  resultError: { backgroundColor: '#F4DDD6' },
-  resultSymbol: { color: palette.green, fontSize: 21, fontWeight: '900' },
-  resultMessage: { color: palette.ink, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  resultHint: { color: palette.muted, fontSize: 11, textAlign: 'center' },
-  secureLabel: { color: '#D5DFD4', fontSize: 10, fontWeight: '800', textAlign: 'center' },
-});
+/** The camera UI is always dark, in both themes, so it uses a fixed palette. */
+const CAMERA = {
+  scrim: 'rgba(6, 10, 8, 0.82)',
+  text: '#F1F5F2',
+  muted: '#A9B7AF',
+  volt: '#10FF85',
+  danger: '#FF6B5E',
+};
+
+function ScanFrame({ state }: { state: 'idle' | 'processing' | 'success' | 'error' }) {
+  const styles = useStyles();
+  const reduceMotion = useReducedMotion();
+  const line = useSharedValue(0);
+  useEffect(() => {
+    if (reduceMotion) return;
+    line.set(withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.quad) }), -1, true));
+  }, [line, reduceMotion]);
+  const lineStyle = useAnimatedStyle(() => ({ transform: [{ translateY: line.value * 236 }] }));
+  const color = state === 'success' ? CAMERA.volt : state === 'error' ? CAMERA.danger : CAMERA.text;
+  return (
+    <View style={styles.scanFrame}>
+      <View style={[styles.corner, styles.cornerTL, { borderColor: color }]} />
+      <View style={[styles.corner, styles.cornerTR, { borderColor: color }]} />
+      <View style={[styles.corner, styles.cornerBL, { borderColor: color }]} />
+      <View style={[styles.corner, styles.cornerBR, { borderColor: color }]} />
+      {state === 'idle' && !reduceMotion ? <Animated.View style={[styles.scanLine, lineStyle]} /> : null}
+    </View>
+  );
+}
+
+const useStyles = makeStyles(({ colors }) => ({
+  screen: { flex: 1, backgroundColor: '#000000', justifyContent: 'space-between' },
+  permissionScreen: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: space.xxl, gap: space.lg },
+  permissionContent: { width: '100%', maxWidth: 430, gap: space.lg, alignItems: 'stretch' },
+  permissionIcon: { alignSelf: 'center', width: 76, height: 76, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
+  permissionEyebrow: { color: colors.accent, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', textAlign: 'center' },
+  permissionTitle: { color: colors.text, fontSize: 30, lineHeight: 34, fontWeight: '800', fontFamily: 'display', textAlign: 'center' },
+  permissionText: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center' },
+  permissionHint: { color: colors.textSecondary, fontSize: 13, lineHeight: 18, textAlign: 'center' },
+  topOverlay: { paddingHorizontal: space.xl, paddingBottom: space.lg, backgroundColor: CAMERA.scrim, gap: 2 },
+  cameraEyebrow: { color: CAMERA.volt, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+  cameraTitle: { color: CAMERA.text, fontSize: 32, lineHeight: 36, fontWeight: '800', fontFamily: 'display' },
+  cameraSubtitle: { color: CAMERA.muted, fontSize: 14 },
+  scanGuide: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: space.xl },
+  scanFrame: { width: 260, height: 260, maxWidth: '72%', overflow: 'hidden' },
+  corner: { position: 'absolute', width: 44, height: 44, borderWidth: 0 },
+  cornerTL: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderTopLeftRadius: 22 },
+  cornerTR: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderTopRightRadius: 22 },
+  cornerBL: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderBottomLeftRadius: 22 },
+  cornerBR: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderBottomRightRadius: 22 },
+  scanLine: { position: 'absolute', left: 16, right: 16, top: 12, height: 2, borderRadius: 1, backgroundColor: CAMERA.volt, opacity: 0.85 },
+  guideText: { color: CAMERA.text, backgroundColor: CAMERA.scrim, overflow: 'hidden', borderRadius: radius.pill, paddingHorizontal: space.lg, paddingVertical: space.sm, fontSize: 14, fontWeight: '600' },
+  bottomOverlay: { minHeight: 132, paddingHorizontal: space.xl, paddingTop: space.lg, paddingBottom: space.xl, gap: space.md, backgroundColor: CAMERA.scrim, justifyContent: 'center' },
+  processing: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
+  processingText: { color: CAMERA.text, fontSize: 16, fontWeight: '600' },
+  resultPanel: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.lg, borderWidth: 1, borderColor: 'rgba(16,255,133,0.5)', backgroundColor: 'rgba(16,255,133,0.12)', padding: space.lg },
+  resultError: { borderColor: 'rgba(255,107,94,0.55)', backgroundColor: 'rgba(255,107,94,0.14)' },
+  resultText: { flex: 1, gap: 2 },
+  resultMessage: { flex: 1, color: CAMERA.text, fontSize: 17, fontWeight: '700' },
+  resultHint: { color: CAMERA.muted, fontSize: 13 },
+  secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm },
+  secureLabel: { color: CAMERA.muted, fontSize: 13, fontWeight: '600' },
+}));

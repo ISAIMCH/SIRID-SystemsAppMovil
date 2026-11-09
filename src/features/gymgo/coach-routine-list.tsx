@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard } from './fit-ui';
 import { routineEditorHref } from './routine-links';
-import { palette } from './theme';
 import type { Routine } from './types';
 import { Notice, useDarkUi } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 const dayShort = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 const levelNames = { principiante: 'Principiante', intermedio: 'Intermedio', avanzado: 'Avanzado' };
@@ -31,6 +32,8 @@ export function CoachRoutineList({ routines, groupByClient = false, onChanged }:
   groupByClient?: boolean;
   onChanged: () => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const dark = useDarkUi();
   const [activatingId, setActivatingId] = useState('');
   const [error, setError] = useState('');
@@ -72,7 +75,7 @@ export function CoachRoutineList({ routines, groupByClient = false, onChanged }:
           </Pressable>
           {!isActive ? (
             <Pressable accessibilityRole="button" disabled={Boolean(activatingId)} onPress={() => void activate(routine)}>
-              {activatingId === routine._id ? <ActivityIndicator color={palette.green} /> : <Text style={styles.link}>Activar</Text>}
+              {activatingId === routine._id ? <ActivityIndicator color={colors.accent} /> : <Text style={styles.link}>Activar</Text>}
             </Pressable>
           ) : null}
         </View>
@@ -115,23 +118,23 @@ export function CoachRoutineList({ routines, groupByClient = false, onChanged }:
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   groups: { gap: 22 },
   list: { gap: 10 },
   groupHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 },
-  groupName: { flex: 1, color: palette.ink, fontSize: 17, fontWeight: '800' },
+  groupName: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '800' },
   card: { gap: 6, padding: 16 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
-  title: { flex: 1, color: palette.ink, fontSize: 15, fontWeight: '800' },
-  darkTitle: { color: '#F4F8F5' },
-  meta: { color: palette.muted, fontSize: 12 },
-  darkMeta: { color: '#91A098' },
+  title: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '800' },
+  darkTitle: { color: colors.text },
+  meta: { color: colors.textSecondary, fontSize: 12 },
+  darkMeta: { color: colors.textSecondary },
   chip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 3 },
-  chipActive: { borderColor: '#10FF85', backgroundColor: '#10FF8514' },
-  chipPaused: { borderColor: '#52525B' },
-  chipText: { fontSize: 11, fontWeight: '800' },
-  chipTextActive: { color: '#10FF85' },
-  chipTextPaused: { color: '#A1A1AA' },
+  chipActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  chipPaused: { borderColor: colors.borderStrong },
+  chipText: { fontSize: 12, fontWeight: '800' },
+  chipTextActive: { color: colors.accent },
+  chipTextPaused: { color: colors.textSecondary },
   actions: { flexDirection: 'row', gap: 22, paddingTop: 4 },
-  link: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
-});
+  link: { color: colors.accent, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
+}));

@@ -3,7 +3,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable,
-  ScrollView, StyleSheet, Text, TextInput, View,
+  ScrollView, Text, TextInput, View,
 } from 'react-native';
 
 import { createExercise, getApiErrorMessage, getExerciseCatalog, updateExercise } from './api';
@@ -11,11 +11,12 @@ import { ExerciseDetailModal } from './exercise-detail';
 import type { ExerciseDetailTarget } from './exercise-detail';
 import { EQUIPMENT_FAMILY_OPTIONS, normalizeEquipmentCategory } from './equipment-families';
 import type { EquipmentCategory } from './equipment-families';
-import { palette } from './theme';
 import { isMuscleGroup, MUSCLE_GROUPS, normalizeMuscleGroup } from './types';
 import type { CustomExercisePayload, CuratedExercise, Exercise, MuscleGroup } from './types';
 import { SelectField } from './select-field';
 import { useDarkUi } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 const MUSCLE_GROUP_ICONS: Record<string, keyof typeof MaterialCommunityIcons.glyphMap> = {
   Abdominales: 'human',
@@ -65,6 +66,8 @@ type ExerciseFormProps = {
 };
 
 function ExerciseFormModal({ visible, exercise, onClose, onSaved }: ExerciseFormProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const dark = useDarkUi();
   const [name, setName] = useState(exercise?.name ?? '');
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup | ''>(exercise ? normalizeMuscleGroup(exercise.muscleGroup) : '');
@@ -99,18 +102,18 @@ function ExerciseFormModal({ visible, exercise, onClose, onSaved }: ExerciseForm
         <View style={[styles.formCard, dark && styles.darkCard]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, dark && styles.darkText]}>{exercise ? 'Editar ejercicio' : 'Crear ejercicio personalizado'}</Text>
-            <Pressable onPress={onClose} hitSlop={10}><MaterialCommunityIcons name="close" size={24} color={dark ? '#F4F8F5' : palette.ink} /></Pressable>
+            <Pressable onPress={onClose} hitSlop={10}><MaterialCommunityIcons name="close" size={24} color={dark ? colors.text : colors.text} /></Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
             <Text style={[styles.label, dark && styles.darkText]}>Nombre</Text>
-            <TextInput value={name} onChangeText={setName} placeholder="Ej. Press inclinado" placeholderTextColor={palette.muted} style={[styles.input, dark && styles.darkInput]} />
+            <TextInput value={name} onChangeText={setName} placeholder="Ej. Press inclinado" placeholderTextColor={colors.textSecondary} style={[styles.input, dark && styles.darkInput]} />
             <SelectField label="Grupo muscular" placeholder="Selecciona un grupo" options={MUSCLE_GROUPS.map((item) => ({ value: item, label: item }))} value={muscleGroup} onChange={(value) => { if (isMuscleGroup(value)) setMuscleGroup(value); }} />
             <SelectField label="Categoría de equipo" placeholder="Selecciona el equipo" options={EQUIPMENT_FAMILY_OPTIONS.map((item) => ({ value: item.value, label: item.label }))} value={equipment} onChange={(value) => setEquipment(normalizeEquipmentCategory(value))} />
             <Text style={[styles.label, dark && styles.darkText]}>Video o GIF (opcional)</Text>
-            <TextInput value={videoUrl} onChangeText={setVideoUrl} placeholder="https://..." placeholderTextColor={palette.muted} autoCapitalize="none" style={[styles.input, dark && styles.darkInput]} />
+            <TextInput value={videoUrl} onChangeText={setVideoUrl} placeholder="https://..." placeholderTextColor={colors.textSecondary} autoCapitalize="none" style={[styles.input, dark && styles.darkInput]} />
             {error ? <Text style={styles.error}>{error}</Text> : null}
             <Pressable onPress={() => void save()} disabled={isSaving} style={styles.primaryButton}>
-              {isSaving ? <ActivityIndicator color="#121212" /> : <Text style={styles.primaryText}>{exercise ? 'Guardar cambios' : 'Crear ejercicio'}</Text>}
+              {isSaving ? <ActivityIndicator color={colors.onAccentFill} /> : <Text style={styles.primaryText}>{exercise ? 'Guardar cambios' : 'Crear ejercicio'}</Text>}
             </Pressable>
           </ScrollView>
         </View>
@@ -147,6 +150,8 @@ function MetricsModal({
   onClose: () => void;
   onConfirm: (value: ExerciseSelection[]) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [values, setValues] = useState<Record<string, ExerciseSelection>>(() => initialMetricValues(exercises));
   const availableEquipment = equipment.filter((item) => item.status !== 'out_of_service');
 
@@ -165,7 +170,7 @@ function MetricsModal({
         <View style={styles.metricsCard}>
           <View style={styles.modalHeader}>
             <View style={styles.flex}><Text style={styles.modalTitle}>Configurar objetivos</Text><Text style={styles.subtitle}>{exercises.length} ejercicio{exercises.length === 1 ? '' : 's'}</Text></View>
-            <Pressable onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={palette.ink} /></Pressable>
+            <Pressable onPress={onClose}><MaterialCommunityIcons name="close" size={24} color={colors.text} /></Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.metricsList} keyboardShouldPersistTaps="handled">
             {exercises.map((exercise) => {
@@ -209,10 +214,14 @@ function MetricsModal({
 }
 
 function Field({ label, value, onChangeText }: { label: string; value: string; onChangeText: (value: string) => void }) {
-  return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput keyboardType="decimal-pad" value={value} onChangeText={onChangeText} style={styles.smallInput} placeholderTextColor={palette.muted} /></View>;
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return <View style={styles.field}><Text style={styles.fieldLabel}>{label}</Text><TextInput keyboardType="decimal-pad" value={value} onChangeText={onChangeText} style={styles.smallInput} placeholderTextColor={colors.textSecondary} /></View>;
 }
 
 export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, canManage = true }: ExerciseSearchProps) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const dark = useDarkUi();
   const [catalog, setCatalog] = useState<CuratedExercise[]>([]);
   const [page, setPage] = useState(1);
@@ -292,35 +301,35 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
     <Modal visible={visible} animationType="slide" onRequestClose={closePicker}>
       <View style={[styles.screen, dark && styles.darkScreen]}>
         <View style={styles.header}>
-          <Pressable onPress={closePicker} hitSlop={10}><MaterialCommunityIcons name="arrow-left" size={25} color={dark ? '#F4F8F5' : palette.ink} /></Pressable>
+          <Pressable onPress={closePicker} hitSlop={10}><MaterialCommunityIcons name="arrow-left" size={25} color={dark ? colors.text : colors.text} /></Pressable>
           <Text style={[styles.headerTitle, dark && styles.darkText]}>Añadir Ejercicio</Text>
-          {canManage ? <Pressable onPress={() => { setFormExercise(null); setFormVisible(true); }} style={styles.createAction}><MaterialCommunityIcons name="plus" size={18} color={palette.green} /><Text style={styles.createText}>Crear</Text></Pressable> : <View style={styles.headerSpacer} />}
+          {canManage ? <Pressable onPress={() => { setFormExercise(null); setFormVisible(true); }} style={styles.createAction}><MaterialCommunityIcons name="plus" size={18} color={colors.accent} /><Text style={styles.createText}>Crear</Text></Pressable> : <View style={styles.headerSpacer} />}
         </View>
-        <View style={[styles.searchBar, dark && styles.darkInputWrap]}><MaterialCommunityIcons name="magnify" size={21} color={palette.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar ejercicio" placeholderTextColor={palette.muted} style={[styles.searchInput, dark && styles.darkText]} /></View>
+        <View style={[styles.searchBar, dark && styles.darkInputWrap]}><MaterialCommunityIcons name="magnify" size={21} color={colors.textSecondary} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar ejercicio" placeholderTextColor={colors.textSecondary} style={[styles.searchInput, dark && styles.darkText]} /></View>
         <View style={styles.filters}>
-          <Pressable onPress={() => setFilter('muscle')} style={styles.filterButton}><MaterialCommunityIcons name="arm-flex" size={18} color={palette.green} /><Text style={styles.filterText}>{muscleFilter || 'Músculos'}</Text><MaterialCommunityIcons name="chevron-down" size={17} color={palette.muted} /></Pressable>
-          <Pressable onPress={() => setFilter('equipment')} style={styles.filterButton}><MaterialCommunityIcons name="dumbbell" size={18} color={palette.green} /><Text style={styles.filterText}>{equipmentFilter || 'Equipamiento'}</Text><MaterialCommunityIcons name="chevron-down" size={17} color={palette.muted} /></Pressable>
+          <Pressable onPress={() => setFilter('muscle')} style={styles.filterButton}><MaterialCommunityIcons name="arm-flex" size={18} color={colors.accent} /><Text style={styles.filterText}>{muscleFilter || 'Músculos'}</Text><MaterialCommunityIcons name="chevron-down" size={17} color={colors.textSecondary} /></Pressable>
+          <Pressable onPress={() => setFilter('equipment')} style={styles.filterButton}><MaterialCommunityIcons name="dumbbell" size={18} color={colors.accent} /><Text style={styles.filterText}>{equipmentFilter || 'Equipamiento'}</Text><MaterialCommunityIcons name="chevron-down" size={17} color={colors.textSecondary} /></Pressable>
         </View>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {loading ? <ActivityIndicator color={palette.green} style={styles.loader} /> : (
+        {loading ? <ActivityIndicator color={colors.accent} style={styles.loader} /> : (
           <FlatList data={catalog} keyExtractor={(item) => `${item.source ?? 'custom'}-${item._id}`} contentContainerStyle={styles.list}
             onEndReached={loadNextPage} onEndReachedThreshold={0.4}
             ListEmptyComponent={<Text style={styles.empty}>No hay ejercicios con estos filtros.</Text>}
-            ListFooterComponent={loadingMore ? <ActivityIndicator color={palette.green} style={styles.loader} /> : undefined}
+            ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.accent} style={styles.loader} /> : undefined}
             renderItem={({ item }) => {
             const checked = selected.some((exercise) => exercise._id === item._id);
             const category = normalizeEquipmentCategory(item.equipment);
             const thumbnail = item.imageUrl || item.gifUrl || item.videoUrl;
             return <Pressable onPress={() => toggle(item)} style={styles.exerciseRow}>
-              {thumbnail ? <Image source={{ uri: thumbnail }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={item._id} autoplay={false} transition={120} /> : <View style={styles.thumbnail}><MaterialCommunityIcons name="dumbbell" size={23} color={palette.green} /></View>}
+              {thumbnail ? <Image source={{ uri: thumbnail }} style={styles.thumbnail} contentFit="cover" cachePolicy="memory-disk" recyclingKey={item._id} autoplay={false} transition={120} /> : <View style={styles.thumbnail}><MaterialCommunityIcons name="dumbbell" size={23} color={colors.accent} /></View>}
               <View style={styles.flex}>
                 <Text numberOfLines={1} style={styles.exerciseName}>{item.name}</Text>
                 <Text style={styles.exerciseMeta}>{normalizeMuscleGroup(item.muscleGroup)} · {category}</Text>
                 {outOfService.includes(category) ? <Text style={styles.maintenance}>Equipo en mantenimiento</Text> : null}
               </View>
-              {item.source === 'global' ? <Pressable accessibilityRole="button" accessibilityLabel={`Ver instrucciones de ${item.name}`} onPress={() => setDetail({ name: item.name, gifUrl: item.gifUrl, catalogExerciseId: item._id })} hitSlop={8}><MaterialCommunityIcons name="information-outline" size={20} color={palette.cyan} /></Pressable> : null}
-              {item.isCustom && canManage ? <Pressable onPress={() => { setFormExercise(item); setFormVisible(true); }} hitSlop={8}><MaterialCommunityIcons name="pencil-outline" size={19} color={palette.cyan} /></Pressable> : null}
-              {mode === 'superset' ? <View style={[styles.check, checked && styles.checkActive]}>{checked ? <Text style={styles.checkText}>✓</Text> : null}</View> : <MaterialCommunityIcons name="chevron-right" size={21} color={palette.muted} />}
+              {item.source === 'global' ? <Pressable accessibilityRole="button" accessibilityLabel={`Ver instrucciones de ${item.name}`} onPress={() => setDetail({ name: item.name, gifUrl: item.gifUrl, catalogExerciseId: item._id })} hitSlop={8}><MaterialCommunityIcons name="information-outline" size={20} color={colors.info} /></Pressable> : null}
+              {item.isCustom && canManage ? <Pressable onPress={() => { setFormExercise(item); setFormVisible(true); }} hitSlop={8}><MaterialCommunityIcons name="pencil-outline" size={19} color={colors.info} /></Pressable> : null}
+              {mode === 'superset' ? <View style={[styles.check, checked && styles.checkActive]}>{checked ? <Text style={styles.checkText}>✓</Text> : null}</View> : <MaterialCommunityIcons name="chevron-right" size={21} color={colors.textSecondary} />}
             </Pressable>;
           }} />)}
         {mode === 'superset' && selected.length >= 2 ? <Pressable onPress={() => setMetricsVisible(true)} style={styles.stickyButton}><Text style={styles.primaryText}>Configurar {selected.length} ejercicios</Text></Pressable> : null}
@@ -333,9 +342,9 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
                   const isSelected = isMuscleFilter ? (item === 'Todos los Músculos' ? !muscleFilter : muscleFilter === item) : (item === 'Todos los Equipos' ? !equipmentFilter : equipmentFilter === item);
                   const icon = isMuscleFilter ? MUSCLE_GROUP_ICONS[item] ?? 'arm-flex' : EQUIPMENT_FAMILY_OPTIONS.find((option) => option.value === item)?.icon ?? 'dots-horizontal-circle-outline';
                   return <Pressable key={item} onPress={() => { if (isMuscleFilter) setMuscleFilter(item === 'Todos los Músculos' ? '' : item); else setEquipmentFilter(item === 'Todos los Equipos' ? '' : item); setFilter(null); }} style={[styles.filterOption, isSelected && styles.filterOptionSelected]}>
-                    <MaterialCommunityIcons name={icon} size={20} color={isSelected ? palette.neon : palette.green} />
+                    <MaterialCommunityIcons name={icon} size={20} color={isSelected ? colors.accent : colors.accent} />
                     <Text style={[styles.filterOptionText, dark && styles.darkText, isSelected && styles.filterOptionTextSelected]}>{item}</Text>
-                    {isSelected ? <MaterialCommunityIcons name="check" size={19} color={palette.neon} /> : null}
+                    {isSelected ? <MaterialCommunityIcons name="check" size={19} color={colors.accent} /> : null}
                   </Pressable>;
                 })}
               </ScrollView>
@@ -350,19 +359,19 @@ export function ExerciseSearch({ visible, mode, equipment, onClose, onConfirm, c
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#F4F4EC', padding: 20, paddingTop: 56 },
-  darkScreen: { backgroundColor: '#101412' },
+const useStyles = makeStyles(({ colors }) => ({
+  screen: { flex: 1, backgroundColor: colors.background, padding: 20, paddingTop: 56 },
+  darkScreen: { backgroundColor: colors.surfaceSunken },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
-  headerTitle: { color: palette.ink, fontSize: 21, fontWeight: '800' },
-  headerSpacer: { width: 40 }, createAction: { flexDirection: 'row', alignItems: 'center', gap: 3 }, createText: { color: palette.green, fontSize: 15, fontWeight: '800' },
-  searchBar: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 16, backgroundColor: palette.white, paddingHorizontal: 14, marginBottom: 12 },
-  darkInputWrap: { backgroundColor: '#1E1E1E' }, searchInput: { flex: 1, color: palette.ink, fontSize: 15 },
-  filters: { flexDirection: 'row', gap: 10, marginBottom: 12 }, filterButton: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 14, backgroundColor: palette.white, paddingHorizontal: 11 }, filterText: { flex: 1, color: palette.ink, fontSize: 12, fontWeight: '700' },
-  list: { gap: 8, paddingBottom: 90 }, exerciseRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, backgroundColor: '#1E1E1E', padding: 10 }, thumbnail: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#3A3A3A', alignItems: 'center', justifyContent: 'center' }, flex: { flex: 1 }, exerciseName: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' }, exerciseMeta: { color: '#A1A1AA', fontSize: 13, marginTop: 3 },
-  check: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: palette.line, alignItems: 'center', justifyContent: 'center' }, checkActive: { backgroundColor: palette.green, borderColor: palette.green }, checkText: { color: palette.white, fontSize: 17, fontWeight: '800' },
-  stickyButton: { position: 'absolute', left: 20, right: 20, bottom: 22, minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: palette.neon }, primaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: palette.neon, paddingHorizontal: 16 }, primaryText: { color: '#081009', fontSize: 14, fontWeight: '800' },
-  loader: { marginTop: 30 }, empty: { color: palette.muted, fontSize: 13, textAlign: 'center', marginTop: 30 }, maintenance: { color: '#F5B84B', fontSize: 11, fontWeight: '700', marginTop: 3 }, error: { color: palette.danger, fontSize: 12, marginBottom: 8 }, filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000066' }, filterSheet: { minHeight: 400, maxHeight: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: palette.white, padding: 18 }, darkFilterSheet: { backgroundColor: '#18181B' }, filterScrollContent: { flexGrow: 1, paddingBottom: 40 }, filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: palette.line }, filterOptionSelected: { backgroundColor: '#10FF8512' }, filterOptionText: { flex: 1, color: palette.ink, fontSize: 15 }, filterOptionTextSelected: { color: palette.neon, fontWeight: '800' },
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: '#00000099' }, formCard: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: palette.white, padding: 20 }, darkCard: { backgroundColor: '#18181B' }, modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }, modalTitle: { color: palette.ink, fontSize: 20, fontWeight: '800' }, darkText: { color: '#F4F8F5' }, subtitle: { color: palette.muted, fontSize: 12, marginTop: 3 }, form: { gap: 12, paddingBottom: 18 }, label: { color: palette.ink, fontSize: 13, fontWeight: '700' }, input: { minHeight: 48, borderWidth: 1, borderColor: palette.line, borderRadius: 13, color: palette.ink, paddingHorizontal: 12 }, darkInput: { color: '#F4F8F5', backgroundColor: '#1E1E1E', borderColor: '#333' },
-  metricsCard: { maxHeight: '88%', borderRadius: 24, backgroundColor: palette.white, padding: 20, margin: 16 }, metricsList: { gap: 14, paddingBottom: 14 }, metricRow: { gap: 7, borderBottomWidth: 1, borderBottomColor: palette.line, paddingBottom: 14 }, metricTitle: { color: palette.ink, fontSize: 15, fontWeight: '800' }, metricSubtitle: { color: palette.muted, fontSize: 12 }, row: { flexDirection: 'row', gap: 8 }, field: { flex: 1, gap: 4 }, fieldLabel: { color: palette.muted, fontSize: 10, fontWeight: '700' }, smallInput: { minHeight: 42, borderWidth: 1, borderColor: palette.line, borderRadius: 10, color: palette.ink, paddingHorizontal: 9, fontSize: 13 },
-});
+  headerTitle: { color: colors.text, fontSize: 21, fontWeight: '800' },
+  headerSpacer: { width: 40 }, createAction: { flexDirection: 'row', alignItems: 'center', gap: 3 }, createText: { color: colors.accent, fontSize: 15, fontWeight: '800' },
+  searchBar: { height: 52, flexDirection: 'row', alignItems: 'center', gap: 9, borderRadius: 16, backgroundColor: colors.surface, paddingHorizontal: 14, marginBottom: 12 },
+  darkInputWrap: { backgroundColor: colors.surface }, searchInput: { flex: 1, color: colors.text, fontSize: 15 },
+  filters: { flexDirection: 'row', gap: 10, marginBottom: 12 }, filterButton: { flex: 1, minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 14, backgroundColor: colors.surface, paddingHorizontal: 11 }, filterText: { flex: 1, color: colors.text, fontSize: 12, fontWeight: '700' },
+  list: { gap: 8, paddingBottom: 90 }, exerciseRow: { minHeight: 74, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, backgroundColor: colors.surface, padding: 10 }, thumbnail: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.surfaceSunken, alignItems: 'center', justifyContent: 'center' }, flex: { flex: 1 }, exerciseName: { color: colors.text, fontSize: 16, fontWeight: '800' }, exerciseMeta: { color: colors.textSecondary, fontSize: 13, marginTop: 3 },
+  check: { width: 26, height: 26, borderRadius: 13, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, checkActive: { backgroundColor: colors.primary, borderColor: colors.accent }, checkText: { color: colors.text, fontSize: 17, fontWeight: '800' },
+  stickyButton: { position: 'absolute', left: 20, right: 20, bottom: 22, minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 16, backgroundColor: colors.accentFill }, primaryButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.accentFill, paddingHorizontal: 16 }, primaryText: { color: colors.onAccentFill, fontSize: 14, fontWeight: '800' },
+  loader: { marginTop: 30 }, empty: { color: colors.textSecondary, fontSize: 13, textAlign: 'center', marginTop: 30 }, maintenance: { color: colors.warning, fontSize: 12, fontWeight: '700', marginTop: 3 }, error: { color: colors.danger, fontSize: 12, marginBottom: 8 }, filterBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.surfaceSunken }, filterSheet: { minHeight: 400, maxHeight: '80%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.surface, padding: 18 }, darkFilterSheet: { backgroundColor: colors.surface }, filterScrollContent: { flexGrow: 1, paddingBottom: 40 }, filterOption: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: colors.border }, filterOptionSelected: { backgroundColor: colors.accentSoft }, filterOptionText: { flex: 1, color: colors.text, fontSize: 15 }, filterOptionTextSelected: { color: colors.accent, fontWeight: '800' },
+  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.scrim }, formCard: { maxHeight: '90%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.surface, padding: 20 }, darkCard: { backgroundColor: colors.surface }, modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }, modalTitle: { color: colors.text, fontSize: 20, fontWeight: '800' }, darkText: { color: colors.text }, subtitle: { color: colors.textSecondary, fontSize: 12, marginTop: 3 }, form: { gap: 12, paddingBottom: 18 }, label: { color: colors.text, fontSize: 13, fontWeight: '700' }, input: { minHeight: 48, borderWidth: 1, borderColor: colors.border, borderRadius: 13, color: colors.text, paddingHorizontal: 12 }, darkInput: { color: colors.text, backgroundColor: colors.surface, borderColor: '#333' },
+  metricsCard: { maxHeight: '88%', borderRadius: 24, backgroundColor: colors.surface, padding: 20, margin: 16 }, metricsList: { gap: 14, paddingBottom: 14 }, metricRow: { gap: 7, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 14 }, metricTitle: { color: colors.text, fontSize: 15, fontWeight: '800' }, metricSubtitle: { color: colors.textSecondary, fontSize: 12 }, row: { flexDirection: 'row', gap: 8 }, field: { flex: 1, gap: 4 }, fieldLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' }, smallInput: { minHeight: 42, borderWidth: 1, borderColor: colors.border, borderRadius: 10, color: colors.text, paddingHorizontal: 9, fontSize: 13 },
+}));

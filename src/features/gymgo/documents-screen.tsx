@@ -5,15 +5,17 @@ import * as ImagePicker from 'expo-image-picker';
 import { Redirect, router } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { IconBadge } from './fit-ui';
-import { palette } from './theme';
 import { Notice, Page, Surface } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import type { ThemeColors } from '@/theme/tokens';
+import { useTheme } from '@/theme/theme-provider';
 
 type DocumentCategory = 'student_id' | 'other';
 type DocumentStatus = 'pending' | 'verified' | 'rejected';
@@ -38,11 +40,11 @@ const CATEGORIES: { value: DocumentCategory; label: string; hint: string }[] = [
   { value: 'other', label: 'Otro documento', hint: 'Cualquier documento que te pida tu gimnasio.' },
 ];
 
-const STATUS: Record<DocumentStatus, { label: string; color: string; icon: keyof typeof MaterialIcons.glyphMap }> = {
-  pending: { label: 'En revisión', color: '#FFD54F', icon: 'schedule' },
-  verified: { label: 'Verificado', color: '#10FF85', icon: 'verified' },
-  rejected: { label: 'Rechazado', color: '#FF6B6B', icon: 'cancel' },
-};
+const STATUS = (colors: ThemeColors): Record<DocumentStatus, { label: string; color: string; icon: keyof typeof MaterialIcons.glyphMap }> => ({
+  pending: { label: 'En revisión', color: colors.warning, icon: 'schedule' },
+  verified: { label: 'Verificado', color: colors.accent, icon: 'verified' },
+  rejected: { label: 'Rechazado', color: colors.danger, icon: 'cancel' },
+});
 
 function categoryLabel(category: DocumentCategory) {
   return CATEGORIES.find((entry) => entry.value === category)?.label ?? 'Documento';
@@ -89,6 +91,8 @@ export default function DocumentsScreen() {
 }
 
 function ClientDocuments() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [documents, setDocuments] = useState<ClientDocument[]>([]);
   const [category, setCategory] = useState<DocumentCategory>('student_id');
   const [isLoading, setIsLoading] = useState(true);
@@ -222,7 +226,7 @@ function ClientDocuments() {
           accessibilityLabel="Volver al perfil"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color="#FFFFFF" />
+          <IconBadge name="arrow-back" color={colors.text} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>Mis documentos</Text>
@@ -253,16 +257,16 @@ function ClientDocuments() {
           <SourceButton icon="photo-library" label="Galería" disabled={isUploading} onPress={() => void upload(pickFromGallery)} />
           <SourceButton icon="picture-as-pdf" label="PDF" disabled={isUploading} onPress={() => void upload(pickPdf)} />
         </View>
-        {isUploading ? <ActivityIndicator color={palette.neon} /> : <Text style={styles.hint}>PDF, JPG o PNG de hasta 10 MB.</Text>}
+        {isUploading ? <ActivityIndicator color={colors.accent} /> : <Text style={styles.hint}>PDF, JPG o PNG de hasta 10 MB.</Text>}
       </Surface>
 
       <Text style={styles.sectionLabel}>MIS ARCHIVOS</Text>
-      {isLoading ? <ActivityIndicator color={palette.neon} size="large" /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} size="large" /> : null}
       {!isLoading && documents.length === 0 ? (
         <Text style={styles.empty}>Todavía no has subido documentos.</Text>
       ) : null}
       {documents.map((document) => {
-        const status = STATUS[document.status];
+        const status = STATUS(colors)[document.status];
         const validUntil = formatDate(document.validUntil);
         return (
           <Surface key={document.id} style={styles.documentCard}>
@@ -272,7 +276,7 @@ function ClientDocuments() {
               disabled={busyId === document.id}
               onPress={() => void openDocument(document)}
               style={styles.documentMain}>
-              <MaterialIcons name={document.mimeType === 'application/pdf' ? 'picture-as-pdf' : 'image'} size={28} color="#A1A1AA" />
+              <MaterialIcons name={document.mimeType === 'application/pdf' ? 'picture-as-pdf' : 'image'} size={28} color={colors.textSecondary} />
               <View style={styles.documentText}>
                 <Text numberOfLines={1} style={styles.documentName}>{document.originalName}</Text>
                 <Text style={styles.documentMeta}>{categoryLabel(document.category)} · {formatDate(document.createdAt)}</Text>
@@ -287,13 +291,13 @@ function ClientDocuments() {
                 ) : null}
               </View>
             </Pressable>
-            {busyId === document.id ? <ActivityIndicator color={palette.neon} /> : (
+            {busyId === document.id ? <ActivityIndicator color={colors.accent} /> : (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Eliminar ${document.originalName}`}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 onPress={() => confirmDelete(document)}>
-                <MaterialIcons name="delete-outline" size={22} color="#A1A1AA" />
+                <MaterialIcons name="delete-outline" size={22} color={colors.textSecondary} />
               </Pressable>
             )}
           </Surface>
@@ -308,6 +312,8 @@ function ClientDocuments() {
 }
 
 function SourceButton({ icon, label, onPress, disabled }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; onPress: () => void; disabled: boolean }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
@@ -315,39 +321,39 @@ function SourceButton({ icon, label, onPress, disabled }: { icon: keyof typeof M
       disabled={disabled}
       onPress={() => { void Haptics.selectionAsync(); onPress(); }}
       style={({ pressed }) => [styles.source, disabled && styles.disabled, pressed && styles.pressed]}>
-      <MaterialIcons name={icon} size={24} color="#10FF85" />
+      <MaterialIcons name={icon} size={24} color={colors.accent} />
       <Text style={styles.sourceText}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27272A' },
+const useStyles = makeStyles(({ colors }) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerText: { flex: 1, gap: 4 },
-  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  headerDetail: { color: '#A1A1AA', fontSize: 13 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  headerDetail: { color: colors.textSecondary, fontSize: 13 },
   uploadCard: { gap: 12 },
-  sectionLabel: { color: '#A1A1AA', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+  sectionLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { minHeight: 36, justifyContent: 'center', borderRadius: 999, borderWidth: 1, borderColor: '#3F3F46', paddingHorizontal: 14 },
-  chipSelected: { borderColor: '#10FF85', backgroundColor: 'rgba(16, 255, 133, 0.12)' },
-  chipText: { color: '#D4D4D8', fontSize: 13, fontWeight: '700' },
-  chipTextSelected: { color: '#10FF85' },
-  hint: { color: '#A1A1AA', fontSize: 12 },
+  chip: { minHeight: 36, justifyContent: 'center', borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, paddingHorizontal: 14 },
+  chipSelected: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  chipText: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  chipTextSelected: { color: colors.accent },
+  hint: { color: colors.textSecondary, fontSize: 12 },
   sources: { flexDirection: 'row', gap: 10 },
-  source: { flex: 1, minHeight: 72, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: '#27272A' },
-  sourceText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  source: { flex: 1, minHeight: 72, alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: colors.surfaceRaised },
+  sourceText: { color: colors.text, fontSize: 13, fontWeight: '700' },
   disabled: { opacity: 0.5 },
   pressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
-  empty: { color: '#A1A1AA', fontSize: 14, textAlign: 'center', paddingVertical: 16 },
+  empty: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingVertical: 16 },
   documentCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   documentMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
   documentText: { flex: 1, gap: 3 },
-  documentName: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
-  documentMeta: { color: '#A1A1AA', fontSize: 12 },
+  documentName: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  documentMeta: { color: colors.textSecondary, fontSize: 12 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   statusText: { fontSize: 12, fontWeight: '800' },
-  rejection: { color: '#FCA5A5', fontSize: 12 },
+  rejection: { color: colors.danger, fontSize: 12 },
   purge: { alignSelf: 'center', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
-  purgeText: { color: '#FF6B6B', fontSize: 14, fontWeight: '700' },
-});
+  purgeText: { color: colors.danger, fontSize: 14, fontWeight: '700' },
+}));

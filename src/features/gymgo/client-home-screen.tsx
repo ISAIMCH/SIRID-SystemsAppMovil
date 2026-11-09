@@ -1,14 +1,31 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Pressable, Text as RNText, View, useWindowDimensions } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
+import {
+  Button,
+  Card,
+  ErrorBanner,
+  FadeIn,
+  IconTile,
+  PressableScale,
+  Screen,
+  Segmented,
+  Skeleton,
+  StatTile,
+  Text,
+  type IconName,
+  type Tone,
+} from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientAccessModal from './client-access-modal';
-import { FloatingCard } from './fit-ui';
 import GymSwitcher from './gym-switcher';
 
 type Period = 'day' | 'week' | 'month';
@@ -24,22 +41,12 @@ type Analytics = {
 };
 type WorkoutStats = { currentStreak: number };
 
-const periods: { value: Period; short: string; label: string; title: string }[] = [
-  { value: 'day', short: 'D', label: 'Día', title: 'Hoy' },
-  { value: 'week', short: 'S', label: 'Semana', title: 'Esta semana' },
-  { value: 'month', short: 'M', label: 'Mes', title: 'Este mes' },
+const periods: { value: Period; label: string; title: string }[] = [
+  { value: 'day', label: 'Día', title: 'Hoy' },
+  { value: 'week', label: 'Semana', title: 'Esta semana' },
+  { value: 'month', label: 'Mes', title: 'Este mes' },
 ];
 const dayLabels = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-const dark = {
-  background: '#070B09',
-  surface: '#18181B',
-  elevated: '#27272A',
-  line: '#27272A',
-  muted: '#A1A1AA',
-  white: '#FFFFFF',
-  green: '#10FF85',
-  cyan: '#10FF85',
-};
 
 function localDateAndTimezone() {
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -70,11 +77,13 @@ function formatWholeNumber(value: number) {
 function formatDisplayDate(value: string) {
   const date = new Date(`${value}T12:00:00`);
   if (Number.isNaN(date.getTime())) return value;
-  const formatted = date.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'short' });
-  return formatted.charAt(0).toUpperCase() + formatted.slice(1).replace(' de ', ', ');
+  const formatted = date.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 export default function ClientHomeScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const { user } = useAuth();
   const [period, setPeriod] = useState<Period>('day');
@@ -134,7 +143,9 @@ export default function ClientHomeScreen() {
         if (isCurrent) setIsLoadingStreak(false);
       });
     return () => { isCurrent = false; };
-  }, [user?.id]));
+  // reloadToken: pull-to-refresh reloads the streak too.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, reloadToken]));
 
   const selectedAnalytics = analytics?.period === period ? analytics : null;
   const maximumCalories = Math.max(5, ...(selectedAnalytics?.chartData.map((item) => item.caloriesBurned) ?? [0]));
@@ -142,244 +153,226 @@ export default function ClientHomeScreen() {
   const chartData = (selectedAnalytics?.chartData ?? []).map((item, index) => ({
     value: item.caloriesBurned,
     label: labelForPeriod(item.label, period, index),
-    frontColor: dark.green,
+    frontColor: colors.accentFill,
     topLabelComponent: () => <View />,
   }));
-  const chartWidth = Math.min(Math.max(width - 84, 250), 580);
+  const chartWidth = Math.min(Math.max(width - 96, 240), 580);
   const periodName = periods.find((item) => item.value === period)?.title ?? 'Hoy';
   const displayDate = formatDisplayDate(selectedAnalytics?.date ?? localDateAndTimezone().date);
   const hasCalories = Boolean(selectedAnalytics?.totals.caloriesBurned);
+  const firstName = user?.name?.split(' ')[0] ?? 'deportista';
+  const streak = workoutStats?.currentStreak ?? 0;
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.eyebrow}>GYMGO · CLIENTE</Text>
-            <Text style={styles.greeting}>Hola, {user?.name?.split(' ')[0] ?? 'deportista'}</Text>
-            <Text style={styles.subtitle}>{periodName} · {displayDate}</Text>
-            <GymSwitcher />
-          </View>
-        </View>
+    <Screen
+      onRefresh={() => setReloadToken((value) => value + 1)}
+      refreshing={false}
+      overlay={<ClientAccessModal visible={showAccess} onClose={() => setShowAccess(false)} />}>
+      <FadeIn style={styles.header}>
+        <Text variant="caption" tone="secondary">{displayDate}</Text>
+        <Text variant="display" accessibilityRole="header">Hola, {firstName}</Text>
+        <GymSwitcher />
+      </FadeIn>
 
-        <FloatingCard style={styles.streakCard}>
-          <MaterialIcons name="local-fire-department" size={30} color="#FF7043" />
-          <View style={styles.streakText}>
-            <Text style={styles.streakLabel}>Racha actual</Text>
-            <Text style={styles.streakValue}>
-              {isLoadingStreak || !workoutStats ? '—' : `${workoutStats.currentStreak} días asistidos`}
-            </Text>
-          </View>
-        </FloatingCard>
-
-        <View accessibilityRole="tablist" style={styles.segmented}>
-          {periods.map((item) => (
-            <Pressable
-              key={item.value}
-              accessibilityRole="tab"
-              accessibilityLabel={item.label}
-              accessibilityState={{ selected: period === item.value }}
-              onPress={() => setPeriod(item.value)}
-              style={[styles.segment, period === item.value && styles.segmentSelected]}>
-              <Text style={[styles.segmentLetter, period === item.value && styles.segmentLetterSelected]}>{item.short}</Text>
-              <Text style={[styles.segmentLabel, period === item.value && styles.segmentLabelSelected]}>{item.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {error ? (
-          <Pressable accessibilityRole="button" onPress={() => setReloadToken((value) => value + 1)} style={styles.errorBox}>
-            <MaterialIcons name="refresh" size={18} color={dark.green} />
-            <Text style={styles.errorText}>{error} · Toca para reintentar</Text>
-          </Pressable>
-        ) : null}
-
-        <View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Ver historial de entrenamientos"
-            onPress={() => router.push('/(main)/client-workout-detail')}
-            style={({ pressed }) => [styles.calorieCard, pressed && styles.calorieCardPressed]}>
-          <View style={styles.calorieHead}>
-            <View>
-              <Text style={styles.metricLabel}>CALORÍAS QUEMADAS</Text>
-              <Text style={styles.periodCaption}>{periodName}</Text>
+      <FadeIn index={1}>
+        <View style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroText}>
+              <Text variant="label" tone="heroSecondary">Racha actual</Text>
+              {isLoadingStreak ? <Skeleton width={120} height={56} style={styles.heroSkeleton} /> : (
+                <View style={styles.streakRow}>
+                  <RNText style={styles.streakValue}>{workoutStats ? streak : '—'}</RNText>
+                  <RNText style={styles.streakUnit}>{streak === 1 ? 'día' : 'días'}</RNText>
+                </View>
+              )}
+              <Text variant="caption" tone="heroSecondary">
+                {!workoutStats ? 'Tu constancia aparecerá aquí.' : streak > 0 ? 'Días seguidos asistiendo. ¡No la rompas!' : 'Entrena hoy para iniciar tu racha.'}
+              </Text>
             </View>
-            <View style={styles.flameIcon}><MaterialIcons name="local-fire-department" size={23} color={dark.green} /></View>
+            <View style={styles.flame}>
+              <MaterialIcons name="local-fire-department" size={34} color={streak > 0 ? '#FFC24D' : colors.heroTextSecondary} />
+            </View>
           </View>
-          <View style={styles.calorieValueRow}>
-            <Text style={styles.calorieValue}>{selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.caloriesBurned) : '—'}</Text>
-            <Text style={styles.calorieUnit}>kcal</Text>
+          <View style={styles.heroActions}>
+            <Button variant="accent" icon="qr-code-2" onPress={() => setShowAccess(true)} style={styles.heroButton}>Mi acceso</Button>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(main)/routines')}
+              style={({ pressed }) => [styles.heroGhost, pressed && styles.pressed]}>
+              <MaterialIcons name="fitness-center" size={20} color={colors.heroText} />
+              <RNText style={styles.heroGhostText}>Entrenar</RNText>
+            </Pressable>
           </View>
-          {isLoading ? <ActivityIndicator color={dark.green} style={styles.loadingIndicator} /> : null}
-          <View style={styles.chartArea}>
+        </View>
+      </FadeIn>
+
+      <FadeIn index={2} style={styles.section}>
+        <Segmented value={period} onChange={setPeriod} options={periods.map((item) => ({ value: item.value, label: item.label }))} />
+
+        {error ? <ErrorBanner message={error} onRetry={() => setReloadToken((value) => value + 1)} /> : null}
+
+        <Card
+          variant="raised"
+          onPress={() => router.push('/(main)/client-workout-detail')}
+          accessibilityLabel={`Calorías quemadas ${periodName}: ${selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.caloriesBurned) : 'sin datos'} kilocalorías. Ver historial`}>
+          <View style={styles.cardHead}>
+            <View style={styles.flexText}>
+              <Text variant="label" tone="secondary">Calorías · {periodName}</Text>
+              {isLoading && !selectedAnalytics ? <Skeleton width={140} height={44} /> : (
+                <View style={styles.valueRow}>
+                  <Text variant="hero">{selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.caloriesBurned) : '—'}</Text>
+                  <Text variant="bodyStrong" tone="secondary">kcal</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.historyLink}>
+              <RNText style={styles.historyText}>Historial</RNText>
+              <MaterialIcons name="chevron-right" size={18} color={colors.accent} />
+            </View>
+          </View>
+          <View style={styles.chartArea} pointerEvents="none">
             {hasCalories && selectedAnalytics?.chartData.length ? (
-              <View pointerEvents="none">
-                <BarChart
-                  key={`${period}-${selectedAnalytics.range.start}`}
-                  data={chartData}
-                  width={chartWidth}
-                  height={166}
-                  barWidth={period === 'month' ? 6 : period === 'day' ? 8 : 18}
-                  spacing={period === 'month' ? 4 : period === 'day' ? 4 : 17}
-                  initialSpacing={8}
-                  adjustToWidth
-                  frontColor={dark.green}
-                  barBorderTopLeftRadius={5}
-                  barBorderTopRightRadius={5}
-                  noOfSections={4}
-                  maxValue={chartMaximum * 4}
-                  stepValue={chartMaximum}
-                  yAxisTextStyle={styles.axisText}
-                  xAxisLabelTextStyle={styles.axisText}
-                  xAxisColor={dark.line}
-                  yAxisColor={dark.line}
-                  rulesColor={dark.surface}
-                  rulesThickness={1}
-                  hideOrigin
-                  isAnimated
-                  animationDuration={350}
-                  disableScroll
-                />
-              </View>
-            ) : !isLoading ? (
+              <BarChart
+                key={`${period}-${selectedAnalytics.range.start}`}
+                data={chartData}
+                width={chartWidth}
+                height={150}
+                barWidth={period === 'month' ? 6 : period === 'day' ? 8 : 18}
+                spacing={period === 'month' ? 4 : period === 'day' ? 4 : 17}
+                initialSpacing={8}
+                adjustToWidth
+                frontColor={colors.accentFill}
+                barBorderTopLeftRadius={5}
+                barBorderTopRightRadius={5}
+                noOfSections={4}
+                maxValue={chartMaximum * 4}
+                stepValue={chartMaximum}
+                yAxisTextStyle={styles.axisText}
+                xAxisLabelTextStyle={styles.axisText}
+                xAxisColor={colors.border}
+                yAxisColor="transparent"
+                yAxisThickness={0}
+                rulesColor={colors.divider}
+                rulesType="solid"
+                rulesThickness={1}
+                hideOrigin
+                isAnimated
+                animationDuration={350}
+                disableScroll
+              />
+            ) : isLoading ? (
+              <Skeleton height={150} radius={radius.md} />
+            ) : (
               <View style={styles.emptyChart}>
-                <Text style={styles.emptyChartText}>Aún no hay actividad en este periodo</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => router.push('/(main)/routines')}
-                  style={({ pressed }) => [styles.startWorkoutButton, pressed && styles.startWorkoutButtonPressed]}>
-                  <Text style={styles.startWorkoutButtonText}>¡Iniciar entrenamiento hoy!</Text>
-                </Pressable>
+                <MaterialIcons name="bar-chart" size={30} color={colors.textTertiary} />
+                <Text variant="callout" tone="secondary">Aún no hay actividad en este periodo</Text>
               </View>
-            ) : null}
+            )}
           </View>
           {hasCalories && selectedAnalytics?.chartData.length ? (
             <View style={styles.chartFooter}>
-              <Text style={styles.chartCaption}>{period === 'day' ? 'HORA DEL DÍA' : 'DÍA DEL PERIODO'}</Text>
-              <Text style={styles.chartCaption}>TOTAL {period === 'day' ? 'POR HORA' : 'POR DÍA'}</Text>
+              <Text variant="caption" tone="secondary">{period === 'day' ? 'Por hora del día' : 'Por día del periodo'}</Text>
             </View>
           ) : null}
-          </Pressable>
+        </Card>
+
+        {!hasCalories && !isLoading ? (
+          <Button variant="secondary" icon="play-arrow" onPress={() => router.push('/(main)/routines')}>Iniciar entrenamiento hoy</Button>
+        ) : null}
+
+        <View style={styles.row}>
+          <StatTile
+            icon="schedule"
+            tone="info"
+            label="Tiempo activo"
+            value={selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.durationMinutes) : '—'}
+            unit="min"
+            loading={isLoading && !selectedAnalytics}
+          />
+          <StatTile
+            icon="fitness-center"
+            label="Volumen"
+            value={selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.totalVolumeKg) : '—'}
+            unit="kg"
+            loading={isLoading && !selectedAnalytics}
+          />
         </View>
 
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryTitleRow}>
-              <View style={[styles.summaryIcon, { backgroundColor: '#10FF8512' }]}><MaterialIcons name="schedule" size={17} color={dark.cyan} /></View>
-              <Text style={styles.summaryLabel}>TIEMPO ACTIVO</Text>
+        <Card>
+          <View style={styles.liftRow}>
+            <IconTile name="emoji-events" tone="warning" size={44} />
+            <View style={styles.flexText}>
+              <Text variant="label" tone="secondary">Mejor levantamiento</Text>
+              {selectedAnalytics?.bestLift ? (
+                <>
+                  <Text variant="bodyStrong" numberOfLines={1}>{selectedAnalytics.bestLift.exerciseName}</Text>
+                  <Text variant="caption" tone="secondary">{new Date(selectedAnalytics.bestLift.completedAt).toLocaleDateString('es-MX')}</Text>
+                </>
+              ) : (
+                <Text variant="callout" tone="secondary">{isLoading ? 'Cargando…' : 'Registra un ejercicio de fuerza para ver tu mejor marca.'}</Text>
+              )}
             </View>
-            <Text style={styles.summaryValue}>{selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.durationMinutes) : '—'}<Text style={styles.summaryUnit}> min</Text></Text>
-          </View>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryTitleRow}>
-              <View style={[styles.summaryIcon, { backgroundColor: '#10FF8512' }]}><MaterialIcons name="fitness-center" size={17} color={dark.green} /></View>
-              <Text style={styles.summaryLabel}>VOLUMEN</Text>
-            </View>
-            <Text style={styles.summaryValue}>{selectedAnalytics ? formatWholeNumber(selectedAnalytics.totals.totalVolumeKg) : '—'}<Text style={styles.summaryUnit}> kg</Text></Text>
-          </View>
-        </View>
-
-        <View style={styles.secondaryCard}>
-          <View style={styles.summaryTitleRow}>
-            <View style={[styles.summaryIcon, { backgroundColor: '#FFB4541F' }]}><MaterialIcons name="emoji-events" size={17} color="#FFB454" /></View>
-            <Text style={styles.summaryLabel}>MEJOR LEVANTAMIENTO</Text>
-          </View>
-          {selectedAnalytics?.bestLift ? (
-            <View style={styles.bestLiftRow}>
-              <View style={styles.bestLiftText}>
-                <Text style={styles.bestLiftName}>{selectedAnalytics.bestLift.exerciseName}</Text>
-                <Text style={styles.bestLiftDate}>{new Date(selectedAnalytics.bestLift.completedAt).toLocaleDateString('es-MX')}</Text>
+            {selectedAnalytics?.bestLift ? (
+              <View style={styles.valueRow}>
+                <Text variant="metric" tone="accent">{formatWholeNumber(selectedAnalytics.bestLift.weightKg)}</Text>
+                <Text variant="caption" tone="secondary">kg</Text>
               </View>
-              <Text style={styles.bestLiftValue}>{formatWholeNumber(selectedAnalytics.bestLift.weightKg)}<Text style={styles.summaryUnit}> kg</Text></Text>
-            </View>
-          ) : (
-            <Text style={styles.noLift}>{isLoading ? 'Cargando…' : 'Registra un ejercicio de fuerza para ver tu mejor marca.'}</Text>
-          )}
-        </View>
+            ) : null}
+          </View>
+        </Card>
+      </FadeIn>
 
-        <Text style={styles.sectionTitle}>ACCESOS RÁPIDOS</Text>
-        <View style={styles.shortcuts}>
-          <QuickLink icon="qr-code-2" label="Acceso QR" onPress={() => setShowAccess(true)} />
-          <QuickLink icon="fitness-center" label="Rutinas" onPress={() => router.push('/(main)/routines')} />
-          <QuickLink icon="storefront" label="Tienda" onPress={() => router.push('/(main)/store')} />
-          <QuickLink icon="monitor-weight" label="Perfil físico" onPress={() => router.push('/(main)/profile')} />
-          <QuickLink icon="build" label="Reportar falla de equipo" onPress={() => router.push('/(main)/maintenance')} />
+      <FadeIn index={3} style={styles.section}>
+        <Text variant="headline" accessibilityRole="header">Accesos rápidos</Text>
+        <View style={styles.grid}>
+          <QuickLink icon="fitness-center" label="Mis rutinas" tone="accent" onPress={() => router.push('/(main)/routines')} />
+          <QuickLink icon="storefront" label="Tienda" tone="warning" onPress={() => router.push('/(main)/store')} />
+          <QuickLink icon="monitor-weight" label="Perfil físico" tone="info" onPress={() => router.push('/(main)/profile')} />
+          <QuickLink icon="build" label="Reportar falla" tone="danger" onPress={() => router.push('/(main)/maintenance')} />
         </View>
-      </ScrollView>
-      <ClientAccessModal visible={showAccess} onClose={() => setShowAccess(false)} />
-    </SafeAreaView>
+      </FadeIn>
+    </Screen>
   );
 }
 
-function QuickLink({ icon, label, onPress }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; onPress: () => void }) {
+function QuickLink({ icon, label, tone, onPress }: { icon: IconName; label: string; tone: Tone; onPress: () => void }) {
+  const styles = useStyles();
   return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.quickLink, pressed && styles.quickLinkPressed]}>
-      <MaterialIcons name={icon} size={20} color={dark.green} />
-      <Text style={styles.quickLinkText}>{label}</Text>
-      <MaterialIcons name="arrow-forward" size={16} color={dark.muted} />
-    </Pressable>
+    <PressableScale onPress={onPress} accessibilityLabel={label} style={styles.quickLink}>
+      <IconTile name={icon} tone={tone} size={40} />
+      <RNText numberOfLines={2} maxFontSizeMultiplier={1.4} style={styles.quickLinkText}>{label}</RNText>
+    </PressableScale>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: dark.background },
-  content: { width: '100%', maxWidth: 640, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 12, paddingBottom: 38, gap: 18 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14 },
-  headerText: { flex: 1, gap: 4 },
-  eyebrow: { color: dark.green, fontSize: 10, fontWeight: '900' },
-  greeting: { color: dark.white, fontSize: 26, fontWeight: '800' },
-  subtitle: { color: dark.muted, fontSize: 13 },
-  iconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.line, alignItems: 'center', justifyContent: 'center' },
-  segmented: { minHeight: 54, flexDirection: 'row', borderRadius: 18, backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.line, padding: 4 },
-  segment: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, borderRadius: 14 },
-  segmentSelected: { backgroundColor: dark.elevated, borderWidth: 1, borderColor: '#9BFF634D' },
-  segmentLetter: { color: dark.muted, fontSize: 15, fontWeight: '900' },
-  segmentLetterSelected: { color: dark.green },
-  segmentLabel: { color: dark.muted, fontSize: 12, fontWeight: '700' },
-  segmentLabelSelected: { color: dark.white },
-  streakCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, shadowColor: '#000000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.22, shadowRadius: 14, elevation: 4 },
-  streakText: { flex: 1, gap: 3 },
-  streakLabel: { color: dark.muted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
-  streakValue: { color: dark.white, fontSize: 19, fontWeight: '900' },
-  errorBox: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 14, backgroundColor: '#17221C', padding: 12 },
-  errorText: { flex: 1, color: dark.white, fontSize: 12 },
-  calorieCard: { borderRadius: 16, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 18, overflow: 'hidden', shadowColor: '#000000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 16, elevation: 4 },
-  calorieCardPressed: { opacity: 0.82 },
-  calorieHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  metricLabel: { color: dark.muted, fontSize: 10, fontWeight: '900' },
-  periodCaption: { color: dark.white, fontSize: 14, fontWeight: '700', marginTop: 4 },
-  flameIcon: { width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FF70431A' },
-  calorieValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 12 },
-  calorieValue: { color: dark.white, fontSize: 48, lineHeight: 55, fontWeight: '900' },
-  calorieUnit: { color: dark.muted, fontSize: 14, fontWeight: '800' },
-  loadingIndicator: { alignSelf: 'flex-start', marginVertical: 4 },
-  chartArea: { minHeight: 182, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginHorizontal: -8 },
-  axisText: { color: dark.muted, fontSize: 9 },
-  emptyChart: { minHeight: 160, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  emptyChartText: { color: dark.muted, fontSize: 12 },
-  startWorkoutButton: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: dark.green, borderRadius: 10, backgroundColor: 'transparent', paddingHorizontal: 16, marginTop: 4 },
-  startWorkoutButtonText: { color: dark.green, fontSize: 13, fontWeight: '800' },
-  startWorkoutButtonPressed: { opacity: 0.78 },
-  chartFooter: { flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: dark.line, paddingTop: 10 },
-  chartCaption: { color: dark.muted, fontSize: 9, fontWeight: '800' },
-  summaryRow: { flexDirection: 'row', gap: 12 },
-  summaryCard: { flex: 1, minHeight: 112, justifyContent: 'space-between', borderRadius: 14, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 15, shadowColor: '#000000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.16, shadowRadius: 12, elevation: 3 },
-  summaryTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  summaryIcon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: '#10FF8512' },
-  summaryLabel: { color: dark.muted, fontSize: 9, fontWeight: '900' },
-  summaryValue: { color: dark.white, fontSize: 25, fontWeight: '900' },
-  summaryUnit: { color: dark.muted, fontSize: 12, fontWeight: '700' },
-  secondaryCard: { gap: 14, borderRadius: 14, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, padding: 16, shadowColor: '#000000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.16, shadowRadius: 12, elevation: 3 },
-  bestLiftRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  bestLiftText: { flex: 1, gap: 4 },
-  bestLiftName: { color: dark.white, fontSize: 15, fontWeight: '800' },
-  bestLiftDate: { color: dark.muted, fontSize: 11 },
-  bestLiftValue: { color: dark.green, fontSize: 24, fontWeight: '900' },
-  noLift: { color: dark.muted, fontSize: 12, lineHeight: 18 },
-  sectionTitle: { color: dark.muted, fontSize: 10, fontWeight: '900', marginTop: 2 },
-  shortcuts: { gap: 9 },
-  quickLink: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, paddingHorizontal: 14 },
-  quickLinkPressed: { opacity: 0.75 },
-  quickLinkText: { flex: 1, color: dark.white, fontSize: 13, fontWeight: '700' },
-});
+const useStyles = makeStyles(({ colors }) => ({
+  header: { gap: space.xs },
+  section: { gap: space.md },
+  hero: { backgroundColor: colors.hero, borderRadius: radius.xl, padding: space.xl, gap: space.xl, overflow: 'hidden' },
+  heroTop: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  heroText: { flex: 1, gap: space.xs },
+  heroSkeleton: { opacity: 0.3 },
+  streakRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  streakValue: { color: colors.heroText, fontFamily: 'display', fontSize: 64, lineHeight: 68, fontWeight: '800' },
+  streakUnit: { color: colors.heroTextSecondary, fontFamily: 'display', fontSize: 24, fontWeight: '600' },
+  flame: { width: 60, height: 60, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.07)' },
+  heroActions: { flexDirection: 'row', gap: space.sm },
+  heroButton: { flex: 1.3 },
+  heroGhost: { flex: 1, minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderRadius: radius.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.2)' },
+  heroGhostText: { color: colors.heroText, fontSize: 16, fontWeight: '700' },
+  pressed: { opacity: 0.7 },
+  flexText: { flex: 1, gap: 2 },
+  cardHead: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  historyLink: { flexDirection: 'row', alignItems: 'center', minHeight: 32 },
+  historyText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
+  chartArea: { minHeight: 160, justifyContent: 'center', marginHorizontal: -8 },
+  axisText: { color: colors.textSecondary, fontSize: 10 },
+  emptyChart: { minHeight: 140, alignItems: 'center', justifyContent: 'center', gap: space.sm, borderRadius: radius.md, backgroundColor: colors.surfaceSunken, marginHorizontal: 8 },
+  chartFooter: { borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: space.sm },
+  row: { flexDirection: 'row', gap: space.md },
+  liftRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  quickLink: { flexBasis: '46%', flexGrow: 1, minHeight: 104, justifyContent: 'space-between', gap: space.md, borderRadius: radius.lg, padding: space.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  quickLinkText: { color: colors.text, fontSize: 15, fontWeight: '700' },
+}));

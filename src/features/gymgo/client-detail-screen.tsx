@@ -1,6 +1,6 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
@@ -14,9 +14,10 @@ import { FloatingCard, IconBadge } from './fit-ui';
 import { membershipDisplayStatus, membershipLabel } from './membership-status';
 import { routineEditorHref } from './routine-links';
 import SharedHistorySection from './shared-history-section';
-import { palette } from './theme';
 import type { Routine } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 const experienceLabels: Record<NonNullable<DirectoryClient['experienceLevel']>, string> = {
   principiante: 'Principiante',
@@ -27,10 +28,12 @@ const experienceLabels: Record<NonNullable<DirectoryClient['experienceLevel']>, 
 function formatDate(value?: string) {
   if (!value) return 'Sin fecha';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? 'Sin fecha' : date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 export default function ClientDetailScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { clientId } = useLocalSearchParams<{ clientId: string }>();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
@@ -99,7 +102,7 @@ export default function ClientDetailScreen() {
           accessibilityLabel="Volver al directorio"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color={isAdmin ? '#18181B' : '#FFFFFF'} />
+          <IconBadge name="arrow-back" color={isAdmin ? colors.text : colors.text} />
         </Pressable>
         <View style={styles.flex}>
           <Text style={[styles.title, isAdmin && styles.adminTitle]}>{person ? [person.name, person.lastName].filter(Boolean).join(' ') : 'Perfil'}</Text>
@@ -107,7 +110,7 @@ export default function ClientDetailScreen() {
         </View>
       </View>
 
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={colors.accent} size="large" /></View> : null}
       {error ? (
         <View style={styles.gap}>
           <Notice error>{error}</Notice>
@@ -176,7 +179,7 @@ export default function ClientDetailScreen() {
 
                   <SectionTitle>Rutinas</SectionTitle>
                   {routinesError ? <Notice error>{routinesError}</Notice> : null}
-                  {routines === null && !routinesError ? <ActivityIndicator color={palette.green} /> : null}
+                  {routines === null && !routinesError ? <ActivityIndicator color={colors.accent} /> : null}
                   {routines?.length ? (
                     <CoachRoutineList routines={routines} onChanged={() => setRoutinesReload((value) => value + 1)} />
                   ) : routines ? (
@@ -205,6 +208,8 @@ function EditProfileForm({ person, onCancel, onSaved }: {
   onCancel: () => void;
   onSaved: (person: DirectoryClient) => void;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const isCoach = person.role === 'Coach';
   const [email, setEmail] = useState(person.email);
   const [lastName, setLastName] = useState(person.lastName ?? '');
@@ -249,7 +254,7 @@ function EditProfileForm({ person, onCancel, onSaved }: {
       )}
       {error ? <Notice error>{error}</Notice> : null}
       <ActionButton onPress={() => void save()} disabled={isSaving}>
-        {isSaving ? <ActivityIndicator color={palette.white} /> : 'Guardar cambios'}
+        {isSaving ? <ActivityIndicator color={colors.text} /> : 'Guardar cambios'}
       </ActionButton>
       <ActionButton secondary onPress={onCancel}>Cancelar</ActionButton>
     </FloatingCard>
@@ -262,6 +267,7 @@ function DetailRow({ label, value, last = false, accent = false }: {
   last?: boolean;
   accent?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={[styles.detailRow, !last && styles.detailDivider]}>
       <Text style={styles.detailLabel}>{label}</Text>
@@ -270,26 +276,26 @@ function DetailRow({ label, value, last = false, accent = false }: {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   flex: { flex: 1 },
   gap: { gap: 10 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  title: { color: '#F4F8F5', fontSize: 24, fontWeight: '800' },
-  subtitle: { color: '#91A098', fontSize: 13 },
-  adminTitle: { color: '#18181B' },
-  adminSubtitle: { color: '#52525B' },
+  title: { color: colors.text, fontSize: 24, fontWeight: '800' },
+  subtitle: { color: colors.textSecondary, fontSize: 13 },
+  adminTitle: { color: colors.text },
+  adminSubtitle: { color: colors.textSecondary },
   loading: { minHeight: 180, justifyContent: 'center', alignItems: 'center' },
-  details: { paddingVertical: 6, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
+  details: { paddingVertical: 6, backgroundColor: colors.surface, borderColor: colors.border },
   detailRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 12 },
-  detailDivider: { borderBottomWidth: 1, borderBottomColor: '#27272A' },
-  detailLabel: { color: '#A1A1AA', fontSize: 13 },
-  detailValue: { flex: 1, color: '#FFFFFF', fontSize: 13, fontWeight: '500', textAlign: 'right' },
-  detailValueAccent: { color: '#10FF85' },
-  coachCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A' },
-  adminSlateCard: { backgroundColor: '#3F3F46', borderColor: '#52525B', borderRadius: 16 },
-  coachName: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
-  coachEmail: { color: '#A1A1AA', fontSize: 13 },
-  observations: { color: '#FFFFFF', fontSize: 14, lineHeight: 21, paddingVertical: 10 },
-  observationsEmpty: { color: '#A1A1AA' },
-  form: { gap: 16, padding: 20, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
-});
+  detailDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  detailLabel: { color: colors.textSecondary, fontSize: 13 },
+  detailValue: { flex: 1, color: colors.text, fontSize: 13, fontWeight: '500', textAlign: 'right' },
+  detailValueAccent: { color: colors.accent },
+  coachCard: { backgroundColor: colors.surface, borderColor: colors.border },
+  adminSlateCard: { backgroundColor: colors.surfaceRaised, borderColor: colors.borderStrong, borderRadius: 16 },
+  coachName: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  coachEmail: { color: colors.textSecondary, fontSize: 13 },
+  observations: { color: colors.text, fontSize: 14, lineHeight: 21, paddingVertical: 10 },
+  observationsEmpty: { color: colors.textSecondary },
+  form: { gap: 16, padding: 20, backgroundColor: colors.surface, borderColor: colors.border },
+}));

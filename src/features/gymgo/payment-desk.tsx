@@ -1,12 +1,14 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { connectSocket } from '../../services/socket';
-import { palette } from './theme';
 import { ActionButton, Notice, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import type { ThemeColors } from '@/theme/tokens';
+import { useTheme } from '@/theme/theme-provider';
 
 type PaymentStatus = 'pending' | 'paid' | 'cancelled';
 type Payment = {
@@ -22,7 +24,7 @@ type Payment = {
 };
 
 const statusLabels: Record<PaymentStatus, string> = { pending: 'Pendiente', paid: 'Pagado', cancelled: 'Cancelado' };
-const statusColors: Record<PaymentStatus, string> = { pending: palette.orange, paid: palette.neon, cancelled: palette.danger };
+const statusColors = (colors: ThemeColors): Record<PaymentStatus, string> => ({ pending: colors.warning, paid: colors.accent, cancelled: colors.danger });
 
 function formatAmount(amount: number, currency: string) {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency }).format(amount);
@@ -34,6 +36,8 @@ function customerOf(payment: Payment) {
 
 // Membership payments at the front desk: the client shows a 5-digit PIN, reception confirms the cash.
 export default function PaymentDesk() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [pin, setPin] = useState('');
   const [found, setFound] = useState<Payment | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -125,7 +129,7 @@ export default function PaymentDesk() {
     <>
       <FloatingCard style={styles.pinCard}>
         <View style={styles.pinHeader}>
-          <IconBadge name="pin" color={palette.cyan} />
+          <IconBadge name="pin" color={colors.info} />
           <Text style={styles.pinTitle}>Buscar por PIN</Text>
         </View>
         <View style={styles.searchRow}>
@@ -136,7 +140,7 @@ export default function PaymentDesk() {
             onChangeText={(value) => { setPin(value.replace(/\D/g, '')); setPinError(''); }}
             onSubmitEditing={() => void searchPin()}
             placeholder="00000"
-            placeholderTextColor={palette.muted}
+            placeholderTextColor={colors.textSecondary}
             style={styles.pinInput}
           />
           <Pressable
@@ -145,7 +149,7 @@ export default function PaymentDesk() {
             disabled={isSearching || pin.length !== 5}
             onPress={() => void searchPin()}
             style={[styles.searchButton, (isSearching || pin.length !== 5) && styles.disabled]}>
-            {isSearching ? <ActivityIndicator color={palette.deepGreen} /> : <MaterialIcons name="search" size={26} color={palette.deepGreen} />}
+            {isSearching ? <ActivityIndicator color={colors.accent} /> : <MaterialIcons name="search" size={26} color={colors.accent} />}
           </Pressable>
         </View>
         {pinError ? <Notice error>{pinError}</Notice> : null}
@@ -159,7 +163,7 @@ export default function PaymentDesk() {
             <Text style={styles.resultAmount}>{formatAmount(found.amount, found.currency)}</Text>
             <Text style={styles.resultPlan}>{found.planName} · {found.durationDays} días</Text>
             <ActionButton onPress={() => void confirmCash()} disabled={isConfirming}>
-              {isConfirming ? <ActivityIndicator color={palette.white} /> : 'Confirmar recepción de efectivo'}
+              {isConfirming ? <ActivityIndicator color={colors.text} /> : 'Confirmar recepción de efectivo'}
             </ActionButton>
           </View>
         ) : null}
@@ -179,7 +183,7 @@ export default function PaymentDesk() {
         ))}
       </View>
 
-      {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} size="large" /> : null}
       {listError ? <Notice error>{listError}</Notice> : null}
       {!isLoading && !listError && payments.length === 0 ? <Notice>No hay pagos para este filtro.</Notice> : null}
 
@@ -195,7 +199,7 @@ export default function PaymentDesk() {
               </View>
               <View style={styles.paymentRight}>
                 <Text style={styles.paymentAmount}>{formatAmount(payment.amount, payment.currency)}</Text>
-                <View style={[styles.statusChip, { backgroundColor: `${statusColors[payment.status]}26` }]}>
+                <View style={[styles.statusChip, { backgroundColor: `${statusColors(colors)[payment.status]}26` }]}>
                   <Text style={styles.statusText}>{statusLabels[payment.status]}</Text>
                 </View>
               </View>
@@ -212,33 +216,33 @@ export default function PaymentDesk() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   pinCard: { gap: 14, padding: 22 },
   pinHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pinTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
+  pinTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
   searchRow: { flexDirection: 'row', gap: 10 },
-  pinInput: { flex: 1, height: 58, borderRadius: 12, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', color: '#18181B', fontSize: 28, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
-  searchButton: { width: 58, height: 58, borderRadius: 12, backgroundColor: '#18181B', alignItems: 'center', justifyContent: 'center' },
+  pinInput: { flex: 1, height: 58, borderRadius: 12, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 28, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
+  searchButton: { width: 58, height: 58, borderRadius: 12, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   disabled: { opacity: 0.5 },
-  result: { gap: 6, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 14 },
-  resultLabel: { color: palette.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  resultName: { color: palette.ink, fontSize: 22, fontWeight: '800', marginBottom: 6 },
-  resultAmount: { color: palette.green, fontSize: 34, fontWeight: '900' },
-  resultPlan: { color: palette.muted, fontSize: 13, marginBottom: 10 },
+  result: { gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
+  resultLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  resultName: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 6 },
+  resultAmount: { color: colors.accent, fontSize: 34, fontWeight: '900' },
+  resultPlan: { color: colors.textSecondary, fontSize: 13, marginBottom: 10 },
   filters: { flexDirection: 'row', gap: 8 },
-  filterChip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: palette.white },
-  filterSelected: { backgroundColor: palette.deepGreen },
-  filterText: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  filterTextSelected: { color: palette.white },
+  filterChip: { borderRadius: 20, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: colors.surface },
+  filterSelected: { backgroundColor: colors.hero },
+  filterText: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  filterTextSelected: { color: colors.text },
   paymentCard: { gap: 10 },
   paymentTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   paymentInfo: { flex: 1, gap: 3 },
-  paymentName: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  paymentMeta: { color: palette.muted, fontSize: 12 },
+  paymentName: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  paymentMeta: { color: colors.textSecondary, fontSize: 12 },
   paymentRight: { alignItems: 'flex-end', gap: 6 },
-  paymentAmount: { color: palette.ink, fontSize: 16, fontWeight: '800' },
+  paymentAmount: { color: colors.text, fontSize: 16, fontWeight: '800' },
   statusChip: { borderRadius: 12, paddingHorizontal: 9, paddingVertical: 4 },
-  statusText: { color: palette.ink, fontSize: 11, fontWeight: '800' },
+  statusText: { color: colors.text, fontSize: 12, fontWeight: '800' },
   cancelButton: { alignSelf: 'flex-start' },
-  cancelText: { color: palette.danger, fontSize: 13, fontWeight: '800' },
-});
+  cancelText: { color: colors.danger, fontSize: 13, fontWeight: '800' },
+}));

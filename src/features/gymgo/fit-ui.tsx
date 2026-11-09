@@ -1,69 +1,23 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import type { PropsWithChildren } from 'react';
-import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 
-import { useAdminEmbedded, useAdminLight, useDarkUi } from './ui';
-
-type IconName = keyof typeof MaterialIcons.glyphMap;
+import { Card, IconTile, StatTile, type IconName } from '@/components/sirid';
 
 export function FloatingCard({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
-  const dark = useDarkUi();
-  const embedded = useAdminEmbedded();
-  const adminLight = useAdminLight();
-  const admin = embedded || adminLight;
-  if (admin) return <BlurView tint="light" intensity={40} style={[styles.card, styles.adminGlassCard, style]}>{children}</BlurView>;
-  return <View style={[styles.card, dark && styles.darkCard, style]}>{children}</View>;
+  return <Card variant="raised" style={style}>{children}</Card>;
 }
 
-export function IconBadge({ name, color, size = 44 }: { name: IconName; color: string; size?: number }) {
-  const embedded = useAdminEmbedded();
-  const adminLight = useAdminLight();
-  const admin = embedded || adminLight;
-  const iconColor = admin && color !== '#B0443C' ? '#18181B' : color;
-  return (
-    <View style={[styles.badge, { width: size, height: size, borderRadius: size / 2, backgroundColor: admin ? '#F4F4F5' : `${color}26` }]}>
-      <MaterialIcons name={name} size={size * 0.5} color={iconColor} />
-    </View>
-  );
+/** `color` is ignored in favour of the theme's accent so icons adapt to light/dark. */
+export function IconBadge({ name, size = 44 }: { name: IconName; color?: string; size?: number }) {
+  return <IconTile name={name} size={size} />;
 }
 
-export function MetricCard({ icon, color, label, value, hint }: {
+export function MetricCard({ icon, label, value, hint }: {
   icon: IconName;
-  color: string;
+  color?: string;
   label: string;
   value: string | number;
   hint?: string;
 }) {
-  const dark = useDarkUi();
-  return (
-    <FloatingCard style={styles.metric}>
-      <IconBadge name={icon} color={color} />
-      <Text style={[styles.metricValue, { color }]}>{value}</Text>
-      <Text style={[styles.metricLabel, dark && styles.darkMetricLabel]}>{label}</Text>
-      {hint ? <Text style={[styles.metricHint, dark && styles.darkMetricHint]}>{hint}</Text> : null}
-    </FloatingCard>
-  );
+  return <StatTile icon={icon} label={label} value={value} hint={hint} />;
 }
-
-const styles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 18,
-    shadowColor: '#1C2A25',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 4,
-  },
-  darkCard: { backgroundColor: '#111815', borderWidth: 1, borderColor: '#27342E' },
-  adminGlassCard: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E4E4E7', shadowColor: '#18181B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
-  badge: { alignItems: 'center', justifyContent: 'center' },
-  metric: { flex: 1, gap: 6, minWidth: 140 },
-  metricValue: { fontSize: 28, lineHeight: 32, fontWeight: '800', marginTop: 6 },
-  metricLabel: { color: '#1C2A25', fontSize: 13, fontWeight: '700' },
-  metricHint: { color: '#747D75', fontSize: 11 },
-  darkMetricLabel: { color: '#F4F8F5' },
-  darkMetricHint: { color: '#91A098' },
-});

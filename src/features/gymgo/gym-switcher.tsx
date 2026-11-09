@@ -2,13 +2,28 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from '@/hooks/haptics';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+
+import { Button, Sheet } from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 import { getApiErrorMessage } from './api';
 import { useAuth, type SessionGym } from './auth-context';
 
-const dark = { background: '#070B09', surface: '#18181B', line: '#27272A', muted: '#A1A1AA', white: '#FFFFFF', green: '#10FF85' };
+const useStyles = makeStyles(({ colors }) => ({
+  chip: { alignSelf: 'flex-start', maxWidth: '100%', minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceRaised, paddingHorizontal: 12 },
+  chipText: { flexShrink: 1, color: colors.text, fontSize: 14, fontWeight: '600' },
+  pressed: { opacity: 0.7 },
+  list: { gap: space.xl, paddingBottom: space.sm },
+  group: { gap: space.sm },
+  groupTitle: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+  gymRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surfaceRaised, paddingHorizontal: 16 },
+  gymRowActive: { borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  gymName: { flex: 1, color: colors.text, fontSize: 16, fontWeight: '600' },
+  error: { color: colors.danger, fontSize: 14, textAlign: 'center' },
+}));
 
 function groupByOrganization(gyms: SessionGym[]) {
   const groups = new Map<string, { name: string; gyms: SessionGym[] }>();
@@ -24,6 +39,8 @@ function groupByOrganization(gyms: SessionGym[]) {
 // Staff with a single gym have nothing to switch, so it renders nothing for them.
 export default function GymSwitcher() {
   const { user, gyms, activeGym, selectGym } = useAuth();
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [pendingGymId, setPendingGymId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -58,75 +75,43 @@ export default function GymSwitcher() {
         accessibilityLabel={`Gimnasio actual: ${activeGym.name}. Cambiar de gimnasio`}
         onPress={() => setIsOpen(true)}
         style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
-        <MaterialIcons name="location-on" size={16} color={dark.green} />
-        <Text numberOfLines={1} style={styles.chipText}>
+        <MaterialIcons name="location-on" size={16} color={colors.accent} />
+        <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={styles.chipText}>
           {groups.length > 1 ? `${activeGym.organization.name} · ${activeGym.name}` : activeGym.name}
         </Text>
-        <MaterialIcons name="expand-more" size={18} color={dark.muted} />
+        <MaterialIcons name="expand-more" size={18} color={colors.textSecondary} />
       </Pressable>
 
-      <Modal visible={isOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setIsOpen(false)}>
-        <SafeAreaView edges={['top', 'bottom']} style={styles.sheet}>
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>Tus gimnasios</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Cerrar" onPress={() => setIsOpen(false)} style={styles.closeButton}>
-              <MaterialIcons name="close" size={22} color={dark.white} />
-            </Pressable>
-          </View>
+      <Sheet visible={isOpen} onClose={() => setIsOpen(false)} title="Tus gimnasios" subtitle="Cambia de sede o de gimnasio">
+        <ScrollView contentContainerStyle={styles.list}>
+          {groups.map((group) => (
+            <View key={group.name} style={styles.group}>
+              <Text style={styles.groupTitle}>{group.name}</Text>
+              {group.gyms.map((gym) => {
+                const isActive = gym.id === activeGym.id;
+                return (
+                  <Pressable
+                    key={gym.id}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive, disabled: pendingGymId !== null }}
+                    disabled={pendingGymId !== null}
+                    onPress={() => void choose(gym.id)}
+                    style={({ pressed }) => [styles.gymRow, isActive && styles.gymRowActive, pressed && styles.pressed]}>
+                    <MaterialIcons name="fitness-center" size={18} color={isActive ? colors.accent : colors.textSecondary} />
+                    <Text style={styles.gymName}>{gym.name}</Text>
+                    {pendingGymId === gym.id ? <ActivityIndicator color={colors.accent} /> : null}
+                    {isActive ? <MaterialIcons name="check-circle" size={22} color={colors.accent} /> : null}
+                  </Pressable>
+                );
+              })}
+            </View>
+          ))}
 
-          <ScrollView contentContainerStyle={styles.sheetContent}>
-            {groups.map((group) => (
-              <View key={group.name} style={styles.group}>
-                <Text style={styles.groupTitle}>{group.name.toUpperCase()}</Text>
-                {group.gyms.map((gym) => {
-                  const isActive = gym.id === activeGym.id;
-                  return (
-                    <Pressable
-                      key={gym.id}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isActive, disabled: pendingGymId !== null }}
-                      disabled={pendingGymId !== null}
-                      onPress={() => void choose(gym.id)}
-                      style={({ pressed }) => [styles.gymRow, isActive && styles.gymRowActive, pressed && styles.pressed]}>
-                      <Text style={styles.gymName}>{gym.name}</Text>
-                      {pendingGymId === gym.id ? <ActivityIndicator color={dark.green} /> : null}
-                      {isActive ? <MaterialIcons name="check" size={20} color={dark.green} /> : null}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            ))}
+          {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
-            {error ? <Text style={styles.error}>{error}</Text> : null}
-
-            {isClient ? (
-              <Pressable accessibilityRole="button" onPress={joinAnother} style={({ pressed }) => [styles.joinButton, pressed && styles.pressed]}>
-                <MaterialIcons name="add" size={20} color={dark.green} />
-                <Text style={styles.joinText}>Unirme a otro gimnasio</Text>
-              </Pressable>
-            ) : null}
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
+          {isClient ? <Button variant="secondary" icon="add" onPress={joinAnother}>Unirme a otro gimnasio</Button> : null}
+        </ScrollView>
+      </Sheet>
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  chip: { alignSelf: 'flex-start', maxWidth: '100%', minHeight: 36, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 18, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, paddingHorizontal: 12 },
-  chipText: { flexShrink: 1, color: dark.white, fontSize: 13, fontWeight: '700' },
-  pressed: { opacity: 0.78 },
-  sheet: { flex: 1, backgroundColor: dark.background },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14 },
-  sheetTitle: { color: dark.white, fontSize: 22, fontWeight: '800' },
-  closeButton: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: dark.surface },
-  sheetContent: { paddingHorizontal: 20, paddingBottom: 32, gap: 20 },
-  group: { gap: 8 },
-  groupTitle: { color: dark.muted, fontSize: 11, fontWeight: '900' },
-  gymRow: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 14, borderWidth: 1, borderColor: dark.line, backgroundColor: dark.surface, paddingHorizontal: 16 },
-  gymRowActive: { borderColor: '#10FF8566' },
-  gymName: { flex: 1, color: dark.white, fontSize: 15, fontWeight: '700' },
-  error: { color: '#FF8A80', fontSize: 13, textAlign: 'center' },
-  joinButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 14, borderWidth: 1, borderColor: dark.green },
-  joinText: { color: dark.green, fontSize: 14, fontWeight: '800' },
-});

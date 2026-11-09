@@ -1,11 +1,13 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { connectSocket } from '@/services/socket';
 
 import { useAuth } from './auth-context';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 export type AccessResult = {
   id: string;
@@ -56,6 +58,8 @@ const maintenanceStatus = { pending: 'Pendiente', in_progress: 'En revisión', r
 // Keeps the client's session in step with what reception and the gym do from the dashboard, and tells them:
 // payments and membership changes refresh the session; scans and report updates show a short banner.
 export default function ClientLiveUpdates() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, refreshSession } = useAuth();
   const insets = useSafeAreaInsets();
   const [banner, setBanner] = useState<Banner | null>(null);
@@ -121,7 +125,7 @@ export default function ClientLiveUpdates() {
         accessibilityLabel={`${banner.title}. ${banner.detail ?? ''}`}
         onPress={() => setBanner(null)}
         style={[styles.banner, banner.tone === 'error' && styles.errorBanner]}>
-        <MaterialIcons name={icon} size={22} color={banner.tone === 'error' ? '#FF978B' : '#10FF85'} />
+        <MaterialIcons name={icon} size={22} color={banner.tone === 'error' ? colors.danger : colors.accent} />
         <View style={styles.text}>
           <Text style={styles.title}>{banner.title}</Text>
           {banner.detail ? <Text style={styles.detail}>{banner.detail}</Text> : null}
@@ -131,7 +135,7 @@ export default function ClientLiveUpdates() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   wrap: { position: 'absolute', left: 16, right: 16, zIndex: 50, alignItems: 'center' },
   banner: {
     width: '100%',
@@ -141,18 +145,18 @@ const styles = StyleSheet.create({
     gap: 12,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#27342E',
-    backgroundColor: '#18181B',
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
     paddingHorizontal: 14,
     paddingVertical: 12,
-    shadowColor: '#000000',
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 14,
     elevation: 12,
   },
-  errorBanner: { borderColor: '#5A2A26' },
+  errorBanner: { borderColor: colors.danger },
   text: { flex: 1, gap: 2 },
-  title: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
-  detail: { color: '#A1A1AA', fontSize: 12, lineHeight: 17 },
-});
+  title: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  detail: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
+}));

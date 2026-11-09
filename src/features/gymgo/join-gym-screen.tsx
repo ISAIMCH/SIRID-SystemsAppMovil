@@ -8,6 +8,8 @@ import { getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import { ActionButton, Eyebrow, Field, Heading, Notice, Page } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 // Same alphabet and length as the API (api/src/utils/access-codes.js).
 const JOIN_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
@@ -23,6 +25,8 @@ function codeFromQr(data: string) {
 }
 
 export default function JoinGymScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, gyms, needsGym, joinGym, signOut } = useAuth();
   const params = useLocalSearchParams<{ code?: string }>();
   const [code, setCode] = useState(() => normalizeCode(params.code ?? ''));
@@ -145,7 +149,7 @@ export default function JoinGymScreen() {
       <ActionButton onPress={() => void submit()} disabled={isSubmitting || code.length === 0}>
         {isSubmitting ? 'Uniendo…' : 'Unirme'}
       </ActionButton>
-      {isSubmitting ? <ActivityIndicator color="#10FF85" /> : null}
+      {isSubmitting ? <ActivityIndicator color={colors.accent} /> : null}
 
       {gyms.length > 0 ? (
         <Text style={styles.hint}>Tus gimnasios actuales no cambian: podrás elegir entre ellos desde el inicio.</Text>
@@ -154,11 +158,11 @@ export default function JoinGymScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  headerAction: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#18181B' },
-  headerActionText: { color: '#10FF85', fontSize: 13, fontWeight: '800' },
-  cameraBox: { height: 280, borderRadius: 16, overflow: 'hidden', backgroundColor: '#101B18', alignItems: 'center', justifyContent: 'center' },
-  scanFrame: { width: 190, height: 190, borderWidth: 3, borderColor: '#9BFF63', borderRadius: 18 },
-  hint: { color: '#A1A1AA', fontSize: 12, lineHeight: 18, textAlign: 'center' },
-});
+  headerAction: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  headerActionText: { color: colors.accent, fontSize: 13, fontWeight: '800' },
+  cameraBox: { height: 280, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
+  scanFrame: { width: 190, height: 190, borderWidth: 3, borderColor: colors.accent, borderRadius: 18 },
+  hint: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+}));

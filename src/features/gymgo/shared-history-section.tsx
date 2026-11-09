@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard } from './fit-ui';
-import { palette } from './theme';
 import { ActionButton, Notice, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 type ShareStatus = 'pending' | 'approved' | 'rejected' | 'revoked';
 
@@ -43,6 +44,8 @@ const formatDate = (value: string) => new Date(value).toLocaleDateString('es-MX'
 // from the dashboard. Each opening is logged by the API, so it loads only when the coach asks for it, and it hides
 // at once if the client revokes it.
 export default function SharedHistorySection({ clientId }: { clientId: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [shares, setShares] = useState<HistoryShare[] | null>(null);
   const [history, setHistory] = useState<SharedHistory | null>(null);
   const [isOpening, setIsOpening] = useState(false);
@@ -98,7 +101,7 @@ export default function SharedHistorySection({ clientId }: { clientId: string })
     <>
       <SectionTitle>Historial compartido</SectionTitle>
       <FloatingCard style={styles.card}>
-        {shares === null && !error ? <ActivityIndicator color={palette.green} /> : null}
+        {shares === null && !error ? <ActivityIndicator color={colors.accent} /> : null}
         {error ? <Notice error>{error}</Notice> : null}
         {shares?.length === 0 ? (
           <Text style={styles.muted}>Este cliente no comparte su historial de otros gimnasios. Puedes solicitarlo desde el panel web.</Text>
@@ -111,7 +114,7 @@ export default function SharedHistorySection({ clientId }: { clientId: string })
 
         {approved && !history ? (
           <ActionButton onPress={() => void open(approved)} disabled={isOpening}>
-            {isOpening ? <ActivityIndicator color={palette.white} /> : 'Ver historial'}
+            {isOpening ? <ActivityIndicator color={colors.text} /> : 'Ver historial'}
           </ActionButton>
         ) : null}
 
@@ -168,18 +171,18 @@ export default function SharedHistorySection({ clientId }: { clientId: string })
   );
 }
 
-const styles = StyleSheet.create({
-  card: { gap: 12, backgroundColor: '#1E1E1E', borderColor: '#27272A' },
+const useStyles = makeStyles(({ colors }) => ({
+  card: { gap: 12, backgroundColor: colors.surface, borderColor: colors.border },
   flex: { flex: 1, gap: 2 },
-  muted: { color: '#A1A1AA', fontSize: 13, lineHeight: 19 },
-  status: { color: '#A1A1AA', fontSize: 13 },
-  statusApproved: { color: '#10FF85', fontWeight: '700' },
+  muted: { color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  status: { color: colors.textSecondary, fontSize: 13 },
+  statusApproved: { color: colors.accent, fontWeight: '700' },
   history: { gap: 10 },
-  sensitive: { gap: 4, borderRadius: 10, borderWidth: 1, borderColor: '#5A4A1E', backgroundColor: '#211C10', padding: 12 },
-  sensitiveLabel: { color: '#F7C948', fontSize: 10, fontWeight: '900' },
-  heading: { color: '#FFFFFF', fontSize: 14, fontWeight: '800', marginTop: 4 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#27272A' },
-  text: { color: '#FFFFFF', fontSize: 13 },
-  meta: { color: '#A1A1AA', fontSize: 11 },
-  link: { color: '#10FF85', fontSize: 13, fontWeight: '800', paddingVertical: 6 },
-});
+  sensitive: { gap: 4, borderRadius: 10, borderWidth: 1, borderColor: colors.warning, backgroundColor: colors.warningSoft, padding: 12 },
+  sensitiveLabel: { color: colors.warning, fontSize: 12, fontWeight: '900' },
+  heading: { color: colors.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  text: { color: colors.text, fontSize: 13 },
+  meta: { color: colors.textSecondary, fontSize: 12 },
+  link: { color: colors.accent, fontSize: 13, fontWeight: '800', paddingVertical: 6 },
+}));

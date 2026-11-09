@@ -1,16 +1,24 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
-import QRCode from 'react-native-qrcode-svg';
+import { View } from 'react-native';
+
+import { Button, ErrorBanner, FadeIn, Screen, ScreenHeader, Text } from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 import { api, getApiErrorMessage } from './api';
 import { accessResultCopy, useAccessResult, type AccessResult } from './client-live-updates';
-import { palette } from './theme';
-import { ActionButton, AppHeader, Notice, Page, Surface } from './ui';
+import GymSwitcher from './gym-switcher';
+import { QrPass } from './qr-pass';
 
 type QrResponse = { qrToken: string; expiresAt: string };
 
 export default function AccessScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [qr, setQr] = useState<QrResponse | null>(null);
+  const [issuedAt, setIssuedAt] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [now, setNow] = useState(0);
@@ -37,7 +45,9 @@ export default function AccessScreen() {
       try {
         const response = await api.post<QrResponse>('/access/qr');
         if (isCurrent) {
-          setNow(Date.now());
+          const fetchedAt = Date.now();
+          setNow(fetchedAt);
+          setIssuedAt(fetchedAt);
           setQr(response.data);
           setError('');
         }
@@ -60,74 +70,76 @@ export default function AccessScreen() {
     };
   }, [retryNumber]);
 
-  const remainingSeconds = qr ? Math.max(0, Math.ceil((new Date(qr.expiresAt).getTime() - now) / 1000)) : 0;
+  const expiresAt = qr ? new Date(qr.expiresAt).getTime() : 0;
+  const remainingSeconds = qr ? Math.max(0, Math.ceil((expiresAt - now) / 1000)) : 0;
+  const totalSeconds = qr ? Math.max(1, Math.ceil((expiresAt - issuedAt) / 1000)) : 0;
+  const copy = result ? accessResultCopy(result) : null;
+  const denied = result?.event === 'denied';
+  const membershipIssue = /membres[ií]a/i.test(error);
 
   return (
-    <Page dark>
-      <AppHeader title="Acceso al gimnasio" detail="Presenta el código al lector de la entrada." />
-      <View style={styles.statusRow}>
-        <View style={[styles.statusDot, remainingSeconds > 0 && styles.statusReady]} />
-        <Text style={styles.statusText}>{remainingSeconds > 0 ? 'Código vigente' : 'Renovando código'}</Text>
-        {remainingSeconds > 0 ? <Text style={styles.countdown}>{remainingSeconds}s</Text> : null}
-      </View>
+    <Screen>
+      <ScreenHeader eyebrow="Acceso" title="Tu pase QR" subtitle="Acércalo al lector de la entrada." />
+      <GymSwitcher />
 
-      {result ? (
-        <Notice error={result.event === 'denied'}>
-          {`${accessResultCopy(result).title}. ${accessResultCopy(result).detail ?? ''}`}
-        </Notice>
+      {result && copy ? (
+        <FadeIn>
+          <View accessibilityRole="alert" style={[styles.result, denied && styles.resultDenied]}>
+            <MaterialIcons name={denied ? 'block' : result.event === 'check-in' ? 'login' : 'logout'} size={28} color={denied ? colors.danger : colors.success} />
+            <View style={styles.flex}>
+              <Text variant="headline">{copy.title}</Text>
+              {copy.detail ? <Text variant="callout" tone="secondary">{copy.detail}</Text> : null}
+            </View>
+          </View>
+        </FadeIn>
       ) : null}
 
-      <Surface style={styles.qrPanel}>
-        {qr && remainingSeconds > 0 ? (
-          <View style={styles.qrFrame}>
-            <QRCode value={qr.qrToken} size={224} quietZone={12} color={palette.ink} backgroundColor={palette.white} />
-          </View>
-        ) : (
-          <View style={styles.qrLoading}>
-            {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : <Text style={styles.expired}>···</Text>}
-          </View>
-        )}
-        <Text style={styles.qrTitle}>Tu pase personal</Text>
-        <Text style={styles.qrDetail}>Este código cambia automáticamente y solo puede usarse una vez.</Text>
-      </Surface>
+      <FadeIn index={1} style={styles.passWrap}>
+        <QrPass token={qr?.qrToken ?? null} remaining={remainingSeconds} total={totalSeconds} loading={isLoading} dimmed={Boolean(result)} />
+      </FadeIn>
 
       {error ? (
-        <View style={styles.retryGroup}>
-          <Notice error>{error}</Notice>
-          <ActionButton secondary onPress={() => {
-            setError('');
-            setIsLoading(true);
-            setRetryNumber((current) => current + 1);
-          }}>
-            Intentar de nuevo
-          </ActionButton>
+        <View style={styles.errorGroup}>
+          <ErrorBanner
+            message={error}
+            onRetry={() => {
+              setError('');
+              setIsLoading(true);
+              setRetryNumber((current) => current + 1);
+            }}
+          />
+          {membershipIssue ? <Text variant="callout" tone="secondary">Tu gimnasio debe activar tu membresía antes de habilitar el acceso.</Text> : null}
         </View>
       ) : null}
-      {error.includes('membresía') || error.includes('Membresía') ? (
-        <Notice>Tu gimnasio debe activar tu membresía antes de habilitar el acceso.</Notice>
-      ) : null}
-      <View style={styles.securityRow}>
-        <Text style={styles.securityLabel}>SEGURIDAD</Text>
-        <Text style={styles.securityText}>QR temporal · Conexión cifrada</Text>
+
+      <View style={styles.facts}>
+        <Fact icon="autorenew" text="Se renueva solo cada 45 segundos" />
+        <Fact icon="lock" text="Un solo uso · conexión cifrada" />
+        <Fact icon="brightness-high" text="Sube el brillo si el lector no lo detecta" />
       </View>
-    </Page>
+
+      {!qr && !isLoading && !error ? <Button variant="secondary" onPress={() => setRetryNumber((value) => value + 1)}>Generar código</Button> : null}
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: palette.coral },
-  statusReady: { backgroundColor: '#57956D' },
-  statusText: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  countdown: { marginLeft: 'auto', color: palette.green, fontSize: 13, fontWeight: '800' },
-  qrPanel: { alignItems: 'center', gap: 14, paddingVertical: 24 },
-  qrFrame: { width: 256, height: 256, maxWidth: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: palette.white, borderRadius: 8 },
-  qrLoading: { width: 256, height: 256, maxWidth: '100%', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F0F1E9', borderRadius: 8 },
-  expired: { color: palette.muted, fontSize: 32 },
-  qrTitle: { color: palette.ink, fontSize: 19, fontWeight: '800' },
-  qrDetail: { maxWidth: 280, color: palette.muted, fontSize: 13, lineHeight: 19, textAlign: 'center' },
-  securityRow: { borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 16, gap: 5 },
-  securityLabel: { color: palette.green, fontSize: 10, fontWeight: '800' },
-  securityText: { color: palette.muted, fontSize: 13 },
-  retryGroup: { gap: 10 },
-});
+function Fact({ icon, text }: { icon: keyof typeof MaterialIcons.glyphMap; text: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.fact}>
+      <MaterialIcons name={icon} size={18} color={colors.textSecondary} />
+      <Text variant="callout" tone="secondary" style={styles.flex}>{text}</Text>
+    </View>
+  );
+}
+
+const useStyles = makeStyles(({ colors }) => ({
+  flex: { flex: 1 },
+  passWrap: { alignItems: 'center', paddingVertical: space.sm },
+  result: { flexDirection: 'row', alignItems: 'center', gap: space.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.success, backgroundColor: colors.successSoft, padding: space.lg },
+  resultDenied: { borderColor: colors.danger, backgroundColor: colors.dangerSoft },
+  errorGroup: { gap: space.sm },
+  facts: { gap: space.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, padding: space.lg },
+  fact: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+}));
