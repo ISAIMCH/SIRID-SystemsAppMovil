@@ -410,7 +410,8 @@ function paypalOrder(organizationId, value, planCode = 'esencial') {
   };
 }
 
-test('PayPal activates the plan only after the API captures the exact amount with PayPal', async () => {
+// PayPal real quedó comentado (se usa el simulado para la evaluación escolar).
+test.skip('PayPal activates the plan only after the API captures the exact amount with PayPal', async () => {
   const organizationId = id();
   const paypal = stubPaypal(paypalOrder(organizationId, '810.84'));
   let update;
@@ -431,7 +432,7 @@ test('PayPal activates the plan only after the API captures the exact amount wit
   } finally { paypal.restore(); restores.forEach((restore) => restore()); }
 });
 
-test('a PayPal order for another amount or another organization activates nothing', async () => {
+test.skip('a PayPal order for another amount or another organization activates nothing', async () => {
   const organizationId = id();
   const restore = stub(Organization, 'findById', async () => ({ _id: organizationId, subscription: {} }));
   let paypal = stubPaypal(paypalOrder(organizationId, '1.00'));
@@ -447,4 +448,51 @@ test('a PayPal order for another amount or another organization activates nothin
       (error) => error.statusCode === 403,
     );
   } finally { paypal.restore(); restore(); }
+});
+
+test('the simulated PayPal button gives a 5-day trial of the chosen plan once, without PayPal or a payment', async () => {
+  const organizationId = id();
+  let filter;
+  let update;
+  const restores = [
+    stub(Organization, 'findById', async () => ({ _id: organizationId, subscription: { status: 'trialing', planCode: 'esencial', trialEndsAt: addDays(new Date(), 10) } })),
+    stub(Organization, 'findOneAndUpdate', async (query, change) => {
+      filter = query;
+      update = change;
+      return { _id: organizationId, subscription: { status: 'trialing', planCode: 'pro', method: 'paypal', trialEndsAt: change.$set['subscription.trialEndsAt'] } };
+    }),
+    stub(SubscriptionPayment, 'create', async () => { throw new Error('no payment should be recorded'); }),
+  ];
+  const original = global.fetch;
+  global.fetch = async () => { throw new Error('PayPal must not be called'); };
+  try {
+    const req = { ...ownerRequest(organizationId), body: { planCode: 'pro' } };
+    const res = response();
+    await controller.startPaypalDemo(req, res);
+    assert.deepEqual(filter['subscription.demoTrialUsedAt'], { $exists: false });
+    assert.equal(update.$set['subscription.planCode'], 'pro');
+    assert.equal(update.$set['subscription.status'], 'trialing');
+    const days = (update.$set['subscription.trialEndsAt'] - Date.now()) / 864e5;
+    assert.ok(days > 4.99 && days <= 5);
+    assert.equal(res.body.simulated, true);
+    assert.equal(res.body.subscription.status, 'trialing');
+    assert.equal(req.emitted[0].event, 'subscription:updated');
+  } finally { global.fetch = original; restores.forEach((restore) => restore()); }
+});
+
+test('the simulated PayPal trial is refused when it was used or the plan is already paid', async () => {
+  const organizationId = id();
+  let restore = stub(Organization, 'findById', async () => ({ _id: organizationId, subscription: { status: 'trialing', demoTrialUsedAt: new Date() } }));
+  try {
+    await assert.rejects(
+      controller.startPaypalDemo({ ...ownerRequest(organizationId), body: { planCode: 'esencial' } }, response()),
+      (error) => error.extra.code === 'paypal_demo_used',
+    );
+    restore();
+    restore = stub(Organization, 'findById', async () => ({ _id: organizationId, subscription: { status: 'active', renews: false, method: 'oxxo', currentPeriodEnd: addDays(new Date(), 20) } }));
+    await assert.rejects(
+      controller.startPaypalDemo({ ...ownerRequest(organizationId), body: { planCode: 'esencial' } }, response()),
+      (error) => error.extra.code === 'subscription_active',
+    );
+  } finally { restore(); }
 });
