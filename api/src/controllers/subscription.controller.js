@@ -150,14 +150,14 @@ async function createCheckout(req, res) {
     const paidUntil = current.status === 'active' && current.currentPeriodEnd > addDays(new Date(), 2) ? current.currentPeriodEnd : null;
     Object.assign(params, {
       mode: 'subscription',
-      payment_method_types: ['card'],
       line_items: [{ quantity: 1, price_data: { ...priceData, recurring: { interval: input.interval } } }],
       subscription_data: { metadata, ...(paidUntil ? { trial_end: Math.floor(paidUntil.getTime() / 1000) } : {}) },
     });
   } else {
     Object.assign(params, {
       mode: 'payment',
-      payment_method_types: ['oxxo'],
+      // Stripe picks methods from the Dashboard (payment_method_types is no longer accepted); this session is the OXXO one.
+      excluded_payment_method_types: ['card'],
       payment_method_options: { oxxo: { expires_after_days: OXXO_DAYS } },
       payment_intent_data: { metadata },
       line_items: [{ quantity: 1, price_data: priceData }],

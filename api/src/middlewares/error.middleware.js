@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { ZodError } = require('zod');
 const multer = require('multer');
+const HttpError = require('../utils/http-error');
 
 const UPLOAD_ERRORS = {
   LIMIT_FILE_SIZE: 'El archivo supera el tamaño máximo de 10 MB.',
@@ -43,14 +44,16 @@ function errorHandler(error, req, res, next) {
     message = 'Ya existe un registro con esos datos.';
   }
 
+  // HttpError messages are written for users (e.g. 503 "payments not configured"); only unexpected errors are hidden.
+  const intended = error instanceof HttpError;
   if (statusCode >= 500) {
     console.error(error);
-    message = 'Error interno del servidor.';
+    if (!intended) message = 'Error interno del servidor.';
   }
   if (details !== undefined) console.error('Validation Error:', error);
   res.status(statusCode).json({
     error: message,
-    ...(statusCode < 500 && error.extra ? error.extra : {}),
+    ...((statusCode < 500 || intended) && error.extra ? error.extra : {}),
     ...(details !== undefined ? { details } : {}),
   });
 }

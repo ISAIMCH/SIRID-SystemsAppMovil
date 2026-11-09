@@ -299,7 +299,8 @@ test('card checkout opens a renewing subscription with IVA; OXXO pays one period
 
     await controller.createCheckout(ownerRequest(organizationId, { planCode: 'esencial', method: 'oxxo', ...urls }), response());
     assert.equal(sessions[1].mode, 'payment');
-    assert.deepEqual(sessions[1].payment_method_types, ['oxxo']);
+    assert.deepEqual(sessions[1].excluded_payment_method_types, ['card']);
+    assert.equal(card.payment_method_types, undefined);
     assert.equal(sessions[1].line_items[0].price_data.recurring, undefined);
 
     await assert.rejects(
