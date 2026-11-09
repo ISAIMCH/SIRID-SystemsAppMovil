@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from '@/hooks/haptics';
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Animated, Image, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
 
 import { connectSocket } from '../../services/socket';
 import { useCartStore } from '../../store/cartStore';
@@ -10,21 +10,25 @@ import { api, getApiErrorMessage, getPromotions } from './api';
 import CartModal from './cart-modal';
 import { FloatingCard } from './fit-ui';
 import OrdersModal from './orders-modal';
-import { palette } from './theme';
 import type { Promotion } from './types';
 import { Notice, Page } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import type { ThemeColors } from '@/theme/tokens';
+import { useTheme } from '@/theme/theme-provider';
 
 type Product = { _id: string; name: string; category: string; price: number; image: string; imageUrl?: string; stock: number };
 
-const categoryStyle: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
-  Suplementos: { icon: 'local-drink', color: palette.neon },
-  Ropa: { icon: 'checkroom', color: '#10FF85' },
-  Accesorios: { icon: 'sports-bar', color: '#10FF85' },
-};
+const categoryStyle = (colors: ThemeColors): Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> => ({
+  Suplementos: { icon: 'local-drink', color: colors.accent },
+  Ropa: { icon: 'checkroom', color: colors.accent },
+  Accesorios: { icon: 'sports-bar', color: colors.accent },
+});
 
 const currency = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 
 export default function StoreScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const [products, setProducts] = useState<Product[]>([]);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
@@ -113,13 +117,13 @@ export default function StoreScreen() {
             <Text style={styles.subtitle}>Marca lo que te interesa y solicítalo en recepción.</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Abrir mis pedidos" onPress={() => setIsOrdersVisible(true)} style={styles.ordersButton}>
-            <MaterialIcons name="receipt-long" size={20} color={palette.neon} />
+            <MaterialIcons name="receipt-long" size={20} color={colors.accent} />
             <Text style={styles.ordersButtonText}>Mis pedidos</Text>
           </Pressable>
         </View>
       </View>
 
-      {isLoading ? <ActivityIndicator color={palette.green} size="large" /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} size="large" /> : null}
       {error ? <Notice error>{error}</Notice> : null}
 
       {promotions.length ? (
@@ -165,7 +169,7 @@ export default function StoreScreen() {
           const isInterested = cartItems.some((item) => item.id === product._id);
           const soldOut = product.stock === 0;
           const imageUrl = typeof product.imageUrl === 'string' ? product.imageUrl.trim() : '';
-          const look = categoryStyle[product.category] ?? { icon: 'category', color: palette.cyan };
+          const look = categoryStyle(colors)[product.category] ?? { icon: 'category', color: colors.info };
           return (
             <View key={product._id} style={styles.cell}>
               <FloatingCard style={styles.card}>
@@ -184,7 +188,7 @@ export default function StoreScreen() {
                   disabled={soldOut}
                   onPress={() => addProductToCart(product)}
                   style={[styles.button, isInterested && styles.buttonActive, soldOut && styles.buttonDisabled]}>
-                  <MaterialIcons name={isInterested ? 'check' : 'favorite-border'} size={16} color={isInterested ? palette.deepGreen : palette.white} />
+                  <MaterialIcons name={isInterested ? 'check' : 'favorite-border'} size={16} color={isInterested ? colors.accent : colors.text} />
                   <Text style={[styles.buttonText, isInterested && styles.buttonTextActive]}>
                     {soldOut ? 'Agotado' : isInterested ? 'En tu carrito' : 'Agregar al carrito'}
                   </Text>
@@ -198,7 +202,7 @@ export default function StoreScreen() {
       {totalItems > 0 ? (
         <Animated.View style={[styles.fabWrap, { opacity: cartAnimation, transform: [{ translateY: cartAnimation.interpolate({ inputRange: [0, 1], outputRange: [18, 0] }) }, { scale: cartAnimation }] }]}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Abrir carrito, ${totalItems} artículos`} onPress={() => setIsCartVisible(true)} style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}>
-            <MaterialIcons name="shopping-bag" size={22} color="#081009" />
+            <MaterialIcons name="shopping-bag" size={22} color={colors.onAccentFill} />
             <Text style={styles.fabText}>Carrito</Text>
             <View style={styles.fabBadge}><Text style={styles.fabBadgeText}>{totalItems}</Text></View>
           </Pressable>
@@ -211,47 +215,48 @@ export default function StoreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   header: { gap: 4 },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   headerCopy: { flex: 1, gap: 4 },
-  title: { color: '#FFFFFF', fontSize: 28, fontWeight: '800' },
-  subtitle: { color: '#A1A1AA', fontSize: 14 },
-  ordersButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, borderRadius: 10, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#1E1E1E', paddingHorizontal: 10 },
-  ordersButtonText: { color: palette.neon, fontSize: 12, fontWeight: '800' },
+  title: { color: colors.text, fontSize: 28, fontWeight: '800' },
+  subtitle: { color: colors.textSecondary, fontSize: 14 },
+  ordersButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 40, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 10 },
+  ordersButtonText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   banners: { gap: 12 },
-  banner: { aspectRatio: 16 / 9, minHeight: 220, borderRadius: 16, overflow: 'hidden', backgroundColor: '#18181B', borderWidth: 1, borderColor: '#27272A' },
+  banner: { aspectRatio: 16 / 9, minHeight: 220, borderRadius: 20, overflow: 'hidden', backgroundColor: colors.hero },
   bannerImage: { width: '100%', height: '100%' },
-  bannerOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: '#07100ACC' },
-  bannerContent: { flex: 1, justifyContent: 'flex-end', gap: 6, padding: 18, paddingBottom: 24 },
-  bannerText: { color: palette.white, fontSize: 13, fontWeight: '800' },
-  bannerDescription: { color: '#DCE8E0', fontSize: 12, lineHeight: 16 },
-  bannerDiscount: { color: palette.neon, fontSize: 18, fontWeight: '900' },
-  bannerRequirement: { color: '#FFD54F', fontSize: 12, fontWeight: '700' },
-  bannerButton: { alignSelf: 'flex-start', minHeight: 38, justifyContent: 'center', borderRadius: 999, backgroundColor: '#10FF85', paddingHorizontal: 14 },
-  bannerButtonText: { color: '#081009', fontSize: 12, fontWeight: '900' },
+  // Text sits on a photo: a fixed dark scrim and light text in both themes.
+  bannerOverlay: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(7, 16, 10, 0.62)' },
+  bannerContent: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: 6, padding: 18 },
+  bannerText: { color: '#F1F5F2', fontSize: 22, lineHeight: 26, fontWeight: '800', fontFamily: 'display' },
+  bannerDescription: { color: '#D3DED7', fontSize: 14, lineHeight: 19 },
+  bannerDiscount: { color: '#10FF85', fontSize: 20, fontWeight: '800', fontFamily: 'display' },
+  bannerRequirement: { color: '#FFC24D', fontSize: 12, fontWeight: '700' },
+  bannerButton: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', borderRadius: 999, backgroundColor: '#10FF85', paddingHorizontal: 18, marginTop: 4 },
+  bannerButtonText: { color: '#04120A', fontSize: 14, fontWeight: '800' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#27272A' },
-  chipSelected: { backgroundColor: '#10FF85', borderColor: '#10FF85' },
-  chipText: { color: '#A1A1AA', fontSize: 13, fontWeight: '700' },
-  chipTextSelected: { color: '#081009' },
+  chip: { borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  chipSelected: { backgroundColor: colors.accentFill, borderColor: colors.accent },
+  chipText: { color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
+  chipTextSelected: { color: colors.onAccentFill },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
   cell: { width: '47.5%', flexGrow: 1 },
-  card: { gap: 8, padding: 12, borderRadius: 14, backgroundColor: '#18181B', borderWidth: 1, borderColor: '#27272A', shadowColor: '#000000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
+  card: { gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
   image: { height: 110, width: '100%', borderRadius: 10, marginBottom: 6 },
   placeholder: { alignItems: 'center', justifyContent: 'center' },
-  category: { color: '#A1A1AA', fontSize: 10, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
-  name: { color: '#FFFFFF', fontSize: 16, lineHeight: 20, fontWeight: '800', minHeight: 40 },
-  price: { color: '#10FF85', fontSize: 18, fontWeight: '900' },
-  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 38, borderRadius: 999, borderWidth: 1, borderColor: '#10FF85', backgroundColor: 'transparent', marginTop: 4 },
-  buttonActive: { backgroundColor: '#10FF85' },
-  buttonDisabled: { borderColor: '#3F3F46', backgroundColor: '#27272A', opacity: 0.6 },
-  buttonText: { color: '#10FF85', fontSize: 12, fontWeight: '900' },
-  buttonTextActive: { color: '#081009' },
+  category: { color: colors.textSecondary, fontSize: 12, fontWeight: '900', letterSpacing: 0.6, textTransform: 'uppercase' },
+  name: { color: colors.text, fontSize: 16, lineHeight: 20, fontWeight: '800', minHeight: 40 },
+  price: { color: colors.accent, fontSize: 18, fontWeight: '900' },
+  button: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 38, borderRadius: 999, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'transparent', marginTop: 4 },
+  buttonActive: { backgroundColor: colors.accentFill },
+  buttonDisabled: { borderColor: colors.borderStrong, backgroundColor: colors.surfaceRaised, opacity: 0.6 },
+  buttonText: { color: colors.accent, fontSize: 12, fontWeight: '900' },
+  buttonTextActive: { color: colors.onAccentFill },
   fabWrap: { position: 'absolute', right: 22, bottom: 24, zIndex: 2 },
-  fab: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, borderRadius: 999, paddingHorizontal: 18, backgroundColor: '#10FF85', shadowColor: '#10FF85', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 8 },
+  fab: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 52, borderRadius: 999, paddingHorizontal: 18, backgroundColor: colors.accentFill, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.28, shadowRadius: 16, elevation: 8 },
   fabPressed: { opacity: 0.82 },
-  fabText: { color: '#081009', fontSize: 14, fontWeight: '900' },
-  fabBadge: { alignItems: 'center', justifyContent: 'center', minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 5, backgroundColor: '#081009' },
-  fabBadgeText: { color: '#10FF85', fontSize: 12, fontWeight: '900' },
-});
+  fabText: { color: colors.onAccentFill, fontSize: 14, fontWeight: '900' },
+  fabBadge: { alignItems: 'center', justifyContent: 'center', minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 5, backgroundColor: colors.onAccentFill },
+  fabBadgeText: { color: colors.accentFill, fontSize: 12, fontWeight: '900' },
+}));

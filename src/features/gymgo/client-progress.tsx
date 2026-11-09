@@ -1,13 +1,14 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
-import { palette } from './theme';
 import type { Exercise, Routine, RoutineBlock, WorkoutSessionLog } from './types';
 import { Notice, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 type ActualLog = { completedAt: string; reps?: number; weightKg?: number; durationMinutes?: number; distanceKm?: number; level?: number };
@@ -117,11 +118,14 @@ function buildExerciseHistory(sessions: WorkoutSessionLog[]) {
 }
 
 function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'warning' | 'danger' | 'success' }) {
+  const styles = useStyles();
   const toneStyle = tone === 'warning' ? styles.badgeWarning : tone === 'danger' ? styles.badgeDanger : tone === 'success' ? styles.badgeSuccess : styles.badgeNeutral;
   return <View style={[styles.badge, toneStyle]}><Text style={styles.badgeText}>{children}</Text></View>;
 }
 
 export default function ClientProgress({ clientId }: { clientId: string }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [sessions, setSessions] = useState<WorkoutSessionLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -168,7 +172,7 @@ export default function ClientProgress({ clientId }: { clientId: string }) {
   return (
     <View style={styles.wrapper}>
       <SectionTitle>Rutina actual y progreso</SectionTitle>
-      {isLoading ? <ActivityIndicator color={palette.green} /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
       {error ? <Notice error>{error}</Notice> : null}
       {!isLoading && !error && !routine ? <Notice>Este cliente aún no tiene una rutina asignada.</Notice> : null}
 
@@ -176,7 +180,7 @@ export default function ClientProgress({ clientId }: { clientId: string }) {
         <>
           <FloatingCard style={styles.routineCard}>
             <View style={styles.top}>
-              <IconBadge name="assignment" color={palette.neon} />
+              <IconBadge name="assignment" color={colors.accent} />
               <View style={styles.flex}>
                 <Text style={styles.routineTitle}>{routine.title}</Text>
                 <Text style={styles.meta}>{routine.level} · {routine.daysPerWeek} días/semana · {sessions.length} sesiones</Text>
@@ -208,7 +212,7 @@ export default function ClientProgress({ clientId }: { clientId: string }) {
           {blocks.map((block, index) => (
             <FloatingCard key={block._id ?? block.order} style={styles.blockCard}>
               <View style={styles.top}>
-                <IconBadge name={block.blockType === 'single' ? 'fitness-center' : 'sync-alt'} color={block.blockType === 'single' ? palette.neon : palette.violet} size={38} />
+                <IconBadge name={block.blockType === 'single' ? 'fitness-center' : 'sync-alt'} color={block.blockType === 'single' ? colors.accent : colors.info} size={38} />
                 <View style={styles.flex}>
                   <Text style={styles.blockTitle}>{days[block.day]} · Bloque {index + 1} · {block.blockType}</Text>
                   <Text style={styles.meta}>{block.sets} rondas · {block.restSeconds}s descanso</Text>
@@ -227,10 +231,12 @@ export default function ClientProgress({ clientId }: { clientId: string }) {
 }
 
 function InsightValue({ label, value, detail }: { label: string; value: string; detail: string }) {
+  const styles = useStyles();
   return <View style={styles.insightValue}><Text style={styles.insightLabel}>{label}</Text><Text style={styles.insightNumber}>{value}</Text><Text style={styles.meta}>{detail}</Text></View>;
 }
 
 function ProgressExercise({ exercise, actual, index }: { exercise: Exercise; actual?: ExerciseHistory; index: number }) {
+  const styles = useStyles();
   const cardio = isCardio(exercise);
   const assigned = cardio
     ? [exercise.targetDurationMinutes ? `${exercise.targetDurationMinutes} min` : '', exercise.targetDistanceKm ? `${exercise.targetDistanceKm} km` : '', exercise.targetLevel ? `Nivel ${exercise.targetLevel}` : ''].filter(Boolean).join(' · ')
@@ -259,6 +265,7 @@ function ProgressExercise({ exercise, actual, index }: { exercise: Exercise; act
 }
 
 function SessionCard({ session, expanded, onToggle }: { session: WorkoutSessionLog; expanded: boolean; onToggle: () => void }) {
+  const styles = useStyles();
   const date = sessionDate(session);
   const performedDay = date.getDay();
   const recovered = session.trainingDay !== performedDay;
@@ -285,6 +292,7 @@ function SessionCard({ session, expanded, onToggle }: { session: WorkoutSessionL
 }
 
 function SessionDetails({ session }: { session: WorkoutSessionLog }) {
+  const styles = useStyles();
   return (
     <View style={styles.details}>
       {(session.blocks ?? []).map((block, blockIndex) => (
@@ -306,54 +314,54 @@ function SessionDetails({ session }: { session: WorkoutSessionLog }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   wrapper: { gap: 14 },
   flex: { flex: 1 },
   routineCard: { gap: 14 },
-  editRoutineButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#10FF85', borderRadius: 10, backgroundColor: 'transparent', paddingHorizontal: 16 },
-  editRoutineButtonText: { color: '#10FF85', fontSize: 14, fontWeight: '800' },
+  editRoutineButton: { minHeight: 48, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.accent, borderRadius: 10, backgroundColor: 'transparent', paddingHorizontal: 16 },
+  editRoutineButtonText: { color: colors.accent, fontSize: 14, fontWeight: '800' },
   editRoutineButtonPressed: { opacity: 0.78 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  routineTitle: { color: palette.ink, fontSize: 17, fontWeight: '800' },
+  routineTitle: { color: colors.text, fontSize: 17, fontWeight: '800' },
   blockCard: { gap: 12 },
-  blockTitle: { color: palette.ink, fontSize: 14, fontWeight: '800', textTransform: 'capitalize' },
-  meta: { color: palette.muted, fontSize: 12 },
+  blockTitle: { color: colors.text, fontSize: 14, fontWeight: '800', textTransform: 'capitalize' },
+  meta: { color: colors.textSecondary, fontSize: 12 },
   insightsCard: { gap: 16 },
   insightGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   insightValue: { flexGrow: 1, flexBasis: '44%', gap: 3 },
-  insightLabel: { color: palette.muted, fontSize: 11, fontWeight: '700' },
-  insightNumber: { color: palette.neon, fontSize: 19, fontWeight: '900' },
+  insightLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  insightNumber: { color: colors.accent, fontSize: 19, fontWeight: '900' },
   alertList: { gap: 8 },
-  badge: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: '#52635A' },
-  badgeNeutral: { backgroundColor: '#52635A' },
-  badgeWarning: { backgroundColor: '#A66A1D' },
-  badgeDanger: { backgroundColor: '#A33B49' },
-  badgeSuccess: { backgroundColor: '#176B4B' },
-  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
-  noteAlert: { gap: 4, borderRadius: 9, padding: 10, backgroundColor: '#4E321F' },
-  noteLabel: { color: '#FFC57A', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  noteText: { color: '#FFF0DC', fontSize: 13, lineHeight: 19 },
-  exercise: { gap: 4, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 9 },
+  badge: { alignSelf: 'flex-start', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 5, backgroundColor: colors.surfaceSunken },
+  badgeNeutral: { backgroundColor: colors.surfaceSunken },
+  badgeWarning: { backgroundColor: colors.warning },
+  badgeDanger: { backgroundColor: colors.danger },
+  badgeSuccess: { backgroundColor: colors.success },
+  badgeText: { color: colors.text, fontSize: 12, fontWeight: '800' },
+  noteAlert: { gap: 4, borderRadius: 9, padding: 10, backgroundColor: colors.warningSoft },
+  noteLabel: { color: colors.warning, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  noteText: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  exercise: { gap: 4, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 },
   compactLine: { minHeight: 31, flexDirection: 'row', alignItems: 'center', gap: 7 },
-  exerciseLetter: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#9BFF631C', color: '#9BFF63', fontSize: 11, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
-  exerciseName: { flex: 1, color: '#F4F8F5', fontSize: 12, fontWeight: '800' },
-  assignedTarget: { maxWidth: '25%', color: '#55D6D0', fontSize: 11, fontWeight: '700' },
-  actualTarget: { maxWidth: '25%', color: '#9BFF63', fontSize: 11, fontWeight: '700', textAlign: 'right' },
-  compactLegend: { color: '#91A098', fontSize: 9, textAlign: 'right' },
+  exerciseLetter: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.accentSoft, color: colors.accent, fontSize: 12, fontWeight: '900', textAlign: 'center', textAlignVertical: 'center' },
+  exerciseName: { flex: 1, color: colors.text, fontSize: 12, fontWeight: '800' },
+  assignedTarget: { maxWidth: '25%', color: colors.info, fontSize: 12, fontWeight: '700' },
+  actualTarget: { maxWidth: '25%', color: colors.accent, fontSize: 12, fontWeight: '700', textAlign: 'right' },
+  compactLegend: { color: colors.textSecondary, fontSize: 11, textAlign: 'right' },
   exerciseMeta: { alignItems: 'flex-end', gap: 4 },
-  prText: { color: '#FFC857', fontSize: 11, fontWeight: '800' },
-  trendText: { color: '#55D6D0', fontSize: 11, fontWeight: '700' },
+  prText: { color: colors.warning, fontSize: 12, fontWeight: '800' },
+  trendText: { color: colors.info, fontSize: 12, fontWeight: '700' },
   sessionCard: { gap: 10 },
   sessionHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sessionTitle: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  expandText: { color: palette.neon, fontSize: 11, fontWeight: '800' },
+  sessionTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  expandText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
   metricRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
-  metricText: { color: '#B8C8BF', fontSize: 11 },
-  sessionNote: { gap: 4, borderRadius: 9, padding: 10, backgroundColor: '#332B20' },
-  details: { gap: 10, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
+  metricText: { color: colors.textSecondary, fontSize: 12 },
+  sessionNote: { gap: 4, borderRadius: 9, padding: 10, backgroundColor: colors.warningSoft },
+  details: { gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 },
   detailBlock: { gap: 6 },
-  detailTitle: { color: palette.neon, fontSize: 12, fontWeight: '900' },
+  detailTitle: { color: colors.accent, fontSize: 12, fontWeight: '900' },
   setRow: { gap: 3, paddingLeft: 8 },
-  setLabel: { color: '#FFC857', fontSize: 11, fontWeight: '800' },
-  setText: { color: '#C8D4CD', fontSize: 11, lineHeight: 16 },
-});
+  setLabel: { color: colors.warning, fontSize: 12, fontWeight: '800' },
+  setText: { color: colors.textSecondary, fontSize: 12, lineHeight: 16 },
+}));

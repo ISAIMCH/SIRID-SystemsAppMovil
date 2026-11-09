@@ -1,9 +1,10 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { palette } from './theme';
 import { useAdminEmbedded, useAdminLight, useDarkUi } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 export type SelectOption = { value: string; label: string; hint?: string };
 
@@ -18,6 +19,8 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
   addOption?: { label: string; onSelect: () => void };
   filterable?: boolean;
 }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState('');
   const embedded = useAdminEmbedded();
@@ -32,11 +35,11 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
       <Text style={[styles.label, dark && styles.darkLabel]}>{label}</Text>
       <Pressable accessibilityRole="button" onPress={() => { setIsOpen((open) => !open); setQuery(''); }} style={[styles.select, dark && styles.darkSelect, admin && styles.adminGlassInput]}>
         <Text numberOfLines={1} style={[styles.selectText, dark && styles.darkSelectText, !selected && styles.placeholder, dark && !selected && styles.darkPlaceholder]}>{selected?.label ?? placeholder}</Text>
-        <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={22} color={dark ? '#9CA3AF' : palette.muted} />
+        <MaterialIcons name={isOpen ? 'expand-less' : 'expand-more'} size={22} color={dark ? colors.textSecondary : colors.textSecondary} />
       </Pressable>
       {isOpen ? (
         <View style={[styles.options, dark && styles.darkOptions, admin && styles.adminGlassInput]}>
-          {filterable ? <TextInput value={query} onChangeText={setQuery} placeholder="Buscar..." placeholderTextColor={dark ? '#9CA3AF' : palette.muted} style={[styles.filterInput, dark && styles.darkFilterInput, admin && styles.adminGlassInput]} autoFocus /> : null}
+          {filterable ? <TextInput value={query} onChangeText={setQuery} placeholder="Buscar..." placeholderTextColor={dark ? colors.textSecondary : colors.textSecondary} style={[styles.filterInput, dark && styles.darkFilterInput, admin && styles.adminGlassInput]} autoFocus /> : null}
           {clearLabel ? (
             <Pressable accessibilityRole="button" onPress={() => { onChange(''); setIsOpen(false); }} style={styles.option}>
               <Text style={[styles.optionText, styles.clearText]}>{clearLabel}</Text>
@@ -60,30 +63,30 @@ export function SelectField({ label, placeholder, options, value, onChange, clea
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   group: { gap: 8 },
-  label: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  darkLabel: { color: '#F4F8F5' },
-  select: { height: 52, borderRadius: 12, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  darkSelect: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#333333' },
-  selectText: { flex: 1, color: palette.ink, fontSize: 15, fontWeight: '600' },
-  darkSelectText: { color: '#FFFFFF' },
-  placeholder: { color: palette.muted, fontWeight: '400' },
-  darkPlaceholder: { color: '#9CA3AF' },
-  options: { borderRadius: 16, backgroundColor: palette.white, borderWidth: 1, borderColor: palette.line, overflow: 'hidden' },
-  darkOptions: { backgroundColor: '#1E1E1E', borderColor: '#333333' },
-  option: { paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: palette.line, gap: 2 },
-  darkOption: { borderBottomColor: '#27272A' },
-  optionText: { color: palette.ink, fontSize: 15 },
-  darkOptionText: { color: '#FFFFFF' },
-  optionSelected: { color: palette.green, fontWeight: '800' },
-  darkOptionSelected: { color: '#10FF85', fontWeight: '800' },
-  clearText: { color: palette.muted },
-  addText: { color: palette.cyan, fontWeight: '800' },
-  hint: { color: palette.muted, fontSize: 12 },
-  darkHint: { color: '#9CA3AF' },
-  empty: { color: palette.muted, fontSize: 13, padding: 16 },
-  filterInput: { height: 44, color: palette.ink, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: palette.line, fontSize: 14 },
-  darkFilterInput: { color: '#FFFFFF', backgroundColor: '#18181B', borderBottomColor: '#27272A' },
-  adminGlassInput: { backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', borderRadius: 12, color: '#18181B' },
-});
+  label: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  darkLabel: { color: colors.text },
+  select: { height: 52, borderRadius: 12, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  darkSelect: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  selectText: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+  darkSelectText: { color: colors.text },
+  placeholder: { color: colors.textSecondary, fontWeight: '400' },
+  darkPlaceholder: { color: colors.textSecondary },
+  options: { borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  darkOptions: { backgroundColor: colors.surface, borderColor: colors.border },
+  option: { paddingHorizontal: 16, paddingVertical: 13, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 2 },
+  darkOption: { borderBottomColor: colors.border },
+  optionText: { color: colors.text, fontSize: 15 },
+  darkOptionText: { color: colors.text },
+  optionSelected: { color: colors.accent, fontWeight: '800' },
+  darkOptionSelected: { color: colors.accent, fontWeight: '800' },
+  clearText: { color: colors.textSecondary },
+  addText: { color: colors.info, fontWeight: '800' },
+  hint: { color: colors.textSecondary, fontSize: 12 },
+  darkHint: { color: colors.textSecondary },
+  empty: { color: colors.textSecondary, fontSize: 13, padding: 16 },
+  filterInput: { height: 44, color: colors.text, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.border, fontSize: 14 },
+  darkFilterInput: { color: colors.text, backgroundColor: colors.surface, borderBottomColor: colors.border },
+  adminGlassInput: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, borderRadius: 12, color: colors.text },
+}));

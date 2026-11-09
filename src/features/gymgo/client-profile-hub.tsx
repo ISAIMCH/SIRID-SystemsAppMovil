@@ -1,50 +1,92 @@
-import { MaterialIcons } from '@expo/vector-icons';
-import * as Haptics from '@/hooks/haptics';
 import { router, type Href } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 
+import { Badge, Card, FadeIn, ListGroup, ListRow, Screen, ScreenHeader, Text } from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { radius, space } from '@/theme/tokens';
 import { connectSocket } from '@/services/socket';
 
 import { api } from './api';
 import { useAuth } from './auth-context';
+import GymSwitcher from './gym-switcher';
+import { membershipDisplayStatus, membershipLabel } from './membership-status';
+import { initialsOf } from './settings-screen';
 import { usePendingStaffInvitations } from './staff-invitation-notifier';
-import { Page } from './ui';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-function springScale(scale: Animated.Value, toValue: number) {
-  Animated.spring(scale, { toValue, friction: 5, tension: 100, useNativeDriver: true }).start();
-}
+const useStyles = makeStyles(({ colors }) => ({
+  identity: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  avatar: { width: 72, height: 72, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary },
+  avatarText: { color: colors.onPrimary, fontSize: 28, fontWeight: '800', fontFamily: 'display' },
+  identityText: { flex: 1, gap: 4 },
+  facts: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: colors.divider, paddingTop: space.md },
+  fact: { flex: 1, gap: 2 },
+  section: { gap: space.md },
+}));
 
 export default function ClientProfileHub() {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
+  const styles = useStyles();
   const pendingRequests = usePendingHistoryRequests();
   const pendingInvitations = usePendingStaffInvitations();
-  const initials = user?.name.split(' ').map((name) => name[0]).slice(0, 2).join('').toUpperCase() ?? 'GG';
+  const membership = user?.membership;
+  const membershipActive = membershipDisplayStatus(membership) === 'active';
 
   return (
-    <Page dark>
-      <View style={styles.header}>
-        <View style={styles.avatar}><Text style={styles.avatarText}>{initials}</Text></View>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>{[user?.name, user?.lastName].filter(Boolean).join(' ') || 'Usuario GymGo'}</Text>
-          <Text style={styles.subtitle}>{user?.heightCm ? `Cliente | ${user.heightCm} cm` : 'Cliente'}</Text>
-        </View>
-      </View>
+    <Screen>
+      <ScreenHeader eyebrow="Tu cuenta" title="Perfil" />
 
-      <View style={styles.menuList}>
-        <MenuRow icon="person-outline" title="Datos personales y físicos" onPress={() => router.push('/(main)/profile')} />
-        <MenuRow icon="credit-card" title="Membresía y pagos" onPress={() => router.push('/(main)/client-billing' as Href)} />
-        <MenuRow icon="folder-shared" title="Mis documentos" onPress={() => router.push('/(main)/documents' as Href)} />
-        <MenuRow icon="build" title="Mis reportes de equipo" onPress={() => router.push('/(main)/maintenance' as Href)} />
-        <MenuRow icon="shield" title="Privacidad e historial" badge={pendingRequests} onPress={() => router.push('/(main)/privacy' as Href)} />
-        {pendingInvitations > 0 ? (
-          <MenuRow icon="badge" title="Invitaciones al staff" badge={pendingInvitations} onPress={() => router.push('/staff-invitations' as Href)} />
-        ) : null}
-        <MenuRow icon="logout" title="Cerrar sesión" warning onPress={() => void signOut()} />
-      </View>
-    </Page>
+      <FadeIn>
+        <Card variant="raised">
+          <View style={styles.identity}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{initialsOf(user?.name, user?.lastName)}</Text></View>
+            <View style={styles.identityText}>
+              <Text variant="title" numberOfLines={2}>{[user?.name, user?.lastName].filter(Boolean).join(' ') || 'Usuario GymGo'}</Text>
+              <Badge tone={membershipActive ? 'success' : 'warning'} dot>{membershipLabel(membership)}</Badge>
+            </View>
+          </View>
+          <View style={styles.facts}>
+            <View style={styles.fact}>
+              <Text variant="label" tone="secondary">Estatura</Text>
+              <Text variant="bodyStrong">{user?.heightCm ? `${user.heightCm} cm` : '—'}</Text>
+            </View>
+            <View style={styles.fact}>
+              <Text variant="label" tone="secondary">Objetivo</Text>
+              <Text variant="bodyStrong" numberOfLines={1}>{user?.goal || '—'}</Text>
+            </View>
+          </View>
+          <GymSwitcher />
+        </Card>
+      </FadeIn>
+
+      <FadeIn index={1} style={styles.section}>
+        <Text variant="label" tone="secondary">Mi información</Text>
+        <ListGroup>
+          <ListRow icon="monitor-weight" title="Datos personales y físicos" subtitle="Peso, estatura y objetivo" onPress={() => router.push('/(main)/profile')} />
+          <ListRow icon="credit-card" iconTone="info" title="Membresía y pagos" subtitle="Plan, vigencia y comprobantes" onPress={() => router.push('/(main)/client-billing' as Href)} />
+          <ListRow icon="folder-shared" iconTone="info" title="Mis documentos" onPress={() => router.push('/(main)/documents' as Href)} />
+          <ListRow icon="storefront" iconTone="warning" title="Tienda del gimnasio" divider={false} onPress={() => router.push('/(main)/store')} />
+        </ListGroup>
+      </FadeIn>
+
+      <FadeIn index={2} style={styles.section}>
+        <Text variant="label" tone="secondary">Gimnasio y privacidad</Text>
+        <ListGroup>
+          <ListRow icon="build" iconTone="warning" title="Mis reportes de equipo" onPress={() => router.push('/(main)/maintenance' as Href)} />
+          <ListRow
+            icon="shield"
+            iconTone="success"
+            title="Privacidad e historial"
+            trailing={pendingRequests > 0 ? <Badge tone="danger">{String(pendingRequests)}</Badge> : undefined}
+            onPress={() => router.push('/(main)/privacy' as Href)}
+          />
+          {pendingInvitations > 0 ? (
+            <ListRow icon="badge" title="Invitaciones al staff" trailing={<Badge tone="accent">{String(pendingInvitations)}</Badge>} onPress={() => router.push('/staff-invitations' as Href)} />
+          ) : null}
+          <ListRow icon="settings" iconTone="neutral" title="Ajustes y apariencia" subtitle="Tema claro u oscuro, cerrar sesión" divider={false} onPress={() => router.push('/(main)/settings' as Href)} />
+        </ListGroup>
+      </FadeIn>
+    </Screen>
   );
 }
 
@@ -72,38 +114,3 @@ function usePendingHistoryRequests() {
 
   return count;
 }
-
-function MenuRow({ icon, title, onPress, warning = false, badge = 0 }: { icon: keyof typeof MaterialIcons.glyphMap; title: string; onPress: () => void; warning?: boolean; badge?: number }) {
-  const scale = useState(() => new Animated.Value(1))[0];
-  return (
-    <AnimatedPressable
-      accessibilityRole="button"
-      onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onPress();
-      }}
-      onPressIn={() => springScale(scale, 0.97)}
-      onPressOut={() => springScale(scale, 1)}
-      style={[styles.menuRow, { transform: [{ scale }] }]}>
-      <MaterialIcons name={icon} size={22} color={warning ? '#A1A1AA' : '#10FF85'} />
-      <Text style={[styles.menuTitle, warning && styles.warning]}>{title}</Text>
-      {badge > 0 ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
-      {!warning ? <MaterialIcons name="chevron-right" size={22} color="#91A098" /> : null}
-    </AnimatedPressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#18181B', borderWidth: 1, borderColor: '#10FF85', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#10FF85', fontSize: 20, fontWeight: '900' },
-  headerText: { flex: 1 },
-  title: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  subtitle: { color: '#A1A1AA', fontSize: 13, marginTop: 5 },
-  menuList: { gap: 10 },
-  menuRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#1E1E1E' },
-  menuTitle: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
-  badge: { minWidth: 22, height: 22, alignItems: 'center', justifyContent: 'center', borderRadius: 11, backgroundColor: '#10FF85', paddingHorizontal: 6 },
-  badgeText: { color: '#070B09', fontSize: 12, fontWeight: '800' },
-  warning: { color: '#A1A1AA' },
-});

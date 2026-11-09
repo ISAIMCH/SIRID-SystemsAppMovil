@@ -1,21 +1,40 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Text as RNText, View } from 'react-native';
+
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  FadeIn,
+  IconTile,
+  ListGroup,
+  ListRow,
+  PressableScale,
+  ProgressBar,
+  Screen,
+  SectionHeader,
+  Skeleton,
+  StatTile,
+  Text,
+  type IconName,
+  type Tone,
+} from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import ClientHomeScreen from './client-home-screen';
 import FloorHomeScreen from './floor-home-screen';
 import GymSwitcher from './gym-switcher';
-import { usePendingStaffInvitations } from './staff-invitation-notifier';
-import ClientQrCard from './client-qr-card';
 import { routineEditorHref } from './routine-links';
-import { useMaintenanceAlerts } from './use-maintenance-alerts';
-import { palette } from './theme';
+import { usePendingStaffInvitations } from './staff-invitation-notifier';
 import type { Routine } from './types';
-import { ActionButton, AdminLightProvider, AppHeader, DarkUiProvider, Eyebrow, Notice, SectionTitle, Surface } from './ui';
+import { useMaintenanceAlerts } from './use-maintenance-alerts';
 
 type OperationsDashboard = {
   period: 'day' | 'week';
@@ -27,37 +46,41 @@ type OperationsDashboard = {
   equipmentByZone: { zone: string; total: number; available: number; busy: number; outOfService: number }[];
 };
 
-type WorkoutStats = {
-  currentStreak: number;
-  totalSessions: number;
-  completedThisWeek: number;
-  totalVolumeKg: number;
-  lastWorkoutAt: string | null;
-};
-
 export default function DashboardScreen() {
   const { user } = useAuth();
   if (user?.role === 'Cliente') return <ClientHomeScreen />;
   if (user?.role === 'Admin' || user?.role === 'Recepcion') return <FloorHomeScreen />;
-  return <StaffDashboard />;
+  return <CoachHome />;
 }
 
-function StaffDashboard() {
+const weekdayShort = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
+
+function clientName(routine: Routine) {
+  return typeof routine.assignedTo === 'object' && routine.assignedTo ? routine.assignedTo.name : 'Cliente';
+}
+
+function clientId(routine: Routine) {
+  return typeof routine.assignedTo === 'object' && routine.assignedTo ? routine.assignedTo._id : routine.assignedTo;
+}
+
+function CoachHome() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
-  const isClient = user?.role === 'Cliente';
-  const isAdmin = user?.role === 'Admin';
   const pendingInvitations = usePendingStaffInvitations();
-  const maintenanceAlerts = useMaintenanceAlerts(user?.role === 'Coach');
+  const maintenanceAlerts = useMaintenanceAlerts(true);
   const [routines, setRoutines] = useState<Routine[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [routineError, setRoutineError] = useState('');
   const [operations, setOperations] = useState<OperationsDashboard | null>(null);
-  const [workoutStats, setWorkoutStats] = useState<WorkoutStats | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState('');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
+    setRoutineError('');
     api.get<{ routines: Routine[] }>('/routines')
       .then((response) => {
         if (isCurrent) setRoutines(response.data.routines);
@@ -69,19 +92,16 @@ function StaffDashboard() {
         if (isCurrent) setIsLoading(false);
       });
     return () => { isCurrent = false; };
-  }, []));
+  // reloadKey is the pull-to-refresh / retry trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey]));
 
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
-    const summaryRequest = isClient
-      ? api.get<WorkoutStats>('/workouts/me/stats', { params: { tzOffsetMinutes: -new Date().getTimezoneOffset() } })
-      : api.get<OperationsDashboard>('/analytics/dashboard', { params: { period: 'week' } });
-
-    summaryRequest
+    setSummaryError('');
+    api.get<OperationsDashboard>('/analytics/dashboard', { params: { period: 'week' } })
       .then((response) => {
-        if (!isCurrent) return;
-        if (isClient) setWorkoutStats(response.data as WorkoutStats);
-        else setOperations(response.data as OperationsDashboard);
+        if (isCurrent) setOperations(response.data);
       })
       .catch((error: unknown) => {
         if (isCurrent) setSummaryError(getApiErrorMessage(error, 'No se pudieron cargar las estadísticas.'));
@@ -90,244 +110,217 @@ function StaffDashboard() {
         if (isCurrent) setIsLoadingSummary(false);
       });
     return () => { isCurrent = false; };
-  }, [isClient]));
+  // reloadKey is the pull-to-refresh / retry trigger.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reloadKey]));
 
-  const activeRoutineCount = routines.filter((routine) => routine.status === 'active').length;
-  const roleHeading = isClient ? 'Tu semana, a tu ritmo.' : user?.role === 'Admin' ? 'Tu gimnasio, en foco.' : 'Entrena con estrategia.';
-  const hasDemandData = Boolean(operations?.hourlyDemand.some((entry) => entry.checkIns > 0));
+  const activeRoutines = routines.filter((routine) => routine.status === 'active');
+  const clientsWithRoutine = new Set(routines.map(clientId)).size;
+  const recentRoutines = [...routines].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).slice(0, 4);
+  const demand = (operations?.hourlyDemand ?? []).filter((entry) => entry.hour >= 6 && entry.hour <= 23);
+  const demandMax = Math.max(1, ...demand.map((entry) => entry.checkIns));
+  const hasDemand = demand.some((entry) => entry.checkIns > 0);
+  const attendance = operations?.dailyAttendance ?? [];
+  const attendanceMax = Math.max(1, ...attendance.map((day) => day.checkIns));
+  const firstName = user?.name?.split(' ')[0] ?? 'coach';
+  const today = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <DarkUiProvider dark={user?.role === 'Coach'}>
-      <AdminLightProvider enabled={isAdmin}>
-      <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, user?.role === 'Coach' && styles.darkSafeArea, isAdmin && styles.adminSafeArea]}>
-        <View style={[styles.topTint, user?.role === 'Coach' && styles.darkTopTint, isAdmin && styles.adminTopTint]} />
-        <ScrollView contentContainerStyle={[styles.page, user?.role === 'Coach' && styles.darkPage, isAdmin && styles.adminPage]}>
-        <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'deportista'}`} detail={user?.email} />
+    <Screen onRefresh={() => setReloadKey((value) => value + 1)} refreshing={false}>
+      <FadeIn style={styles.header}>
+        <Text variant="caption" tone="secondary">{today.charAt(0).toUpperCase() + today.slice(1)}</Text>
+        <Text variant="display" accessibilityRole="header">Hola, {firstName}</Text>
         <GymSwitcher />
-        {pendingInvitations > 0 ? (
-          <ActionButton secondary onPress={() => router.push('/staff-invitations' as Href)}>
+      </FadeIn>
+
+      {pendingInvitations > 0 ? (
+        <Card onPress={() => router.push('/staff-invitations' as Href)} style={styles.inlineCard}>
+          <IconTile name="badge" tone="info" />
+          <Text variant="bodyStrong" style={styles.flex}>
             {pendingInvitations === 1 ? 'Tienes 1 invitación al staff' : `Tienes ${pendingInvitations} invitaciones al staff`}
-          </ActionButton>
-        ) : null}
-
-        <View style={[styles.hero, user?.role === 'Coach' && styles.darkHero, isAdmin && styles.adminHero]}>
-          <Eyebrow>{isClient ? 'PLAN PERSONAL' : `${user?.role?.toUpperCase()} · GYMGO`}</Eyebrow>
-          <Text style={styles.heroTitle}>{roleHeading}</Text>
-          <Text style={[styles.heroDetail, user?.role === 'Coach' && styles.darkHeroDetail]}>
-            {isClient
-              ? user?.goal ? `Objetivo: ${user.goal}` : 'Tus rutinas y tu acceso están a un toque.'
-              : 'Una vista clara de la actividad y el equipo del gimnasio.'}
           </Text>
-          {isAdmin ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Abrir escáner de recepción"
-              onPress={() => router.push('/(main)/scanner')}
-              style={[styles.scannerCta, isAdmin && styles.adminScannerCta]}>
-              <SymbolView name={{ ios: 'qrcode', android: 'qr_code_scanner', web: 'qr_code_scanner' }} tintColor={isAdmin ? '#18181B' : palette.deepGreen} size={22} />
-              <Text style={[styles.scannerCtaText, isAdmin && styles.adminScannerCtaText]}>Escáner de recepción</Text>
-              <Text style={[styles.scannerCtaArrow, isAdmin && styles.adminScannerCtaText]}>→</Text>
-            </Pressable>
-          ) : null}
-          {isClient ? (
-            <Pressable onPress={() => router.push('/(main)/access')} style={styles.qrLink}>
-              <Text style={styles.qrLinkText}>Mostrar acceso QR</Text>
-              <Text style={styles.arrow}>→</Text>
-            </Pressable>
-          ) : null}
+          <MaterialIcons name="chevron-right" size={22} color={colors.textTertiary} />
+        </Card>
+      ) : null}
+
+      <FadeIn index={1} style={styles.grid}>
+        <StatTile icon="login" label="Entradas hoy" value={operations?.today.checkIns ?? '—'} loading={isLoadingSummary} style={styles.gridItem} />
+        <StatTile icon="groups" tone="info" label="Dentro ahora" value={operations?.currentOccupancy ?? '—'} loading={isLoadingSummary} style={styles.gridItem} />
+        <StatTile icon="assignment" tone="success" label="Rutinas activas" value={isLoading ? '—' : activeRoutines.length} loading={isLoading} style={styles.gridItem} onPress={() => router.push('/(main)/routines')} />
+        <StatTile icon="person" tone="warning" label="Clientes" value={isLoading ? '—' : clientsWithRoutine} loading={isLoading} style={styles.gridItem} onPress={() => router.push('/directory' as Href)} />
+      </FadeIn>
+
+      {summaryError ? <ErrorBanner message={summaryError} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+      {routineError ? <ErrorBanner message={routineError} onRetry={() => setReloadKey((value) => value + 1)} /> : null}
+
+      <FadeIn index={2} style={styles.section}>
+        <SectionHeader title="Acciones rápidas" />
+        <View style={styles.actions}>
+          <QuickAction icon="add-task" label="Nueva rutina" tone="accent" primary onPress={() => router.push(routineEditorHref())} />
+          <QuickAction icon="library-add" label="Plantilla base" tone="info" onPress={() => router.push(routineEditorHref({ mode: 'template' }))} />
+          <QuickAction icon="groups" label="Mis clientes" tone="success" onPress={() => router.push('/directory' as Href)} />
+          <QuickAction
+            icon="build"
+            label="Mantenimiento"
+            tone="danger"
+            badge={maintenanceAlerts?.length ?? 0}
+            onPress={() => router.push('/(main)/maintenance')}
+          />
         </View>
+      </FadeIn>
 
-        {isClient ? <ClientQrCard /> : null}
-
-        {isClient ? (
-          <View style={styles.metricRow}>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
-              <Text style={styles.metricLabel}>Rutinas activas</Text>
-              <Text style={styles.metricValue}>{isLoading ? '—' : activeRoutineCount}</Text>
-            </Surface>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
-              <Text style={styles.metricLabel}>Membresía</Text>
-              <Text style={[styles.metricStatus, user?.membership?.status === 'active' && styles.active]}>
-                {user?.membership?.status ?? 'pendiente'}
-              </Text>
-            </Surface>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
-              <Text style={styles.metricLabel}>Racha actual</Text>
-              <Text style={styles.metricValue}>{isLoadingSummary || !workoutStats ? '—' : workoutStats.currentStreak}</Text>
-              <Text style={styles.metricHint}>días asistidos</Text>
-            </Surface>
-          </View>
-        ) : (
-          <View style={styles.metricRow}>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
-              <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Entradas hoy</Text>
-              <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.today.checkIns ?? 0}</Text>
-              <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>check-in registrados</Text>
-            </Surface>
-            <Surface style={[styles.metric, user?.role === 'Coach' && styles.darkMetricCard, isAdmin && styles.adminMetricCard]}>
-              <Text style={[styles.metricLabel, user?.role === 'Coach' && styles.darkMetricLabel]}>Dentro ahora</Text>
-              <Text style={[styles.metricValue, user?.role === 'Coach' && styles.darkMetricValue]}>{isLoadingSummary ? '—' : operations?.currentOccupancy ?? 0}</Text>
-              <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>clientes presentes</Text>
-            </Surface>
-          </View>
-        )}
-
-        {routineError ? <Notice error>{routineError}</Notice> : null}
-        {summaryError ? <Notice error>{summaryError}</Notice> : null}
-
-        {isClient && workoutStats ? (
-          <Surface style={styles.progressPanel}>
-            <SectionTitle>Progreso de entrenamiento</SectionTitle>
-            <View style={styles.progressRow}>
-              <View><Text style={styles.progressValue}>{workoutStats.completedThisWeek}</Text><Text style={styles.metricHint}>sesiones esta semana</Text></View>
-              <View><Text style={styles.progressValue}>{Math.round(workoutStats.totalVolumeKg)} kg</Text><Text style={styles.metricHint}>volumen acumulado</Text></View>
+      <FadeIn index={3}>
+        <Card variant="raised">
+          <View style={styles.chartHead}>
+            <View style={styles.flex}>
+              <Text variant="label" tone="secondary">Demanda horaria · 7 días</Text>
+              {operations?.peakHour ? (
+                <View style={styles.peakRow}>
+                  <Text variant="metric">{hourLabel(operations.peakHour.hour)}</Text>
+                  <Text variant="caption" tone="secondary">hora pico · {operations.peakHour.checkIns} entradas</Text>
+                </View>
+              ) : null}
             </View>
-          </Surface>
-        ) : null}
-
-        {!isClient && operations ? (
-            <Surface style={[styles.analyticsPanel, user?.role === 'Coach' && styles.darkPanel, isAdmin && styles.adminAnalyticsPanel]}>
-            <View style={styles.analyticsHeader}>
-              <View style={styles.analyticsHeading}>
-                <View style={styles.demandDot} />
-                <Text style={[styles.demandTitle, user?.role === 'Coach' && styles.darkMetricValue]}>Demanda horaria · 7 días</Text>
-              </View>
-              <Text style={[styles.metricHint, user?.role === 'Coach' && styles.darkMetricHint]}>{operations.today.checkOuts} salidas hoy</Text>
-            </View>
-            {operations.peakHour ? (
-              <Text style={styles.peakLabel}>Hora pico · {String(operations.peakHour.hour).padStart(2, '0')}:00 ({operations.peakHour.checkIns} entradas)</Text>
-            ) : null}
-            {hasDemandData && operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).length ? (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chart}>
-                {operations.hourlyDemand.filter((entry) => entry.hour >= 6 && entry.hour <= 23).map((entry) => {
-                  const maximum = Math.max(1, ...operations.hourlyDemand.map((value) => value.checkIns));
-                  return (
-                    <View key={entry.hour} style={styles.chartColumn}>
-                      <Text style={styles.chartCount}>{entry.checkIns || ''}</Text>
-                      <View style={[styles.chartBar, { height: Math.max(4, Math.round((entry.checkIns / maximum) * 66)) }]} />
-                      <Text style={[styles.chartHour, user?.role === 'Coach' && styles.darkChartHour]}>{String(entry.hour).padStart(2, '0')}</Text>
+            {operations ? <Badge tone="neutral">{`${operations.today.checkOuts} salidas hoy`}</Badge> : null}
+          </View>
+          {isLoadingSummary ? <Skeleton height={120} radius={radius.md} /> : hasDemand ? (
+            <View
+              style={styles.bars}
+              accessible
+              accessibilityLabel={`Demanda por hora. Hora pico ${operations?.peakHour ? hourLabel(operations.peakHour.hour) : 'sin datos'}`}>
+              {demand.map((entry) => {
+                const isPeak = entry.hour === operations?.peakHour?.hour;
+                return (
+                  <View key={entry.hour} style={styles.barColumn}>
+                    <View style={styles.barTrack}>
+                      <View style={[styles.bar, { height: `${Math.max(4, (entry.checkIns / demandMax) * 100)}%`, backgroundColor: isPeak ? colors.accentFill : colors.borderStrong }]} />
                     </View>
-                  );
-                })}
-              </ScrollView>
-            ) : (
-              <Text style={styles.emptyDemand}>Aún no hay suficientes entradas para calcular una hora pico.</Text>
-            )}
-            <View style={styles.zoneList}>
-              <ScrollView
-                nestedScrollEnabled
-                showsVerticalScrollIndicator
-                style={styles.zoneScroll}
-                contentContainerStyle={styles.zoneScrollContent}>
-                {operations.equipmentByZone.map((zone) => (
-                  <View key={zone.zone} style={styles.zoneRow}>
-                    <Text style={[styles.zoneName, user?.role === 'Coach' && styles.darkZoneText]}>{zone.zone}</Text>
-                    <Text style={[styles.zoneValue, user?.role === 'Coach' && styles.darkZoneText]}>{zone.available}/{zone.total} disp.</Text>
+                    <RNText style={[styles.barLabel, isPeak && styles.barLabelPeak]}>{entry.hour % 3 === 0 || isPeak ? entry.hour : ''}</RNText>
                   </View>
-                ))}
-                {!operations.equipmentByZone.length ? <Text style={styles.demandBody}>No hay equipos por zona registrados.</Text> : null}
-              </ScrollView>
-            </View>
-          </Surface>
-        ) : null}
-
-        <View style={styles.section}>
-          <SectionTitle>{isClient ? 'Siguiente paso' : 'Operación del gimnasio'}</SectionTitle>
-          {isClient ? (
-            <View style={styles.actionStack}>
-              <ActionButton onPress={() => router.push('/(main)/routines')}>Ver mis rutinas</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/(main)/access')}>Abrir código de acceso</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/(main)/billing')}>Pago y membresía</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/(main)/maintenance')}>Reportar falla de equipo</ActionButton>
+                );
+              })}
             </View>
           ) : (
-            <View style={styles.actionStack}>
-              <ActionButton onPress={() => router.push(routineEditorHref())}>Crear rutina</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/directory' as Href)}>Ver directorio</ActionButton>
-              <ActionButton secondary onPress={() => router.push('/(main)/maintenance')}>
-                {maintenanceAlerts?.length
-                  ? `Alertas de mantenimiento (${maintenanceAlerts.length})`
-                  : 'Alertas de mantenimiento'}
-              </ActionButton>
-            </View>
+            <EmptyState icon="schedule" title="Sin datos suficientes" message="Aún no hay entradas para calcular una hora pico." />
           )}
-        </View>
+        </Card>
+      </FadeIn>
 
-        {isLoading ? <ActivityIndicator color={palette.green} /> : null}
-        <View style={styles.footerLine}>
-          <Text style={styles.footerText}>{user?.role === 'Coach' ? 'COACH CREATOR' : 'GYMGO · MOVIMIENTO CON PROPÓSITO'}</Text>
-        </View>
-        </ScrollView>
-      </SafeAreaView>
-      </AdminLightProvider>
-    </DarkUiProvider>
+      {attendance.length ? (
+        <FadeIn index={4}>
+          <Card>
+            <Text variant="label" tone="secondary">Asistencia diaria</Text>
+            <View style={styles.attendance}>
+              {attendance.map((day) => {
+                const weekday = weekdayShort[new Date(`${day.date}T12:00:00`).getDay()] ?? day.date.slice(5);
+                return (
+                  <View key={day.date} style={styles.attendanceColumn} accessible accessibilityLabel={`${weekday}: ${day.checkIns} entradas`}>
+                    <RNText style={styles.attendanceValue}>{day.checkIns}</RNText>
+                    <View style={styles.attendanceTrack}>
+                      <View style={[styles.attendanceBar, { height: `${Math.max(6, (day.checkIns / attendanceMax) * 100)}%` }]} />
+                    </View>
+                    <RNText style={styles.barLabel}>{weekday}</RNText>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+        </FadeIn>
+      ) : null}
+
+      {operations?.equipmentByZone.length ? (
+        <FadeIn index={5} style={styles.section}>
+          <SectionHeader title="Equipos por zona" subtitle="Disponibles ahora" />
+          <Card>
+            {operations.equipmentByZone.map((zone) => (
+              <View key={zone.zone} style={styles.zoneRow}>
+                <View style={styles.zoneHead}>
+                  <Text variant="bodyStrong" style={styles.flex}>{zone.zone}</Text>
+                  <Text variant="caption" tone="secondary">{zone.available}/{zone.total} libres{zone.outOfService ? ` · ${zone.outOfService} fuera de servicio` : ''}</Text>
+                </View>
+                <ProgressBar value={zone.total ? zone.available / zone.total : 0} height={6} color={zone.available === 0 ? colors.danger : undefined} />
+              </View>
+            ))}
+          </Card>
+        </FadeIn>
+      ) : null}
+
+      <FadeIn index={6} style={styles.section}>
+        <SectionHeader title="Rutinas recientes" action="Ver todas" onAction={() => router.push('/(main)/routines')} />
+        {isLoading ? <Skeleton height={140} radius={radius.lg} /> : recentRoutines.length ? (
+          <ListGroup>
+            {recentRoutines.map((routine, index) => (
+              <ListRow
+                key={routine._id}
+                icon="assignment"
+                iconTone={routine.status === 'active' ? 'success' : 'neutral'}
+                title={routine.title}
+                subtitle={`${clientName(routine)} · ${routine.daysPerWeek} días/sem`}
+                trailing={<Badge tone={routine.status === 'active' ? 'success' : 'neutral'}>{routine.status === 'active' ? 'Activa' : 'Pausada'}</Badge>}
+                divider={index < recentRoutines.length - 1}
+                onPress={() => router.push(routineEditorHref({ routineId: routine._id }))}
+              />
+            ))}
+          </ListGroup>
+        ) : (
+          <Card variant="sunken">
+            <EmptyState icon="assignment" title="Sin rutinas todavía" message="Crea la primera rutina para uno de tus clientes." action="Crear rutina" onAction={() => router.push(routineEditorHref())} />
+          </Card>
+        )}
+      </FadeIn>
+    </Screen>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F4F4F5' },
-  darkSafeArea: { backgroundColor: '#070B09' },
-  topTint: { position: 'absolute', height: 130, left: 0, right: 0, top: 0, backgroundColor: '#F4F4F5' },
-  darkTopTint: { backgroundColor: '#070B09' },
-  page: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 22, gap: 22, paddingBottom: 36 },
-  adminSafeArea: { backgroundColor: '#F4F4F5' },
-  adminTopTint: { backgroundColor: '#F4F4F5' },
-  adminPage: { backgroundColor: '#F4F4F5' },
-  darkPage: { backgroundColor: '#070B09' },
-  hero: { backgroundColor: palette.deepGreen, borderRadius: 10, minHeight: 205, padding: 22, justifyContent: 'center', gap: 12 },
-  adminHero: { backgroundColor: '#18181B', borderRadius: 16 },
-  darkHero: { backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#27272A', borderRadius: 12 },
-  heroTitle: { color: palette.white, fontSize: 30, lineHeight: 36, fontWeight: '800', maxWidth: 420 },
-  heroDetail: { color: '#DFE8DF', fontSize: 14, lineHeight: 21 },
-  darkHeroDetail: { color: '#A1A1AA' },
-  scannerCta: { minHeight: 50, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 8, backgroundColor: palette.lime, paddingHorizontal: 15 },
-  scannerCtaText: { color: palette.deepGreen, fontSize: 14, fontWeight: '800', flexShrink: 1 },
-  scannerCtaArrow: { color: palette.deepGreen, fontSize: 20, fontWeight: '800' },
-  adminScannerCta: { backgroundColor: '#10FF85', borderRadius: 12 },
-  adminScannerCtaText: { color: '#18181B' },
-  qrLink: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', paddingTop: 4 },
-  qrLinkText: { color: palette.lime, fontSize: 14, fontWeight: '800' },
-  arrow: { color: palette.lime, fontSize: 20, fontWeight: '700' },
-  metricRow: { flexDirection: 'row', gap: 12 },
-  metric: { flex: 1, minHeight: 118, justifyContent: 'space-between', gap: 12 },
-  darkMetricCard: { backgroundColor: '#1E1E1E', borderColor: '#27272A', borderLeftWidth: 4, borderLeftColor: '#10FF85', borderTopWidth: 0, paddingLeft: 14 },
-  adminMetricCard: { backgroundColor: '#FFFFFF', borderColor: '#E4E4E7', borderLeftWidth: 4, borderLeftColor: '#18181B', borderRadius: 16, shadowColor: '#18181B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1, paddingLeft: 14 },
-  metricLabel: { color: palette.muted, fontSize: 13, fontWeight: '700' },
-  metricValue: { color: palette.ink, fontSize: 29, lineHeight: 32, fontWeight: '800' },
-  darkMetricValue: { color: '#F4F8F5' },
-  darkMetricLabel: { color: '#A1A1AA' },
-  metricHint: { color: palette.muted, fontSize: 12 },
-  darkMetricHint: { color: '#A1A1AA' },
-  metricStatus: { color: palette.coral, fontSize: 15, fontWeight: '800', textTransform: 'capitalize' },
-  active: { color: palette.green },
-  section: { gap: 14 },
-  actionStack: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  progressPanel: { gap: 14 },
-  progressRow: { flexDirection: 'row', gap: 28 },
-  progressValue: { color: palette.green, fontSize: 22, fontWeight: '800' },
-  analyticsPanel: { gap: 14 },
-  darkPanel: { backgroundColor: '#1E1E1E', borderColor: '#27272A', borderRadius: 12 },
-  adminAnalyticsPanel: { backgroundColor: '#FFFFFF', borderColor: '#E4E4E7', borderRadius: 16 },
-  analyticsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
-  analyticsHeading: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  demandDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: palette.coral },
-  demandTitle: { color: palette.ink, fontSize: 17, fontWeight: '800' },
-  demandBody: { color: palette.muted, fontSize: 14, lineHeight: 21 },
-  peakLabel: { color: palette.green, fontSize: 13, fontWeight: '800' },
-  chart: { alignItems: 'flex-end', gap: 6, paddingTop: 14, paddingBottom: 4 },
-  chartColumn: { width: 22, height: 100, justifyContent: 'flex-end', alignItems: 'center', gap: 4 },
-  chartCount: { height: 12, color: palette.muted, fontSize: 9 },
-  chartBar: { width: 12, borderTopLeftRadius: 4, borderTopRightRadius: 4, backgroundColor: palette.green },
-  chartHour: { color: palette.muted, fontSize: 9 },
-  darkChartHour: { color: '#A1A1AA' },
-  emptyDemand: { color: '#9CA3AF', fontSize: 12, textAlign: 'center', paddingVertical: 26 },
-  zoneList: { gap: 8, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
-  zoneScroll: { maxHeight: 160 },
-  zoneScrollContent: { gap: 8 },
-  zoneRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
-  zoneName: { color: palette.ink, flex: 1, fontSize: 12, fontWeight: '700' },
-  zoneValue: { color: palette.muted, fontSize: 11 },
-  darkZoneText: { color: '#D4D4D8' },
-  footerLine: { borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
-  footerText: { color: palette.muted, fontSize: 10, fontWeight: '800' },
-});
+function QuickAction({ icon, label, tone, primary = false, badge = 0, onPress }: {
+  icon: IconName;
+  label: string;
+  tone: Tone;
+  primary?: boolean;
+  badge?: number;
+  onPress: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <PressableScale onPress={onPress} accessibilityLabel={badge ? `${label}, ${badge} pendientes` : label} style={[styles.action, primary && styles.actionPrimary]}>
+      {primary ? (
+        <View style={styles.actionPrimaryIcon}><MaterialIcons name={icon} size={22} color={colors.onPrimary} /></View>
+      ) : <IconTile name={icon} tone={tone} size={40} />}
+      <RNText numberOfLines={2} style={[styles.actionLabel, primary && styles.actionLabelPrimary]}>{label}</RNText>
+      {badge ? <View style={styles.actionBadge}><RNText style={styles.actionBadgeText}>{badge}</RNText></View> : null}
+    </PressableScale>
+  );
+}
+
+const useStyles = makeStyles(({ colors }) => ({
+  flex: { flex: 1 },
+  header: { gap: space.xs },
+  section: { gap: space.md },
+  inlineCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  gridItem: { flexBasis: '46%', flexGrow: 1 },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: space.md },
+  action: { flexBasis: '46%', flexGrow: 1, minHeight: 96, justifyContent: 'space-between', gap: space.md, borderRadius: radius.lg, padding: space.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  actionPrimary: { backgroundColor: colors.primary, borderColor: colors.primary },
+  actionPrimaryIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(16,255,133,0.16)' },
+  actionLabel: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  actionLabelPrimary: { color: colors.onPrimary },
+  actionBadge: { position: 'absolute', top: space.md, right: space.md, minWidth: 24, height: 24, borderRadius: 12, paddingHorizontal: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.danger },
+  actionBadgeText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+  chartHead: { flexDirection: 'row', alignItems: 'flex-start', gap: space.md },
+  peakRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm, flexWrap: 'wrap' },
+  bars: { height: 132, flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
+  barColumn: { flex: 1, height: '100%', alignItems: 'center', gap: 4 },
+  barTrack: { flex: 1, width: '100%', justifyContent: 'flex-end' },
+  bar: { width: '100%', borderRadius: 3 },
+  barLabel: { height: 14, color: colors.textSecondary, fontSize: 11 },
+  barLabelPeak: { color: colors.accent, fontWeight: '700' },
+  attendance: { height: 132, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-around', gap: space.sm },
+  attendanceColumn: { flex: 1, maxWidth: 44, height: '100%', alignItems: 'center', gap: 4 },
+  attendanceValue: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  attendanceTrack: { flex: 1, width: '100%', justifyContent: 'flex-end', borderRadius: radius.xs, backgroundColor: colors.surfaceSunken, overflow: 'hidden' },
+  attendanceBar: { width: '100%', borderRadius: radius.xs, backgroundColor: colors.accentFill },
+  zoneRow: { gap: space.sm },
+  zoneHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm, flexWrap: 'wrap' },
+}));

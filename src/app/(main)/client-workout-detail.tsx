@@ -1,6 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from '@/hooks/haptics';
-import { router } from 'expo-router';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -10,7 +10,6 @@ import {
   Modal,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   useWindowDimensions,
@@ -21,17 +20,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api, getApiErrorMessage } from '@/features/gymgo/api';
 import type { Routine, WorkoutSessionLog } from '@/features/gymgo/types';
-
-const dark = {
-  background: '#121212',
-  surface: '#18181B',
-  elevated: '#1E1E1E',
-  border: '#27272A',
-  text: '#FFFFFF',
-  muted: '#A1A1AA',
-  neon: '#10FF85',
-  orange: '#FF7043',
-};
+import { Segmented } from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 type Mode = 'day' | 'week' | 'month';
 type WorkoutSession = WorkoutSessionLog & {
@@ -204,6 +195,8 @@ function summarizeBlockExercises(block: SessionBlock, targetMap: Map<string, Tar
 }
 
 function DetailSlide({ slide, sessions, targetMap, width, onInfo, onEdit, onDelete }: { slide: Slide; sessions: WorkoutSession[]; targetMap: Map<string, TargetData>; width: number; onInfo: () => void; onEdit: (session: WorkoutSession) => void; onDelete: (session: WorkoutSession) => void }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const [transition] = useState(() => new Animated.Value(0));
   const matchingSessions = sessions.filter((session) => sessionMatches(session, slide));
   const calories = matchingSessions.reduce((total, session) => total + (session.caloriesBurned ?? 0), 0);
@@ -237,12 +230,12 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo, onEdit, onDele
   return (
     <Animated.View style={[styles.slide, { width, opacity: transition, transform: [{ translateY: transition.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) }] }]}>
       <ScrollView nestedScrollEnabled showsVerticalScrollIndicator contentContainerStyle={styles.slideContent}>
-      <Text style={styles.periodLabel}><MaterialIcons name="event" size={16} color={dark.neon} /> {slide.label}</Text>
+      <Text style={styles.periodLabel}><MaterialIcons name="event" size={16} color={colors.accent} /> {slide.label}</Text>
       <View style={styles.detailCard}>
         <View style={styles.cardEyebrowRow}>
           <Text style={styles.cardEyebrow}>CALORÍAS QUEMADAS</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Cómo se calculan las calorías" onPress={onInfo} hitSlop={8}>
-            <MaterialIcons name="info-outline" size={18} color={dark.muted} />
+            <MaterialIcons name="info-outline" size={18} color={colors.textSecondary} />
           </Pressable>
         </View>
         <View style={styles.kcalRow}>
@@ -289,7 +282,7 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo, onEdit, onDele
           </>
         ) : (
           <View style={styles.emptyState}>
-            <MaterialIcons name="fitness-center" size={28} color={dark.muted} />
+            <MaterialIcons name="fitness-center" size={28} color={colors.textSecondary} />
             <Text style={styles.emptyText}>Sin entrenamiento registrado este día</Text>
           </View>
         )}
@@ -300,6 +293,7 @@ function DetailSlide({ slide, sessions, targetMap, width, onInfo, onEdit, onDele
 }
 
 function ExerciseRow({ exercise, showRest = true }: { exercise: ExerciseSummary; showRest?: boolean }) {
+  const styles = useStyles();
   const skipped = exercise.logged.split(' / ').every((value) => value === 'Omitido');
   return (
     <View style={styles.exerciseRow}>
@@ -312,6 +306,8 @@ function ExerciseRow({ exercise, showRest = true }: { exercise: ExerciseSummary;
 }
 
 function SessionSection({ session, sessionIndex, targetMap, onEdit, onDelete }: { session: WorkoutSession; sessionIndex: number; targetMap: Map<string, TargetData>; onEdit: (session: WorkoutSession) => void; onDelete: (session: WorkoutSession) => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const completedDate = new Date(session.completedAt);
   const performedDay = completedDate.getDay();
   const isMakeup = session.trainingDay !== performedDay;
@@ -323,8 +319,8 @@ function SessionSection({ session, sessionIndex, targetMap, onEdit, onDelete }: 
       <View style={styles.sessionHeader}>
         <Text style={styles.sessionTitle}>Entrenamiento {sessionIndex + 1} · {formatSessionTime(session.completedAt)}</Text>
         <View style={styles.sessionActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Editar entrenamiento" onPress={() => onEdit(session)} hitSlop={8}><MaterialIcons name="edit" size={18} color={dark.neon} /></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel="Eliminar entrenamiento" onPress={() => onDelete(session)} hitSlop={8}><MaterialIcons name="delete-outline" size={19} color="#FF8A80" /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Editar entrenamiento" onPress={() => onEdit(session)} hitSlop={8}><MaterialIcons name="edit" size={18} color={colors.accent} /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Eliminar entrenamiento" onPress={() => onDelete(session)} hitSlop={8}><MaterialIcons name="delete-outline" size={19} color={colors.danger} /></Pressable>
         </View>
       </View>
       <View style={styles.sessionMetaRow}>
@@ -360,10 +356,12 @@ function SessionSection({ session, sessionIndex, targetMap, onEdit, onDelete }: 
 }
 
 function Metric({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; value: string }) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.metricChip}>
       <View style={styles.metricHeader}>
-        <MaterialIcons name={icon} size={16} color={dark.neon} />
+        <MaterialIcons name={icon} size={16} color={colors.accent} />
         <Text style={styles.metricLabel}>{label}</Text>
       </View>
       <Text style={styles.metricValue}>{value}</Text>
@@ -372,6 +370,8 @@ function Metric({ icon, label, value }: { icon: keyof typeof MaterialIcons.glyph
 }
 
 export default function ClientWorkoutDetailScreen() {
+  const { colors } = useTheme();
+  const styles = useStyles();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const listRef = useRef<FlatList<Slide>>(null);
@@ -484,31 +484,19 @@ export default function ClientWorkoutDetailScreen() {
 
   return (
     <View style={styles.safeArea}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Volver"
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}
-          style={styles.backButton}>
-          <MaterialIcons name="arrow-back" size={24} color={dark.text} />
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <View style={styles.headerText}>
+          <Text style={styles.eyebrow}>Progreso</Text>
+          <Text style={styles.title} accessibilityRole="header">Tu actividad</Text>
+        </View>
+        <Pressable style={styles.periodPicker} onPress={() => setCalendarVisible(true)} accessibilityRole="button" accessibilityLabel="Abrir calendario del historial">
+          <MaterialIcons name="calendar-month" size={20} color={colors.accent} />
+          <Text style={styles.periodPickerText}>Fecha</Text>
         </Pressable>
-        <Text style={styles.title}>Detalle de actividad</Text>
-        <View style={styles.headerSpacer} />
       </View>
-      <View style={styles.segmented}>
-        {modes.map((item) => (
-          <Pressable key={item.value} onPress={() => selectMode(item.value)} style={[styles.segment, mode === item.value && styles.segmentSelected]}>
-            <Text style={[styles.segmentText, mode === item.value && styles.segmentTextSelected]}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      {isLoading ? <ActivityIndicator color={dark.neon} style={styles.loader} /> : null}
+      <Segmented value={mode} onChange={selectMode} options={modes.map((item) => ({ value: item.value, label: item.label }))} style={styles.segmented} />
+      {isLoading ? <ActivityIndicator color={colors.accent} style={styles.loader} /> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.periodPicker} onPress={() => setCalendarVisible(true)} accessibilityRole="button" accessibilityLabel="Abrir calendario del historial">
-        <MaterialIcons name="calendar-month" size={18} color={dark.neon} />
-        <Text style={styles.periodPickerText}>Elegir fecha</Text>
-      </Pressable>
       <FlatList
         ref={listRef}
         data={slides}
@@ -524,11 +512,11 @@ export default function ClientWorkoutDetailScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.calendarCard}>
             <View style={styles.calendarHeader}>
-              <Pressable onPress={() => setCalendarMonth((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1))} hitSlop={10}><MaterialIcons name="chevron-left" size={24} color={dark.text} /></Pressable>
+              <Pressable onPress={() => setCalendarMonth((date) => new Date(date.getFullYear(), date.getMonth() - 1, 1))} hitSlop={10}><MaterialIcons name="chevron-left" size={24} color={colors.text} /></Pressable>
               <Text style={styles.modalTitle}>{calendarMonth.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}</Text>
-              <Pressable onPress={() => setCalendarMonth((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1))} hitSlop={10}><MaterialIcons name="chevron-right" size={24} color={dark.text} /></Pressable>
+              <Pressable onPress={() => setCalendarMonth((date) => new Date(date.getFullYear(), date.getMonth() + 1, 1))} hitSlop={10}><MaterialIcons name="chevron-right" size={24} color={colors.text} /></Pressable>
             </View>
-            <View style={styles.calendarWeek}><Text>L</Text><Text>M</Text><Text>M</Text><Text>J</Text><Text>V</Text><Text>S</Text><Text>D</Text></View>
+            <View style={styles.calendarWeek}>{['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((day, index) => <Text key={index} style={styles.calendarWeekday}>{day}</Text>)}</View>
             <View style={styles.calendarGrid}>
               {Array.from({ length: (new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1).getDay() + 6) % 7 }, (_, index) => <View key={`empty-${index}`} style={styles.calendarDay} />)}
               {Array.from({ length: new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate() }, (_, index) => {
@@ -556,11 +544,11 @@ export default function ClientWorkoutDetailScreen() {
                 <View key={`${blockIndex}-${setIndex}-${exerciseIndex}`} style={styles.editSetRow}>
                   <Text style={styles.editSetLabel}>Serie {set.setNumber} · {exercise.exerciseName}</Text>
                   {exercise.metricType === 'cardio' ? (
-                    <TextInput keyboardType="decimal-pad" placeholder="Duración / distancia / nivel" placeholderTextColor={dark.muted} value={exercise.durationMinutes?.toString() ?? exercise.distanceKm?.toString() ?? exercise.level?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { durationMinutes: Number(value) || undefined })} style={styles.editInput} />
+                    <TextInput keyboardType="decimal-pad" placeholder="Duración / distancia / nivel" placeholderTextColor={colors.textSecondary} value={exercise.durationMinutes?.toString() ?? exercise.distanceKm?.toString() ?? exercise.level?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { durationMinutes: Number(value) || undefined })} style={styles.editInput} />
                   ) : (
                     <View style={styles.editMetricRow}>
-                      <TextInput keyboardType="number-pad" placeholder="Reps" placeholderTextColor={dark.muted} value={exercise.reps?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { reps: Number(value) || undefined })} style={[styles.editInput, styles.editMetricInput]} />
-                      <TextInput keyboardType="decimal-pad" placeholder="kg" placeholderTextColor={dark.muted} value={exercise.weightKg?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { weightKg: Number(value) || undefined })} style={[styles.editInput, styles.editMetricInput]} />
+                      <TextInput keyboardType="number-pad" placeholder="Reps" placeholderTextColor={colors.textSecondary} value={exercise.reps?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { reps: Number(value) || undefined })} style={[styles.editInput, styles.editMetricInput]} />
+                      <TextInput keyboardType="decimal-pad" placeholder="kg" placeholderTextColor={colors.textSecondary} value={exercise.weightKg?.toString() ?? ''} onChangeText={(value) => updateEditExercise(blockIndex, setIndex, exerciseIndex, { weightKg: Number(value) || undefined })} style={[styles.editInput, styles.editMetricInput]} />
                     </View>
                   )}
                 </View>
@@ -586,93 +574,90 @@ export default function ClientWorkoutDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: dark.background },
-  header: { minHeight: 72, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: dark.border },
-  backButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
-  headerSpacer: { width: 42 },
-  title: { flex: 1, color: dark.text, fontSize: 19, fontWeight: '800', textAlign: 'center' },
-  segmented: { flexDirection: 'row', margin: 16, padding: 4, borderRadius: 999, backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border, shadowColor: '#000000', shadowOffset: { width: 0, height: 5 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 4 },
-  segment: { flex: 1, minHeight: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 999 },
-  segmentSelected: { backgroundColor: dark.neon },
-  segmentText: { color: dark.muted, fontSize: 13, fontWeight: '700' },
-  segmentTextSelected: { color: '#081009', fontWeight: '900' },
+const useStyles = makeStyles(({ colors }) => ({
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  header: { flexDirection: 'row', alignItems: 'flex-end', gap: 12, paddingHorizontal: 20, paddingBottom: 4 },
+  headerText: { flex: 1, gap: 2 },
+  eyebrow: { color: colors.accent, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+  title: { color: colors.text, fontSize: 34, lineHeight: 38, fontWeight: '800', fontFamily: 'display' },
+  segmented: { marginHorizontal: 20, marginTop: 12, marginBottom: 12 },
+  calendarWeekday: { width: 36, textAlign: 'center', color: colors.textSecondary, fontSize: 13, fontWeight: '700' },
   loader: { marginVertical: 12 },
-  error: { color: '#FF8A80', paddingHorizontal: 20, paddingBottom: 12, textAlign: 'center' },
+  error: { color: colors.danger, paddingHorizontal: 20, paddingBottom: 12, textAlign: 'center' },
   slide: { paddingHorizontal: 16 },
   slideContent: { paddingBottom: 120 },
-  periodLabel: { color: dark.muted, fontSize: 14, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
-  periodPicker: { alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10, backgroundColor: dark.elevated, borderWidth: 1, borderColor: dark.border },
-  periodPickerText: { color: dark.text, fontSize: 12, fontWeight: '800' },
-  detailCard: { backgroundColor: dark.surface, borderWidth: 1, borderColor: dark.border, borderRadius: 16, padding: 18, shadowColor: '#000000', shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 4 },
+  periodLabel: { color: colors.textSecondary, fontSize: 14, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
+  periodPicker: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  periodPickerText: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  detailCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 18, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 7 }, shadowOpacity: 0.2, shadowRadius: 14, elevation: 4 },
   cardEyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardEyebrow: { color: dark.muted, fontSize: 10, fontWeight: '900' },
+  cardEyebrow: { color: colors.textSecondary, fontSize: 12, fontWeight: '900' },
   kcalRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 6, marginBottom: 20 },
-  kcalValue: { color: dark.neon, fontSize: 48, fontWeight: '900' },
-  kcalUnit: { color: dark.muted, fontSize: 15, fontWeight: '800' },
-  hourlyChart: { height: 76, flexDirection: 'row', alignItems: 'flex-end', gap: 3, borderBottomWidth: 1, borderBottomColor: dark.border, marginBottom: 20, paddingHorizontal: 2 },
+  kcalValue: { color: colors.text, fontSize: 56, lineHeight: 60, fontWeight: '800', fontFamily: 'display' },
+  kcalUnit: { color: colors.textSecondary, fontSize: 15, fontWeight: '800' },
+  hourlyChart: { height: 76, flexDirection: 'row', alignItems: 'flex-end', gap: 3, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: 20, paddingHorizontal: 2 },
   hourColumn: { flex: 1, height: 68, alignItems: 'center', justifyContent: 'flex-end' },
-  hourBar: { width: '100%', maxWidth: 10, minHeight: 3, borderRadius: 4, backgroundColor: dark.neon },
-  hourLabel: { color: dark.muted, fontSize: 8, marginTop: 3 },
+  hourBar: { width: '100%', maxWidth: 10, minHeight: 3, borderRadius: 4, backgroundColor: colors.accentFill },
+  hourLabel: { color: colors.textSecondary, fontSize: 8, marginTop: 3 },
   hourLabelSpacer: { height: 13 },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 22 },
-  metricChip: { width: '47%', minHeight: 78, justifyContent: 'space-between', backgroundColor: dark.elevated, borderRadius: 14, borderWidth: 1, borderColor: dark.border, padding: 12 },
+  metricChip: { width: '47%', minHeight: 78, justifyContent: 'space-between', backgroundColor: colors.surfaceRaised, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 12 },
   metricHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  metricLabel: { color: dark.muted, fontSize: 9, fontWeight: '900' },
-  metricValue: { color: dark.text, fontSize: 15, fontWeight: '800' },
+  metricLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '900' },
+  metricValue: { color: colors.text, fontSize: 15, fontWeight: '800' },
   restSummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 18 },
-  restSummaryText: { color: dark.muted, fontSize: 11, fontWeight: '700', backgroundColor: dark.elevated, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
-  sectionLabel: { color: dark.muted, fontSize: 10, fontWeight: '900', marginBottom: 10 },
+  restSummaryText: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', backgroundColor: colors.surfaceRaised, borderRadius: 9, paddingHorizontal: 9, paddingVertical: 6 },
+  sectionLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '900', marginBottom: 10 },
   notesSection: { gap: 7, marginBottom: 20 },
-  noteCard: { gap: 4, backgroundColor: dark.elevated, borderRadius: 10, padding: 10 },
-  noteMeta: { color: dark.muted, fontSize: 10, fontWeight: '800' },
-  noteText: { color: dark.text, fontSize: 12, lineHeight: 18 },
+  noteCard: { gap: 4, backgroundColor: colors.surfaceRaised, borderRadius: 10, padding: 10 },
+  noteMeta: { color: colors.textSecondary, fontSize: 12, fontWeight: '800' },
+  noteText: { color: colors.text, fontSize: 12, lineHeight: 18 },
   sessionList: { gap: 18 },
   sessionSection: { gap: 10 },
   sessionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
   sessionActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  sessionTitle: { color: dark.text, fontSize: 13, fontWeight: '900' },
+  sessionTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
   sessionMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 7 },
-  sessionMeta: { color: dark.muted, fontSize: 11, fontWeight: '700' },
-  makeupBadge: { color: '#081009', backgroundColor: '#F7C948', borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, fontSize: 10, fontWeight: '900' },
-  sessionRestSummary: { color: dark.muted, fontSize: 10, fontWeight: '700' },
+  sessionMeta: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  makeupBadge: { color: colors.onAccentFill, backgroundColor: colors.warning, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 4, fontSize: 12, fontWeight: '900' },
+  sessionRestSummary: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
   blockSection: { gap: 6 },
-  blockRest: { color: dark.muted, fontSize: 10, fontWeight: '800' },
+  blockRest: { color: colors.textSecondary, fontSize: 12, fontWeight: '800' },
   setRestList: { gap: 5 },
   setRestRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
-  setRestLabel: { color: dark.text, fontSize: 10, fontWeight: '800' },
-  setRestValue: { color: dark.neon, fontSize: 10, fontWeight: '800' },
-  addedRest: { color: '#F7C948', fontSize: 10, fontWeight: '800' },
-  skippedRest: { color: '#FF9868', fontSize: 10, fontWeight: '800' },
+  setRestLabel: { color: colors.text, fontSize: 12, fontWeight: '800' },
+  setRestValue: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  addedRest: { color: colors.warning, fontSize: 12, fontWeight: '800' },
+  skippedRest: { color: colors.danger, fontSize: 12, fontWeight: '800' },
   exerciseList: { gap: 9 },
-  exerciseRow: { borderTopWidth: 1, borderTopColor: dark.border, paddingTop: 12, gap: 5 },
-  exerciseName: { color: dark.text, fontSize: 14, fontWeight: '800' },
-  exerciseTarget: { color: dark.muted, fontSize: 11 },
-  exerciseRest: { color: dark.muted, fontSize: 10, fontWeight: '700' },
-  exerciseLogged: { color: dark.neon, fontSize: 11, fontWeight: '700' },
-  exerciseSkipped: { color: '#F7C948' },
+  exerciseRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12, gap: 5 },
+  exerciseName: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  exerciseTarget: { color: colors.textSecondary, fontSize: 12 },
+  exerciseRest: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  exerciseLogged: { color: colors.accent, fontSize: 12, fontWeight: '700' },
+  exerciseSkipped: { color: colors.warning },
   emptyState: { alignItems: 'center', gap: 10, paddingVertical: 42 },
-  emptyText: { color: dark.muted, fontSize: 13, textAlign: 'center' },
-  modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', backgroundColor: '#000000C7', padding: 16 },
-  modalCard: { width: '100%', maxWidth: 420, gap: 14, borderRadius: 24, borderWidth: 1, borderColor: dark.border, backgroundColor: dark.surface, padding: 20, paddingBottom: 24 },
-  modalTitle: { color: dark.text, fontSize: 18, fontWeight: '800' },
-  modalBody: { color: dark.muted, fontSize: 14, lineHeight: 21 },
-  modalClose: { alignItems: 'center', justifyContent: 'center', minHeight: 50, borderRadius: 10, backgroundColor: dark.neon },
-  modalCloseText: { color: '#081009', fontSize: 14, fontWeight: '900' },
-  calendarCard: { width: '100%', maxWidth: 420, gap: 16, borderRadius: 24, borderWidth: 1, borderColor: dark.border, backgroundColor: dark.surface, padding: 20, paddingBottom: 24 },
+  emptyText: { color: colors.textSecondary, fontSize: 13, textAlign: 'center' },
+  modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', backgroundColor: colors.scrim, padding: 16 },
+  modalCard: { width: '100%', maxWidth: 420, gap: 14, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 20, paddingBottom: 24 },
+  modalTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  modalBody: { color: colors.textSecondary, fontSize: 14, lineHeight: 21 },
+  modalClose: { alignItems: 'center', justifyContent: 'center', minHeight: 50, borderRadius: 10, backgroundColor: colors.accentFill },
+  modalCloseText: { color: colors.onAccentFill, fontSize: 14, fontWeight: '900' },
+  calendarCard: { width: '100%', maxWidth: 420, gap: 16, borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 20, paddingBottom: 24 },
   calendarHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   calendarWeek: { flexDirection: 'row', justifyContent: 'space-between' },
   calendarGrid: { flexDirection: 'row', flexWrap: 'wrap' },
   calendarDay: { width: '14.285%', minHeight: 44, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  calendarDayText: { color: dark.text, fontSize: 13, fontWeight: '700' },
-  calendarDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: dark.neon },
-  inputLabel: { color: dark.muted, fontSize: 11, fontWeight: '800' },
-  editInput: { minHeight: 44, borderWidth: 1, borderColor: dark.border, borderRadius: 10, backgroundColor: dark.elevated, color: dark.text, paddingHorizontal: 12 },
+  calendarDayText: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  calendarDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: colors.accentFill },
+  inputLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '800' },
+  editInput: { minHeight: 44, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surfaceRaised, color: colors.text, paddingHorizontal: 12 },
   notesInput: { minHeight: 90, textAlignVertical: 'top', paddingTop: 12 },
   editSets: { maxHeight: 220 },
   editSetRow: { gap: 6, paddingVertical: 6 },
-  editSetLabel: { color: dark.text, fontSize: 11, fontWeight: '800' },
+  editSetLabel: { color: colors.text, fontSize: 12, fontWeight: '800' },
   editMetricRow: { flexDirection: 'row', gap: 8 },
   editMetricInput: { flex: 1 },
-  cancelText: { color: dark.muted, textAlign: 'center', fontWeight: '800', paddingVertical: 8 },
-});
+  cancelText: { color: colors.textSecondary, textAlign: 'center', fontWeight: '800', paddingVertical: 8 },
+}));

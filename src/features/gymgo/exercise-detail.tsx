@@ -1,17 +1,20 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { getApiErrorMessage, getCatalogExercise } from './api';
-import { palette } from './theme';
 import type { CatalogExerciseDetail } from './types';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 export type ExerciseDetailTarget = { name: string; gifUrl?: string | null; catalogExerciseId?: string };
 
 // Animation plus, for catalog exercises, the muscles and step-by-step instructions (fetched on open:
 // the catalog list does not carry steps).
 export function ExerciseDetailModal({ exercise, onClose }: { exercise: ExerciseDetailTarget | null; onClose: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [detail, setDetail] = useState<CatalogExerciseDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +45,7 @@ export function ExerciseDetailModal({ exercise, onClose }: { exercise: ExerciseD
           <View style={styles.header}>
             <Text numberOfLines={2} style={styles.title}>{exercise?.name}</Text>
             <Pressable accessibilityRole="button" accessibilityLabel="Cerrar detalle" onPress={onClose} hitSlop={10}>
-              <MaterialIcons name="close" size={24} color={palette.ink} />
+              <MaterialIcons name="close" size={24} color={colors.text} />
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.body}>
@@ -68,7 +71,7 @@ export function ExerciseDetailModal({ exercise, onClose }: { exercise: ExerciseD
                 {current.attribution ? <Text style={styles.attribution}>{current.attribution}</Text> : null}
               </>
             ) : null}
-            {loading ? <ActivityIndicator color={palette.green} /> : null}
+            {loading ? <ActivityIndicator color={colors.accent} /> : null}
             {error ? <Text style={styles.error}>{error}</Text> : null}
           </ScrollView>
         </View>
@@ -77,22 +80,22 @@ export function ExerciseDetailModal({ exercise, onClose }: { exercise: ExerciseD
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: '#07130FC7', alignItems: 'center', justifyContent: 'center', padding: 22 },
-  card: { width: '100%', maxWidth: 420, maxHeight: '88%', borderRadius: 24, backgroundColor: palette.white, padding: 16, gap: 14, elevation: 12 },
+const useStyles = makeStyles(({ colors }) => ({
+  backdrop: { flex: 1, backgroundColor: colors.scrim, alignItems: 'center', justifyContent: 'center', padding: 22 },
+  card: { width: '100%', maxWidth: 420, maxHeight: '88%', borderRadius: 24, backgroundColor: colors.surface, padding: 16, gap: 14, elevation: 12 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  title: { flex: 1, color: palette.ink, fontSize: 16, fontWeight: '800' },
+  title: { flex: 1, color: colors.text, fontSize: 16, fontWeight: '800' },
   body: { gap: 14, paddingBottom: 4 },
-  gif: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: '#F2F4EE' },
+  gif: { width: '100%', aspectRatio: 1, borderRadius: 18, backgroundColor: colors.background },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  chip: { overflow: 'hidden', borderRadius: 999, backgroundColor: '#EEF1EA', color: palette.ink, fontSize: 12, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 5 },
-  primaryChip: { backgroundColor: palette.green, color: palette.white },
+  chip: { overflow: 'hidden', borderRadius: 999, backgroundColor: colors.surfaceSunken, color: colors.text, fontSize: 12, fontWeight: '700', paddingHorizontal: 10, paddingVertical: 5 },
+  primaryChip: { backgroundColor: colors.primary, color: colors.text },
   steps: { gap: 10 },
-  sectionTitle: { color: palette.ink, fontSize: 14, fontWeight: '800' },
+  sectionTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
   step: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  stepNumber: { width: 24, height: 24, borderRadius: 12, overflow: 'hidden', backgroundColor: palette.neon, color: '#081009', fontSize: 12, fontWeight: '800', textAlign: 'center', lineHeight: 24 },
-  stepText: { flex: 1, color: palette.ink, fontSize: 14, lineHeight: 20 },
-  muted: { color: palette.muted, fontSize: 13 },
-  attribution: { color: palette.muted, fontSize: 11 },
-  error: { color: palette.danger, fontSize: 12 },
-});
+  stepNumber: { width: 24, height: 24, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.accentFill, color: colors.onAccentFill, fontSize: 12, fontWeight: '800', textAlign: 'center', lineHeight: 24 },
+  stepText: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 20 },
+  muted: { color: colors.textSecondary, fontSize: 13 },
+  attribution: { color: colors.textSecondary, fontSize: 12 },
+  error: { color: colors.danger, fontSize: 12 },
+}));

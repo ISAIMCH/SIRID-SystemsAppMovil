@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Text, TextInput, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { FloatingCard, IconBadge } from './fit-ui';
-import { palette } from './theme';
 import { ActionButton, Notice, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 type Order = {
   _id: string;
@@ -23,6 +24,8 @@ const itemsSummary = (order: Order) => order.items.map((item) => `${item.quantit
 
 // Store orders at the front desk: the client shows a 4-character pickup PIN, reception charges and hands it over.
 export default function OrderDesk() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [listError, setListError] = useState('');
@@ -79,7 +82,7 @@ export default function OrderDesk() {
     <>
       <FloatingCard style={styles.pinCard}>
         <View style={styles.pinHeader}>
-          <IconBadge name="shopping-bag" color={palette.orange} />
+          <IconBadge name="shopping-bag" color={colors.warning} />
           <Text style={styles.pinTitle}>Entregar por PIN</Text>
         </View>
         <TextInput
@@ -89,7 +92,7 @@ export default function OrderDesk() {
           value={pin}
           onChangeText={(value) => { setPin(value.replace(/[^a-z0-9]/gi, '').toUpperCase()); setPinError(''); setDelivered(''); }}
           placeholder="A1B2"
-          placeholderTextColor={palette.muted}
+          placeholderTextColor={colors.textSecondary}
           style={styles.pinInput}
         />
         {pin.length === 4 && !found && !isLoading ? <Notice error>No hay un pedido pendiente con ese PIN.</Notice> : null}
@@ -104,7 +107,7 @@ export default function OrderDesk() {
             <Text style={styles.resultLabel}>Total a cobrar</Text>
             <Text style={styles.resultAmount}>{formatAmount(found.totalAmount)}</Text>
             <ActionButton onPress={() => void deliver()} disabled={isDelivering}>
-              {isDelivering ? <ActivityIndicator color={palette.white} /> : 'Cobrar y entregar'}
+              {isDelivering ? <ActivityIndicator color={colors.text} /> : 'Cobrar y entregar'}
             </ActionButton>
           </View>
         ) : null}
@@ -127,19 +130,19 @@ export default function OrderDesk() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   pinCard: { gap: 14, padding: 22 },
   pinHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  pinTitle: { color: palette.ink, fontSize: 18, fontWeight: '800' },
-  pinInput: { height: 58, borderRadius: 12, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', color: '#18181B', fontSize: 28, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
-  result: { gap: 6, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 14 },
-  resultLabel: { color: palette.muted, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  resultName: { color: palette.ink, fontSize: 22, fontWeight: '800' },
-  resultItems: { color: palette.ink, fontSize: 14, marginBottom: 6 },
-  resultAmount: { color: palette.green, fontSize: 34, fontWeight: '900', marginBottom: 10 },
+  pinTitle: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  pinInput: { height: 58, borderRadius: 12, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, color: colors.text, fontSize: 28, fontWeight: '800', letterSpacing: 8, textAlign: 'center' },
+  result: { gap: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 14 },
+  resultLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  resultName: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  resultItems: { color: colors.text, fontSize: 14, marginBottom: 6 },
+  resultAmount: { color: colors.accent, fontSize: 34, fontWeight: '900', marginBottom: 10 },
   orderCard: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   orderInfo: { flex: 1, gap: 3 },
-  orderName: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  orderMeta: { color: palette.muted, fontSize: 12 },
-  orderAmount: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-});
+  orderName: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  orderMeta: { color: colors.textSecondary, fontSize: 12 },
+  orderAmount: { color: colors.text, fontSize: 15, fontWeight: '800' },
+}));

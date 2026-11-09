@@ -2,7 +2,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from '@/hooks/haptics';
 import { Redirect, router } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native';
 
 import { connectSocket, disconnectSocket } from '@/services/socket';
 
@@ -10,8 +10,9 @@ import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { IconBadge } from './fit-ui';
 import { fetchMyStaffInvitations, type StaffInvitation } from './staff-invitation-notifier';
-import { palette } from './theme';
 import { Notice, Page, Surface } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 const ROLE_LABELS = { Gerente: 'Gerente', Coach: 'Coach', Recepcion: 'Recepción' } as const;
 
@@ -21,6 +22,8 @@ const gymLabel = (invitation: StaffInvitation) =>
 
 // Invitations from gyms to join their staff. Outside the main tabs, so an account without a gym can answer too.
 export default function StaffInvitationsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user, activeGym, selectGym, refreshSession } = useAuth();
   const [invitations, setInvitations] = useState<StaffInvitation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -114,7 +117,7 @@ export default function StaffInvitationsScreen() {
           accessibilityLabel="Volver"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={goBack}>
-          <IconBadge name="arrow-back" color="#FFFFFF" />
+          <IconBadge name="arrow-back" color={colors.text} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>Invitaciones al staff</Text>
@@ -124,7 +127,7 @@ export default function StaffInvitationsScreen() {
 
       {error ? <Notice error>{error}</Notice> : null}
       {success ? <Notice>{success}</Notice> : null}
-      {isLoading ? <ActivityIndicator color={palette.neon} size="large" /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} size="large" /> : null}
       {!isLoading && invitations.length === 0 ? <Text style={styles.empty}>No tienes invitaciones pendientes.</Text> : null}
 
       {invitations.map((invitation) => {
@@ -132,7 +135,7 @@ export default function StaffInvitationsScreen() {
         return (
           <Surface key={invitation.id} style={styles.card}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="badge" size={24} color={palette.neon} />
+              <MaterialIcons name="badge" size={24} color={colors.accent} />
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>{gymLabel(invitation)}</Text>
                 <Text style={styles.cardMeta}>
@@ -154,7 +157,7 @@ export default function StaffInvitationsScreen() {
                 disabled={isBusy}
                 onPress={() => confirmAccept(invitation)}
                 style={({ pressed }) => [styles.primaryButton, (pressed || isBusy) && styles.pressed]}>
-                {isBusy ? <ActivityIndicator color="#070B09" /> : <Text style={styles.primaryText}>Aceptar</Text>}
+                {isBusy ? <ActivityIndicator color={colors.onAccentFill} /> : <Text style={styles.primaryText}>Aceptar</Text>}
               </Pressable>
             </View>
           </Surface>
@@ -164,22 +167,22 @@ export default function StaffInvitationsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27272A' },
+const useStyles = makeStyles(({ colors }) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerText: { flex: 1, gap: 4 },
-  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  headerDetail: { color: '#A1A1AA', fontSize: 13 },
-  empty: { color: '#A1A1AA', fontSize: 14, textAlign: 'center', paddingVertical: 12 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  headerDetail: { color: colors.textSecondary, fontSize: 13 },
+  empty: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingVertical: 12 },
   card: { gap: 14 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   cardText: { flex: 1, gap: 3 },
-  cardTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  cardMeta: { color: '#A1A1AA', fontSize: 12 },
-  body: { color: '#D4D4D8', fontSize: 14, lineHeight: 20 },
+  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  cardMeta: { color: colors.textSecondary, fontSize: 12 },
+  body: { color: colors.text, fontSize: 14, lineHeight: 20 },
   actions: { flexDirection: 'row', gap: 10 },
-  primaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: palette.neon },
-  primaryText: { color: '#070B09', fontSize: 15, fontWeight: '800' },
-  secondaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: '#3F3F46' },
-  secondaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  primaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.accentFill },
+  primaryText: { color: colors.onAccentFill, fontSize: 15, fontWeight: '800' },
+  secondaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: colors.borderStrong },
+  secondaryText: { color: colors.text, fontSize: 15, fontWeight: '700' },
   pressed: { opacity: 0.7 },
-});
+}));

@@ -1,239 +1,136 @@
-import { BlurView } from 'expo-blur';
-import * as Haptics from '@/hooks/haptics';
-import { createContext, useContext, type PropsWithChildren, type ReactNode } from 'react';
-import {
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
-    type TextInputProps,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+/**
+ * Legacy layout primitives, now rendered with the SIRID design system.
+ * The old per-screen "dark" / "admin light" modes are gone: every screen
+ * follows the global theme (Ajustes → Apariencia). The providers and flags
+ * are kept as no-ops so existing call sites keep compiling.
+ */
+import { MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
+import type { PropsWithChildren, ReactNode } from 'react';
+import { Text as RNText, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
+
+import { Button, Card, IconButton, Screen, Text, TextField } from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 import { useAuth } from './auth-context';
-import { palette } from './theme';
 
-const DarkUiContext = createContext(false);
-const AdminEmbeddedContext = createContext(false);
-const AdminLightContext = createContext(false);
-
-export function DarkUiProvider({ children, dark = false }: PropsWithChildren<{ dark?: boolean }>) {
-  return <DarkUiContext.Provider value={dark}>{children}</DarkUiContext.Provider>;
+export function DarkUiProvider({ children }: PropsWithChildren<{ dark?: boolean }>) {
+  return <>{children}</>;
 }
 
 export function AdminEmbeddedProvider({ children }: PropsWithChildren) {
-  return <AdminEmbeddedContext.Provider value>{children}</AdminEmbeddedContext.Provider>;
+  return <>{children}</>;
 }
 
-export function AdminLightProvider({ children, enabled = true }: PropsWithChildren<{ enabled?: boolean }>) {
-  return <AdminLightContext.Provider value={enabled}>{children}</AdminLightContext.Provider>;
+export function AdminLightProvider({ children }: PropsWithChildren<{ enabled?: boolean }>) {
+  return <>{children}</>;
 }
 
 export function useAdminEmbedded() {
-  return useContext(AdminEmbeddedContext);
+  return false;
 }
 
 export function useAdminLight() {
-  return useContext(AdminLightContext);
+  return false;
 }
 
+/** True when the active theme is dark. */
 export function useDarkUi() {
-  return useContext(DarkUiContext);
+  return useTheme().scheme === 'dark';
 }
 
-export function Page({ children, dark = false, admin = false, overlay }: PropsWithChildren<{ dark?: boolean; admin?: boolean; overlay?: ReactNode }>) {
-  return (
-    <DarkUiContext.Provider value={dark}>
-      <AdminLightContext.Provider value={admin}>
-        <SafeAreaView edges={['top', 'left', 'right']} style={[styles.safeArea, admin && styles.adminSafeArea, dark && styles.darkSafeArea]}>
-          <ScrollView
-            contentContainerStyle={[styles.pageContent, admin && styles.adminPageContent]}
-            keyboardShouldPersistTaps="handled"
-            // iOS: keeps the focused field above the keyboard.
-            automaticallyAdjustKeyboardInsets>
-            {children}
-          </ScrollView>
-          {overlay}
-        </SafeAreaView>
-      </AdminLightContext.Provider>
-    </DarkUiContext.Provider>
-  );
+export function Page({ children, overlay }: PropsWithChildren<{ dark?: boolean; admin?: boolean; overlay?: ReactNode }>) {
+  return <Screen overlay={overlay}>{children}</Screen>;
 }
+
+const ROLE_LABEL: Record<string, string> = {
+  Cliente: 'Cliente',
+  Coach: 'Coach',
+  Admin: 'Administración',
+  Recepcion: 'Recepción',
+};
+
+const useStyles = makeStyles(({ colors }) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  headerText: { flex: 1, gap: 2 },
+  headingGroup: { gap: space.xs },
+  sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.md },
+  notice: { flexDirection: 'row', gap: space.md, borderRadius: radius.md, padding: space.lg, backgroundColor: colors.infoSoft },
+  noticeError: { backgroundColor: colors.dangerSoft },
+  noticeText: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 20 },
+  eyebrow: { color: colors.accent, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+}));
 
 export function Eyebrow({ children }: PropsWithChildren) {
-  const dark = useDarkUi();
-  const admin = useAdminLight();
-  return <Text style={[styles.eyebrow, dark && styles.darkAccentText, admin && styles.adminAccentText]}>{children}</Text>;
+  const styles = useStyles();
+  return <RNText style={styles.eyebrow}>{children}</RNText>;
 }
 
+/** Screen header with role label and a settings shortcut (sign-out lives in Ajustes). */
 export function AppHeader({ title, detail, showSignOut = true }: { title: string; detail?: string; showSignOut?: boolean }) {
-  const { user, signOut } = useAuth();
-  const dark = useDarkUi();
-  const admin = useAdminLight();
-  const embedded = useContext(AdminEmbeddedContext);
-  if (embedded) return null;
+  const { user } = useAuth();
+  const styles = useStyles();
   return (
-    <View style={styles.appHeader}>
-      <View style={styles.appHeaderText}>
-        <Text style={[styles.eyebrow, dark && styles.darkAccentText, admin && styles.adminEyebrow]}>{user?.role ?? 'GYMGO'}</Text>
-        <Text style={[styles.headerTitle, dark && styles.darkPrimaryText]}>{title}</Text>
-        {detail ? <Text style={[styles.detail, dark && styles.darkSecondaryText, admin && styles.adminDetail]}>{detail}</Text> : null}
+    <View style={styles.header}>
+      <View style={styles.headerText}>
+        <Text variant="label" tone="accent">{ROLE_LABEL[user?.role ?? ''] ?? 'GymGo'}</Text>
+        <Text variant="display" accessibilityRole="header">{title}</Text>
+        {detail ? <Text variant="callout" tone="secondary">{detail}</Text> : null}
       </View>
-      {showSignOut ? (
-        <Pressable accessibilityRole="button" onPress={() => void signOut()} style={[styles.signOut, dark && styles.darkControl, admin && styles.adminSignOut]}>
-          <Text style={[styles.signOutText, dark && styles.darkAccentText, admin && styles.adminSignOutText]}>Salir</Text>
-        </Pressable>
-      ) : null}
+      {showSignOut && user?.role === 'Cliente' ? <IconButton icon="settings" label="Ajustes y cuenta" onPress={() => router.push('/(main)/settings')} /> : null}
     </View>
   );
 }
 
 export function Heading({ children, detail }: { children: ReactNode; detail?: string }) {
-  const dark = useDarkUi();
+  const styles = useStyles();
   return (
     <View style={styles.headingGroup}>
-      <Text style={[styles.heading, dark && styles.darkPrimaryText]}>{children}</Text>
-      {detail ? <Text style={[styles.detail, dark && styles.darkSecondaryText]}>{detail}</Text> : null}
+      <Text variant="title" accessibilityRole="header">{children}</Text>
+      {detail ? <Text variant="callout" tone="secondary">{detail}</Text> : null}
     </View>
   );
 }
 
 export function SectionTitle({ children, accessory }: { children: ReactNode; accessory?: ReactNode }) {
-  const dark = useDarkUi();
+  const styles = useStyles();
   return (
     <View style={styles.sectionTitle}>
-      <Text style={[styles.sectionText, dark && styles.darkPrimaryText]}>{children}</Text>
+      <Text variant="headline" accessibilityRole="header" style={{ flex: 1 }}>{children}</Text>
       {accessory}
     </View>
   );
 }
 
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
-  const dark = useDarkUi();
-  const embedded = useAdminEmbedded();
-  const adminLight = useAdminLight();
-  const admin = embedded || adminLight;
-  return (
-    <View style={styles.fieldGroup}>
-      <Text style={[styles.fieldLabel, dark && styles.darkPrimaryText]}>{label}</Text>
-      <TextInput
-        placeholderTextColor={dark || admin ? '#A1A1AA' : palette.muted}
-        selectionColor={dark || admin ? '#10FF85' : palette.green}
-        style={[styles.input, dark && styles.darkInput, admin && styles.adminInput]}
-        {...props}
-      />
-    </View>
-  );
+  return <TextField label={label} {...props} />;
 }
 
-export function ActionButton({
-  children,
-  onPress,
-  disabled = false,
-  secondary = false,
-}: PropsWithChildren<{
+export function ActionButton({ children, onPress, disabled = false, secondary = false }: PropsWithChildren<{
   onPress: () => void;
   disabled?: boolean;
   secondary?: boolean;
 }>) {
-  const dark = useDarkUi();
-  const embedded = useAdminEmbedded();
-  const adminLight = useAdminLight();
-  const admin = embedded || adminLight;
   return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={disabled}
-      onPress={() => { void Haptics.selectionAsync(); onPress(); }}
-      style={({ pressed }) => [
-        styles.action,
-        admin && styles.adminAction,
-        secondary && (dark ? styles.darkSecondaryAction : styles.secondaryAction),
-        dark && !secondary && styles.darkAction,
-        disabled && styles.disabledAction,
-        pressed && !disabled && styles.pressed,
-      ]}>
-      <Text style={[styles.actionText, admin && !secondary && styles.adminActionText, admin && secondary && styles.adminSecondaryActionText, secondary && styles.secondaryText, dark && !secondary && styles.darkActionText, dark && secondary && styles.darkSecondaryText]}>{children}</Text>
-    </Pressable>
+    <Button onPress={onPress} disabled={disabled} variant={secondary ? 'secondary' : 'primary'}>
+      {children}
+    </Button>
   );
 }
 
 export function Notice({ children, error = false }: PropsWithChildren<{ error?: boolean }>) {
-  const dark = useDarkUi();
-  const embedded = useAdminEmbedded();
-  const adminLight = useAdminLight();
-  const admin = embedded || adminLight;
+  const styles = useStyles();
+  const { colors } = useTheme();
   return (
-    <View style={[styles.notice, dark && styles.darkNotice, admin && styles.adminNotice, error && (dark ? styles.darkErrorNotice : styles.errorNotice)]}>
-      <Text style={[styles.noticeText, dark && styles.darkNoticeText, admin && styles.adminNoticeText, error && styles.errorText]}>{children}</Text>
+    <View accessibilityRole={error ? 'alert' : undefined} style={[styles.notice, error && styles.noticeError]}>
+      <MaterialIcons name={error ? 'error-outline' : 'info-outline'} size={20} color={error ? colors.danger : colors.info} />
+      <RNText style={styles.noticeText}>{children}</RNText>
     </View>
   );
 }
 
-export function Surface({ children, style }: PropsWithChildren<{ style?: object }>) {
-  const dark = useDarkUi();
-  const embedded = useAdminEmbedded();
-  const adminLight = useAdminLight();
-  const admin = embedded || adminLight;
-  if (admin) return <BlurView tint="light" intensity={40} style={[styles.surface, styles.adminGlassSurface, style]}>{children}</BlurView>;
-  return <View style={[styles.surface, dark && styles.darkSurface, style]}>{children}</View>;
+export function Surface({ children, style }: PropsWithChildren<{ style?: StyleProp<ViewStyle> }>) {
+  return <Card style={style}>{children}</Card>;
 }
-
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: palette.paper },
-  darkSafeArea: { backgroundColor: '#070B09' },
-  adminSafeArea: { backgroundColor: '#F4F4F5' },
-  pageContent: { width: '100%', maxWidth: 760, alignSelf: 'center', padding: 22, gap: 24, paddingBottom: 36 },
-  adminPageContent: { backgroundColor: '#F4F4F5' },
-  eyebrow: { color: palette.green, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  headingGroup: { gap: 8 },
-  appHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  appHeaderText: { flex: 1, gap: 6 },
-  headerTitle: { color: palette.ink, fontSize: 27, lineHeight: 33, fontWeight: '800' },
-  signOut: { borderWidth: 1, borderColor: palette.line, borderRadius: 8, minHeight: 40, paddingHorizontal: 13, justifyContent: 'center' },
-  signOutText: { color: palette.green, fontWeight: '700', fontSize: 13 },
-  adminEyebrow: { color: '#18181B' },
-  adminAccentText: { color: '#10FF85' },
-  adminDetail: { color: '#52525B' },
-  adminSignOut: { backgroundColor: '#FFFFFF', borderColor: '#E4E4E7', borderRadius: 999, minHeight: 38 },
-  adminSignOutText: { color: '#18181B' },
-  heading: { color: palette.ink, fontSize: 30, fontWeight: '800', lineHeight: 36 },
-  detail: { color: palette.muted, fontSize: 15, lineHeight: 22 },
-  sectionTitle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  sectionText: { color: palette.ink, fontSize: 18, fontWeight: '700' },
-  fieldGroup: { gap: 8 },
-  fieldLabel: { color: palette.ink, fontSize: 13, fontWeight: '700' },
-  input: { height: 52, borderRadius: 8, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.surface, color: palette.ink, paddingHorizontal: 14, fontSize: 16 },
-  action: { minHeight: 52, borderRadius: 8, backgroundColor: palette.green, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 18 },
-  darkAction: { backgroundColor: '#10FF85' },
-  adminAction: { backgroundColor: '#18181B', borderRadius: 12 },
-  actionText: { color: palette.white, fontSize: 15, fontWeight: '700' },
-  secondaryAction: { backgroundColor: palette.lime },
-  secondaryText: { color: palette.ink },
-  disabledAction: { opacity: 0.55 },
-  pressed: { opacity: 0.78, transform: [{ scale: 0.98 }] },
-  notice: { backgroundColor: '#E8EEE5', borderRadius: 8, padding: 14 },
-  errorNotice: { backgroundColor: '#F7E7E2' },
-  noticeText: { color: palette.green, fontSize: 14, lineHeight: 20 },
-  errorText: { color: palette.danger },
-  surface: { backgroundColor: palette.surface, borderRadius: 10, padding: 18, borderWidth: 1, borderColor: palette.line },
-  darkPrimaryText: { color: '#F4F8F5' },
-  darkSecondaryText: { color: '#A1A1AA' },
-  darkAccentText: { color: '#10FF85' },
-  darkControl: { borderColor: 'rgba(16, 255, 133, 0.3)', backgroundColor: '#1E1E1E' },
-  darkInput: { borderColor: '#27272A', backgroundColor: '#18181B', color: '#FFFFFF' },
-  adminInput: { backgroundColor: '#F4F4F5', borderColor: '#E4E4E7', borderRadius: 12, borderWidth: 1, color: '#18181B' },
-  darkActionText: { color: '#081009' },
-  adminActionText: { color: '#10FF85' },
-  adminSecondaryActionText: { color: '#18181B' },
-  adminNotice: { backgroundColor: '#F4F4F5', borderLeftWidth: 3, borderLeftColor: '#18181B', borderRadius: 10 },
-  adminNoticeText: { color: '#52525B' },
-  darkSecondaryAction: { backgroundColor: '#27272A' },
-  darkNotice: { backgroundColor: '#18211D' },
-  darkErrorNotice: { backgroundColor: '#321B19' },
-  darkNoticeText: { color: '#DCE8E0' },
-  darkSurface: { backgroundColor: '#111815', borderColor: '#27342E' },
-  adminGlassSurface: { backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E4E4E7', shadowColor: '#18181B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.04, shadowRadius: 12, elevation: 1 },
-});

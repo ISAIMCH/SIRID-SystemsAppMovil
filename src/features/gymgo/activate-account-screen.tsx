@@ -8,7 +8,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   type TextInputInstance,
   View,
@@ -17,10 +16,9 @@ import {
 import { getApiErrorMessage } from './api';
 import { LoginInput } from './auth-screen';
 import { useAuth } from './auth-context';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
-const neon = '#9BFF63';
-const primaryText = '#F4F8F5';
-const mutedText = '#888F8A';
 
 // Same alphabet and length as the API (api/src/utils/access-codes.js); printed codes may come with spaces or dashes.
 const ACTIVATION_CODE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
@@ -33,6 +31,8 @@ type Field = 'email' | 'code' | 'password' | 'confirmation';
 
 // For clients reception registered without the app: email + the one-time code from the front desk + a new password.
 export default function ActivateAccountScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { activateAccount } = useAuth();
   const params = useLocalSearchParams<{ email?: string }>();
   const [email, setEmail] = useState(params.email ?? '');
@@ -89,7 +89,7 @@ export default function ActivateAccountScreen() {
     <KeyboardAvoidingView style={styles.screen} behavior="padding" enabled={Platform.OS === 'ios'}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bounces={false}>
         <Pressable accessibilityRole="button" accessibilityLabel="Volver" onPress={goBack} hitSlop={12} style={styles.back}>
-          <MaterialIcons name="arrow-back" size={22} color={primaryText} />
+          <MaterialIcons name="arrow-back" size={22} color={colors.text} />
         </Pressable>
 
         <View style={styles.card}>
@@ -174,7 +174,7 @@ export default function ActivateAccountScreen() {
             disabled={isSubmitting}
             onPress={() => void submit()}
             style={({ pressed }) => [styles.submitButton, pressed && styles.pressed, isSubmitting && styles.disabled]}>
-            {isSubmitting ? <ActivityIndicator color="#071007" /> : <Text style={styles.submitText}>ACTIVAR CUENTA</Text>}
+            {isSubmitting ? <ActivityIndicator color={colors.onAccentFill} /> : <Text style={styles.submitText}>ACTIVAR CUENTA</Text>}
           </Pressable>
           <Text style={styles.note}>¿Perdiste tu código o ya venció? Pide uno nuevo en recepción.</Text>
         </View>
@@ -183,18 +183,18 @@ export default function ActivateAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#0a0f0d' },
+const useStyles = makeStyles(({ colors }) => ({
+  screen: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, justifyContent: 'center', padding: 20, gap: 16 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 22, backgroundColor: 'rgba(20, 25, 22, 0.75)' },
   card: { gap: 16, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(155, 255, 99, 0.15)', backgroundColor: 'rgba(20, 25, 22, 0.75)' },
-  title: { color: primaryText, fontSize: 25, lineHeight: 30, fontWeight: '900', letterSpacing: 0.5 },
-  subtitle: { color: mutedText, fontSize: 14, lineHeight: 21 },
+  title: { color: colors.text, fontSize: 25, lineHeight: 30, fontWeight: '900', letterSpacing: 0.5 },
+  subtitle: { color: colors.textSecondary, fontSize: 14, lineHeight: 21 },
   form: { gap: 12, marginTop: 4 },
-  error: { color: '#FF8A80', fontSize: 12, lineHeight: 18 },
-  submitButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: neon },
-  submitText: { color: '#071007', fontSize: 14, fontWeight: '900', letterSpacing: 1 },
+  error: { color: colors.danger, fontSize: 12, lineHeight: 18 },
+  submitButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.accent },
+  submitText: { color: colors.onAccentFill, fontSize: 14, fontWeight: '900', letterSpacing: 1 },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   disabled: { opacity: 0.6 },
-  note: { color: '#626A64', fontSize: 12, textAlign: 'center' },
-});
+  note: { color: colors.textSecondary, fontSize: 12, textAlign: 'center' },
+}));

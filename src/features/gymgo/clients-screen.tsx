@@ -1,14 +1,17 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Text, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { ActionButton, AppHeader, Eyebrow, Field, Notice, Page, SectionTitle, Surface } from './ui';
-import { palette } from './theme';
 import type { Routine } from './types';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 export default function ClientsScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
   const [name, setName] = useState('');
@@ -97,7 +100,7 @@ export default function ClientsScreen() {
             {message ? <Notice>{message}</Notice> : null}
             {error ? <Notice error>{error}</Notice> : null}
             <ActionButton onPress={() => void createAndAssignClient()} disabled={isSaving}>
-              {isSaving ? <ActivityIndicator color={palette.white} /> : 'Crear cliente'}
+              {isSaving ? <ActivityIndicator color={colors.text} /> : 'Crear cliente'}
             </ActionButton>
           </Surface>
           <Text style={styles.caption}>El Coach se identifica por su ID de usuario, disponible al crear su cuenta desde el sistema Admin.</Text>
@@ -105,7 +108,7 @@ export default function ClientsScreen() {
       ) : (
         <>
           <SectionTitle>{`${clientsWithRoutines.size} clientes con plan`}</SectionTitle>
-          {isLoadingRoutines ? <ActivityIndicator color={palette.green} size="large" /> : null}
+          {isLoadingRoutines ? <ActivityIndicator color={colors.accent} size="large" /> : null}
           {error ? <Notice error>{error}</Notice> : null}
           {!isLoadingRoutines && !error && clientsWithRoutines.size === 0 ? (
             <Notice>Tus clientes aparecerán aquí cuando tengan una rutina publicada.</Notice>
@@ -131,15 +134,15 @@ export default function ClientsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   formHeading: { gap: 8 },
   form: { gap: 15 },
-  caption: { color: palette.muted, fontSize: 12, lineHeight: 18 },
+  caption: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   clientRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  clientAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: palette.lime, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: palette.deepGreen, fontSize: 16, fontWeight: '800' },
+  clientAvatar: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.accentSoft, alignItems: 'center', justifyContent: 'center' },
+  avatarText: { color: colors.accent, fontSize: 16, fontWeight: '800' },
   clientDetails: { flex: 1, gap: 4 },
-  clientName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  clientMeta: { color: palette.muted, fontSize: 12 },
-  clientArrow: { color: palette.green, fontSize: 24, lineHeight: 26 },
-});
+  clientName: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  clientMeta: { color: colors.textSecondary, fontSize: 12 },
+  clientArrow: { color: colors.accent, fontSize: 24, lineHeight: 26 },
+}));

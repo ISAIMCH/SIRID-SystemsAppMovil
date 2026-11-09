@@ -1,7 +1,8 @@
 import { Stack } from 'expo-router';
+import { useTheme } from '@/theme/theme-provider';
 
-import { palette } from '@/features/gymgo/theme';
 
 export default function DirectoryLayout() {
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.paper } }} />;
+  const { colors } = useTheme();
+  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />;
 }

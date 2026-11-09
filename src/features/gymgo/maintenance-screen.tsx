@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { router } from 'expo-router';
 
@@ -8,8 +8,9 @@ import { connectSocket } from '@/services/socket';
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { IconBadge } from './fit-ui';
-import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle, Surface } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 type Equipment = { _id: string; name: string; zone: string; status: 'available' | 'busy' | 'out_of_service' };
 type MaintenanceReport = {
@@ -29,6 +30,8 @@ const reportStatus: Record<MaintenanceReport['status'], string> = {
 };
 
 export default function MaintenanceScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
   const isCoach = user?.role === 'Coach';
@@ -142,7 +145,7 @@ export default function MaintenanceScreen() {
             accessibilityLabel="Volver"
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)'); } }}>
-            <IconBadge name="arrow-back" color="#FFFFFF" />
+            <IconBadge name="arrow-back" color={colors.text} />
           </Pressable>
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>{isCoach ? 'Alertas de mantenimiento' : 'Reportar una falla'}</Text>
@@ -160,7 +163,7 @@ export default function MaintenanceScreen() {
         </View>
       ) : null}
       {success ? <Notice>{success}</Notice> : null}
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={colors.accent} size="large" /></View> : null}
 
       {isCoach ? (
         <>
@@ -214,7 +217,7 @@ export default function MaintenanceScreen() {
               style={styles.multiline}
             />
             <ActionButton onPress={() => void submitReport()} disabled={isSubmitting || isLoading}>
-              {isSubmitting ? <ActivityIndicator color={palette.white} /> : 'Enviar reporte'}
+              {isSubmitting ? <ActivityIndicator color={colors.text} /> : 'Enviar reporte'}
             </ActionButton>
           </Surface>
 
@@ -225,7 +228,7 @@ export default function MaintenanceScreen() {
               <View style={styles.reportHeader}>
                 <View style={styles.equipmentInfo}>
                   <Text style={[styles.equipmentName, styles.darkText]}>{report.equipment?.name ?? 'Equipo'}</Text>
-                  <Text style={styles.equipmentZone}>{new Date(report.createdAt).toLocaleDateString()}</Text>
+                  <Text style={styles.equipmentZone}>{new Date(report.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
                 </View>
                 <Text style={[styles.reportStatus, report.status === 'resolved' && styles.resolvedDark]}>{reportStatus[report.status]}</Text>
               </View>
@@ -252,7 +255,7 @@ export default function MaintenanceScreen() {
               {report.status !== 'resolved' ? (
                 <View style={styles.actions}>
                   <ActionButton onPress={() => void updateReport(report, 'out_of_service')} disabled={updatingReport === report._id}>
-                    {updatingReport === report._id ? <ActivityIndicator color={palette.white} /> : 'Fuera de servicio'}
+                    {updatingReport === report._id ? <ActivityIndicator color={colors.text} /> : 'Fuera de servicio'}
                   </ActionButton>
                   <ActionButton secondary onPress={() => void updateReport(report, 'repaired')} disabled={updatingReport === report._id}>
                     Marcar reparado
@@ -267,31 +270,31 @@ export default function MaintenanceScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27272A' },
+const useStyles = makeStyles(({ colors }) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerText: { flex: 1, gap: 4 },
-  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  headerDetail: { color: '#A1A1AA', fontSize: 13 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  headerDetail: { color: colors.textSecondary, fontSize: 13 },
   feedback: { gap: 8 },
-  retry: { color: palette.green, fontSize: 13, fontWeight: '800', paddingVertical: 5 },
+  retry: { color: colors.accent, fontSize: 13, fontWeight: '800', paddingVertical: 5 },
   loading: { minHeight: 80, alignItems: 'center', justifyContent: 'center' },
   equipmentList: { gap: 8 },
-  equipmentOption: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: '#27272A', borderRadius: 8, backgroundColor: '#18181B', padding: 12 },
-  selectedOption: { backgroundColor: '#10FF85', borderColor: '#10FF85' },
+  equipmentOption: { minHeight: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface, padding: 12 },
+  selectedOption: { backgroundColor: colors.accentFill, borderColor: colors.accent },
   equipmentInfo: { flex: 1, gap: 4 },
-  equipmentName: { color: palette.ink, fontSize: 14, fontWeight: '800' },
-  equipmentZone: { color: palette.muted, fontSize: 11 },
-  selectedText: { color: '#081009' },
-  radio: { color: palette.muted, fontSize: 18 },
+  equipmentName: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  equipmentZone: { color: colors.textSecondary, fontSize: 12 },
+  selectedText: { color: colors.onAccentFill },
+  radio: { color: colors.textSecondary, fontSize: 18 },
   form: { gap: 14 },
   multiline: { minHeight: 100, textAlignVertical: 'top', paddingTop: 12 },
   reportCard: { gap: 12 },
   reportHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
-  reportStatus: { color: palette.coral, fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
-  resolved: { color: palette.green },
-  resolvedDark: { color: '#10FF85' },
-  darkText: { color: '#F4F8F5' },
-  reportDescription: { color: palette.ink, fontSize: 13, lineHeight: 19 },
-  reportMeta: { color: palette.muted, fontSize: 10 },
+  reportStatus: { color: colors.danger, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
+  resolved: { color: colors.accent },
+  resolvedDark: { color: colors.accent },
+  darkText: { color: colors.text },
+  reportDescription: { color: colors.text, fontSize: 13, lineHeight: 19 },
+  reportMeta: { color: colors.textSecondary, fontSize: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-});
+}));

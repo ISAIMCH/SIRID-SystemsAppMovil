@@ -2,15 +2,16 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from '@/hooks/haptics';
 import { Redirect, router } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, Switch, Text, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import { IconBadge } from './fit-ui';
-import { palette } from './theme';
 import { Notice, Page, Surface } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 type ShareStatus = 'pending' | 'approved' | 'rejected' | 'revoked';
 type HistoryShare = {
@@ -60,6 +61,8 @@ export default function PrivacyScreen() {
 
 // The client decides which gyms see their training history, and sees who looked at it.
 function HistoryPrivacy() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [shares, setShares] = useState<HistoryShare[]>([]);
   const [logs, setLogs] = useState<AccessLog[]>([]);
   // Sensitive data stays out unless the client ticks the box for that request.
@@ -152,7 +155,7 @@ function HistoryPrivacy() {
           accessibilityLabel="Volver al perfil"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color="#FFFFFF" />
+          <IconBadge name="arrow-back" color={colors.text} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>Privacidad</Text>
@@ -162,7 +165,7 @@ function HistoryPrivacy() {
 
       {error ? <Notice error>{error}</Notice> : null}
       {success ? <Notice>{success}</Notice> : null}
-      {isLoading ? <ActivityIndicator color={palette.neon} size="large" /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} size="large" /> : null}
 
       {pending.length > 0 ? <Text style={styles.sectionLabel}>SOLICITUDES PENDIENTES</Text> : null}
       {pending.map((share) => {
@@ -171,7 +174,7 @@ function HistoryPrivacy() {
         return (
           <Surface key={share.id} style={styles.card}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="history" size={24} color={palette.neon} />
+              <MaterialIcons name="history" size={24} color={colors.accent} />
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>{gymLabel(share)}</Text>
                 <Text style={styles.cardMeta}>
@@ -189,7 +192,9 @@ function HistoryPrivacy() {
                 accessibilityLabel="Compartir también datos sensibles"
                 value={includeSensitive}
                 onValueChange={(value) => setSensitiveChoice((current) => ({ ...current, [share.id]: value }))}
-                trackColor={{ true: palette.neon, false: '#3F3F46' }}
+                trackColor={{ true: colors.accentFill, false: colors.borderStrong }}
+                thumbColor={colors.surface}
+                ios_backgroundColor={colors.borderStrong}
                 disabled={isBusy}
               />
             </View>
@@ -220,7 +225,7 @@ function HistoryPrivacy() {
         return (
           <Surface key={share.id} style={styles.card}>
             <View style={styles.cardHeader}>
-              <MaterialIcons name="verified-user" size={24} color={palette.neon} />
+              <MaterialIcons name="verified-user" size={24} color={colors.accent} />
               <View style={styles.cardText}>
                 <Text style={styles.cardTitle}>{gymLabel(share)}</Text>
                 <Text style={styles.cardMeta}>Desde el {formatDate(share.respondedAt)}</Text>
@@ -235,7 +240,9 @@ function HistoryPrivacy() {
                 accessibilityLabel="Compartir datos sensibles"
                 value={share.includeSensitive}
                 onValueChange={(value) => void send(share, 'sensitive', value ? 'Ahora compartes tus datos sensibles.' : 'Dejaste de compartir tus datos sensibles.', value)}
-                trackColor={{ true: palette.neon, false: '#3F3F46' }}
+                trackColor={{ true: colors.accentFill, false: colors.borderStrong }}
+                thumbColor={colors.surface}
+                ios_backgroundColor={colors.borderStrong}
                 disabled={isBusy}
               />
             </View>
@@ -279,32 +286,32 @@ function HistoryPrivacy() {
   );
 }
 
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: '#27272A' },
+const useStyles = makeStyles(({ colors }) => ({
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerText: { flex: 1, gap: 4 },
-  headerTitle: { color: '#FFFFFF', fontSize: 22, fontWeight: '800' },
-  headerDetail: { color: '#A1A1AA', fontSize: 13 },
-  sectionLabel: { color: '#A1A1AA', fontSize: 12, fontWeight: '800', letterSpacing: 1 },
-  empty: { color: '#A1A1AA', fontSize: 14, textAlign: 'center', paddingVertical: 12 },
+  headerTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  headerDetail: { color: colors.textSecondary, fontSize: 13 },
+  sectionLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '800', letterSpacing: 1 },
+  empty: { color: colors.textSecondary, fontSize: 14, textAlign: 'center', paddingVertical: 12 },
   card: { gap: 14 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   cardText: { flex: 1, gap: 3 },
-  cardTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  cardMeta: { color: '#A1A1AA', fontSize: 12 },
-  body: { color: '#D4D4D8', fontSize: 14, lineHeight: 20 },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, backgroundColor: '#27272A', padding: 12 },
+  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  cardMeta: { color: colors.textSecondary, fontSize: 12 },
+  body: { color: colors.text, fontSize: 14, lineHeight: 20 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 14, backgroundColor: colors.surfaceRaised, padding: 12 },
   switchText: { flex: 1, gap: 2 },
-  switchTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  switchTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: 10 },
-  primaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: palette.neon },
-  primaryText: { color: '#070B09', fontSize: 15, fontWeight: '800' },
-  secondaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: '#3F3F46' },
-  secondaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  primaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.accentFill },
+  primaryText: { color: colors.onAccentFill, fontSize: 15, fontWeight: '800' },
+  secondaryButton: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 14, borderWidth: 1, borderColor: colors.borderStrong },
+  secondaryText: { color: colors.text, fontSize: 15, fontWeight: '700' },
   revoke: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center' },
-  revokeText: { color: '#FF6B6B', fontSize: 14, fontWeight: '700' },
+  revokeText: { color: colors.danger, fontSize: 14, fontWeight: '700' },
   pressed: { opacity: 0.7 },
   logList: { gap: 12 },
-  logRow: { gap: 2, borderBottomWidth: 1, borderBottomColor: '#27272A', paddingBottom: 10 },
-  logTitle: { color: '#FFFFFF', fontSize: 14, fontWeight: '700' },
+  logRow: { gap: 2, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 10 },
+  logTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
   closedRow: { gap: 2, paddingVertical: 6 },
-});
+}));

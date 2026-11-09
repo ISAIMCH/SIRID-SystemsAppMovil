@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
@@ -10,11 +10,14 @@ import { useAuth } from './auth-context';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard } from './fit-ui';
 import { membershipDisplayStatus, membershipLabel } from './membership-status';
-import { palette } from './theme';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 // The Coach's assigned clients; staff directories live in the web dashboard.
 export default function DirectoryScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const [people, setPeople] = useState<DirectoryClient[]>([]);
   const [search, setSearch] = useState('');
@@ -71,7 +74,7 @@ export default function DirectoryScreen() {
       />
 
       <SectionTitle>{isLoading ? `Cargando ${noun}` : `${filtered.length} ${noun}`}</SectionTitle>
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={colors.accent} size="large" /></View> : null}
 
       {error ? (
         <View style={styles.feedback}>
@@ -112,7 +115,7 @@ export default function DirectoryScreen() {
                 </Text>
               </View>
             ) : null}
-            <MaterialIcons name="chevron-right" size={22} color={palette.muted} />
+            <MaterialIcons name="chevron-right" size={22} color={colors.textSecondary} />
           </FloatingCard>
         </Pressable>
       ))}
@@ -120,23 +123,23 @@ export default function DirectoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   loading: { minHeight: 120, justifyContent: 'center', alignItems: 'center' },
   feedback: { gap: 10 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  darkRow: { backgroundColor: '#1E1E1E', borderColor: '#27272A' },
-  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7', alignItems: 'center', justifyContent: 'center' },
-  coachAvatar: { backgroundColor: '#F4F4F5' },
-  avatarText: { color: '#18181B', fontSize: 18, fontWeight: '800' },
+  darkRow: { backgroundColor: colors.surface, borderColor: colors.border },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  coachAvatar: { backgroundColor: colors.background },
+  avatarText: { color: colors.text, fontSize: 18, fontWeight: '800' },
   info: { flex: 1, gap: 3 },
-  name: { color: '#18181B', fontSize: 16, fontWeight: '800' },
-  darkName: { color: '#FFFFFF' },
-  email: { color: '#52525B', fontSize: 12 },
-  darkSecondary: { color: '#A1A1AA' },
-  coach: { color: '#71717A', fontSize: 11, fontWeight: '700' },
-  chip: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: '#F4F4F5', borderWidth: 1, borderColor: '#E4E4E7' },
-  chipActive: { backgroundColor: '#18181B', borderColor: '#18181B' },
-  chipText: { color: '#71717A', fontSize: 10, fontWeight: '800' },
-  chipTextActive: { color: '#10FF85' },
+  name: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  darkName: { color: colors.text },
+  email: { color: colors.textSecondary, fontSize: 12 },
+  darkSecondary: { color: colors.textSecondary },
+  coach: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  chip: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+  chipActive: { backgroundColor: colors.surface, borderColor: colors.border },
+  chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '800' },
+  chipTextActive: { color: colors.accent },
   pressed: { opacity: 0.78 },
-});
+}));

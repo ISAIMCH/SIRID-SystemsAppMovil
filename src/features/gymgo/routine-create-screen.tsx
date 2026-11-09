@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
@@ -11,9 +11,10 @@ import type { ExerciseSelection } from './exercise-search';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { SelectField } from './select-field';
 import { useMaintenanceAlerts } from './use-maintenance-alerts';
-import { palette } from './theme';
 import type { Routine, RoutineBlock, RoutineTemplate } from './types';
 import { ActionButton, Field, Notice, Page, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 type Equipment = { _id: string; name: string; zone: string; type: 'strength' | 'cardio'; status: 'available' | 'busy' | 'out_of_service' };
 type RoutineLevel = 'principiante' | 'intermedio' | 'avanzado';
@@ -57,6 +58,8 @@ export default function RoutineCreateScreen() {
 }
 
 function RoutineForm() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const params = useLocalSearchParams<{ mode?: string; templateId?: string; routineId?: string; clientId?: string }>();
   const isTemplate = params.mode === 'template';
@@ -271,7 +274,7 @@ function RoutineForm() {
           accessibilityLabel="Volver"
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => { if (router.canGoBack()) { router.back(); } else { router.push('/(main)/billing'); } }}>
-          <IconBadge name="arrow-back" color="#10FF85" />
+          <IconBadge name="arrow-back" color={colors.accent} />
         </Pressable>
         <View style={styles.flex}>
           <Text style={styles.title}>{heading}</Text>
@@ -285,7 +288,7 @@ function RoutineForm() {
           <Notice>{`Con fallas reportadas: ${reportedEquipment.join(', ')}. Toca para ver las alertas.`}</Notice>
         </Pressable>
       ) : null}
-      {isLoading ? <View style={styles.loading}><ActivityIndicator color={palette.green} size="large" /></View> : null}
+      {isLoading ? <View style={styles.loading}><ActivityIndicator color={colors.accent} size="large" /></View> : null}
 
       <FloatingCard style={styles.section}>
         <SectionTitle>Datos de rutina</SectionTitle>
@@ -307,7 +310,7 @@ function RoutineForm() {
             </View>
             {selectedClient ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Ver ficha del cliente" onPress={openClientFile} style={styles.clientFileButton}>
-                <MaterialIcons name="assignment" size={19} color={palette.deepGreen} />
+                <MaterialIcons name="assignment" size={19} color={colors.accent} />
                 <Text style={styles.clientFileButtonText}>Ver ficha</Text>
               </Pressable>
             ) : null}
@@ -324,7 +327,7 @@ function RoutineForm() {
                 <Text style={styles.modalSubtitle}>{selectedClient?.name}</Text>
               </View>
               <Pressable accessibilityRole="button" accessibilityLabel="Cerrar ficha del cliente" onPress={() => setIsClientFileOpen(false)} hitSlop={10}>
-                <MaterialIcons name="close" size={24} color={palette.ink} />
+                <MaterialIcons name="close" size={24} color={colors.text} />
               </Pressable>
             </View>
             <View style={styles.modalStats}>
@@ -347,13 +350,13 @@ function RoutineForm() {
               value={clientObservations}
               onChangeText={setClientObservations}
               placeholder="Lesiones, limitaciones, precauciones o notas relevantes..."
-              placeholderTextColor={palette.muted}
+              placeholderTextColor={colors.textSecondary}
               style={styles.observationsInput}
               textAlignVertical="top"
             />
             {observationsError ? <Notice error>{observationsError}</Notice> : null}
             <ActionButton onPress={() => void saveClientObservations()} disabled={isSavingObservations}>
-              {isSavingObservations ? <ActivityIndicator color={palette.white} /> : 'Guardar observaciones'}
+              {isSavingObservations ? <ActivityIndicator color={colors.text} /> : 'Guardar observaciones'}
             </ActionButton>
           </View>
         </View>
@@ -382,12 +385,12 @@ function RoutineForm() {
         <SectionTitle>Ejercicios del bloque</SectionTitle>
         {draftExercises.map((exercise, index) => (
           <View key={exercise._id ?? `${exercise.name}-${index}`} style={styles.draftRow}>
-            <IconBadge name={exercise.metricType === 'cardio' ? 'directions-run' : 'fitness-center'} color={exercise.metricType === 'cardio' ? palette.cyan : palette.violet} size={36} />
+            <IconBadge name={exercise.metricType === 'cardio' ? 'directions-run' : 'fitness-center'} color={exercise.metricType === 'cardio' ? colors.info : colors.info} size={36} />
             <View style={styles.flex}>
               <Text style={styles.exerciseName}>{exercise.name}</Text>
               <Text style={styles.exerciseMeta}>{exercise.muscleGroup} · {exercise.metricType === 'cardio' ? 'Cardio' : 'Fuerza'}</Text>
             </View>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${exercise.name}`} onPress={() => setDraftExercises((current) => current.filter((_, i) => i !== index))}><MaterialIcons name="delete" size={21} color={palette.danger} /></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Quitar ${exercise.name}`} onPress={() => setDraftExercises((current) => current.filter((_, i) => i !== index))}><MaterialIcons name="delete" size={21} color={colors.danger} /></Pressable>
           </View>
         ))}
         <Pressable
@@ -420,12 +423,12 @@ function RoutineForm() {
           {blocks.map((block, blockIndex) => (
             <FloatingCard key={block._id ?? `block-${blockIndex}`} style={styles.blockCard}>
               <View style={styles.blockHeader}>
-                <IconBadge name={blockIcon(block.blockType)} color={block.blockType === 'single' ? palette.neon : palette.violet} />
+                <IconBadge name={blockIcon(block.blockType)} color={block.blockType === 'single' ? colors.accent : colors.info} />
                 <View style={styles.flex}>
                   <Text style={styles.blockTitle}>{blockTypes.find((item) => item.value === block.blockType)?.label} · {weekDayNames[block.day]}</Text>
                   <Text style={styles.exerciseMeta}>{block.sets} series · {block.restSeconds}s descanso tras completar el bloque</Text>
                 </View>
-                <Pressable accessibilityRole="button" accessibilityLabel="Eliminar bloque" onPress={() => setBlocks((current) => current.filter((_, i) => i !== blockIndex).map((item, order) => ({ ...item, order })))}><MaterialIcons name="delete" size={21} color={palette.danger} /></Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel="Eliminar bloque" onPress={() => setBlocks((current) => current.filter((_, i) => i !== blockIndex).map((item, order) => ({ ...item, order })))}><MaterialIcons name="delete" size={21} color={colors.danger} /></Pressable>
               </View>
               {block.exercises.map((exercise, exerciseIndex) => (
                 <View key={exercise._id ?? `${exercise.name}-${exerciseIndex}`} style={styles.blockExercise}>
@@ -436,8 +439,8 @@ function RoutineForm() {
                   </View>
                   {exercise.metricType !== 'cardio' ? (
                     <View style={styles.weightControls}>
-                      <Pressable accessibilityRole="button" accessibilityLabel="Bajar peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, -2.5)} style={styles.step}><MaterialIcons name="remove" size={17} color="#E4E4E7" /></Pressable>
-                      <Pressable accessibilityRole="button" accessibilityLabel="Subir peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, 2.5)} style={styles.step}><MaterialIcons name="add" size={17} color="#E4E4E7" /></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Bajar peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, -2.5)} style={styles.step}><MaterialIcons name="remove" size={17} color={colors.text} /></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Subir peso" onPress={() => adjustWeight(blockIndex, exerciseIndex, 2.5)} style={styles.step}><MaterialIcons name="add" size={17} color={colors.text} /></Pressable>
                     </View>
                   ) : null}
                 </View>
@@ -449,65 +452,66 @@ function RoutineForm() {
 
       {error ? <Notice error>{error}</Notice> : null}
       <ActionButton onPress={() => void save()} disabled={isSaving || isLoading}>
-        {isSaving ? <ActivityIndicator color={palette.white} /> : isTemplate ? 'Guardar plantilla' : isEditing ? 'Guardar cambios' : 'Guardar y asignar rutina'}
+        {isSaving ? <ActivityIndicator color={colors.text} /> : isTemplate ? 'Guardar plantilla' : isEditing ? 'Guardar cambios' : 'Guardar y asignar rutina'}
       </ActionButton>
     </Page>
   );
 }
 
 function Choice({ label, selected, onPress }: { label: string; selected: boolean; onPress: () => void }) {
+  const styles = useStyles();
   return <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress} style={[styles.choice, selected && styles.choiceSelected]}><Text style={[styles.choiceText, selected && styles.choiceTextSelected]}>{label}</Text></Pressable>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   flex: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  title: { color: '#F2F4EE', fontSize: 24, fontWeight: '800' },
-  subtitle: { color: '#91A098', fontSize: 13 },
+  title: { color: colors.text, fontSize: 24, fontWeight: '800' },
+  subtitle: { color: colors.textSecondary, fontSize: 13 },
   loading: { minHeight: 60, alignItems: 'center', justifyContent: 'center' },
   section: { gap: 15, padding: 20 },
   group: { gap: 8 },
   row: { flexDirection: 'row', gap: 12 },
   clientAssignment: { flexDirection: 'row', alignItems: 'flex-end', gap: 10 },
   clientSelect: { flex: 1 },
-  clientFileButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: palette.neon, paddingHorizontal: 12 },
-  clientFileButtonText: { color: palette.deepGreen, fontSize: 12, fontWeight: '800' },
-  label: { color: '#F2F4EE', fontSize: 13, fontWeight: '700' },
-  helper: { color: '#91A098', fontSize: 12, lineHeight: 18 },
+  clientFileButton: { minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 16, backgroundColor: colors.accentFill, paddingHorizontal: 12 },
+  clientFileButtonText: { color: colors.accent, fontSize: 12, fontWeight: '800' },
+  label: { color: colors.text, fontSize: 13, fontWeight: '700' },
+  helper: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  segmentedControl: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: '#333333', backgroundColor: '#18181B', padding: 3 },
+  segmentedControl: { flexDirection: 'row', borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 3 },
   segment: { flex: 1, minHeight: 40, alignItems: 'center', justifyContent: 'center', borderRadius: 7, paddingHorizontal: 8 },
-  segmentActive: { borderWidth: 1, borderColor: '#10FF85', backgroundColor: '#10FF8512' },
-  segmentText: { color: '#71717A', fontSize: 12, fontWeight: '700' },
-  segmentTextActive: { color: '#10FF85' },
-  choice: { borderRadius: 20, backgroundColor: '#18211D', borderWidth: 1, borderColor: '#27342E', paddingHorizontal: 14, paddingVertical: 9 },
-  choiceSelected: { backgroundColor: '#18211D', borderColor: '#9BFF63' },
-  choiceText: { color: '#DCE8E0', fontSize: 12, fontWeight: '700' },
-  choiceTextSelected: { color: palette.white },
-  rule: { height: 1, backgroundColor: '#27342E' },
-  draftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, backgroundColor: '#141A17', borderWidth: 1, borderColor: '#27342E', padding: 10 },
+  segmentActive: { borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  segmentText: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  segmentTextActive: { color: colors.accent },
+  choice: { borderRadius: 20, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 9 },
+  choiceSelected: { backgroundColor: colors.surfaceRaised, borderColor: colors.accent },
+  choiceText: { color: colors.text, fontSize: 12, fontWeight: '700' },
+  choiceTextSelected: { color: colors.text },
+  rule: { height: 1, backgroundColor: colors.border },
+  draftRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 16, backgroundColor: colors.surfaceRaised, borderWidth: 1, borderColor: colors.border, padding: 10 },
   blockCard: { gap: 12 },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  blockTitle: { color: '#F4F8F5', fontSize: 15, fontWeight: '800' },
-  blockExercise: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: '#27342E', paddingTop: 10 },
-  exerciseName: { color: '#F4F8F5', fontSize: 14, fontWeight: '800' },
-  exerciseMeta: { color: '#91A098', fontSize: 12, lineHeight: 17 },
-  addExerciseButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: '#10FF85', backgroundColor: 'transparent', paddingHorizontal: 16, marginBottom: 8 },
-  addExerciseButtonText: { color: '#10FF85', fontSize: 14, fontWeight: '800' },
-  saveBlockButton: { minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: '#10FF85', paddingHorizontal: 18, marginTop: 8, marginBottom: 16 },
-  saveBlockButtonText: { color: '#081009', fontSize: 15, fontWeight: '800' },
+  blockTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  blockExercise: { flexDirection: 'row', alignItems: 'center', gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 },
+  exerciseName: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  exerciseMeta: { color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
+  addExerciseButton: { minHeight: 50, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, borderColor: colors.accent, backgroundColor: 'transparent', paddingHorizontal: 16, marginBottom: 8 },
+  addExerciseButtonText: { color: colors.accent, fontSize: 14, fontWeight: '800' },
+  saveBlockButton: { minHeight: 54, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: colors.accentFill, paddingHorizontal: 18, marginTop: 8, marginBottom: 16 },
+  saveBlockButtonText: { color: colors.onAccentFill, fontSize: 15, fontWeight: '800' },
   disabledButton: { opacity: 0.45 },
   buttonPressed: { opacity: 0.78 },
   weightControls: { flexDirection: 'row', gap: 6 },
-  step: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#1E1E1E', borderWidth: 1, borderColor: '#333333', alignItems: 'center', justifyContent: 'center' },
+  step: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0, 0, 0, 0.58)' },
-  modalCard: { gap: 14, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: '#F2F4EE', padding: 20, paddingBottom: 28 },
+  modalCard: { gap: 14, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.background, padding: 20, paddingBottom: 28 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  modalTitle: { color: palette.ink, fontSize: 22, fontWeight: '800' },
-  modalSubtitle: { color: palette.muted, fontSize: 13, marginTop: 3 },
+  modalTitle: { color: colors.text, fontSize: 22, fontWeight: '800' },
+  modalSubtitle: { color: colors.textSecondary, fontSize: 13, marginTop: 3 },
   modalStats: { gap: 10 },
-  modalStat: { borderRadius: 14, backgroundColor: palette.white, padding: 12, gap: 4 },
-  modalLabel: { color: palette.muted, fontSize: 12, fontWeight: '700' },
-  modalValue: { color: palette.ink, fontSize: 15, fontWeight: '800' },
-  observationsInput: { minHeight: 140, borderRadius: 16, borderWidth: 1, borderColor: palette.line, backgroundColor: palette.white, color: palette.ink, padding: 14, fontSize: 15, lineHeight: 21 },
-});
+  modalStat: { borderRadius: 14, backgroundColor: colors.surface, padding: 12, gap: 4 },
+  modalLabel: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  modalValue: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  observationsInput: { minHeight: 140, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, color: colors.text, padding: 14, fontSize: 15, lineHeight: 21 },
+}));

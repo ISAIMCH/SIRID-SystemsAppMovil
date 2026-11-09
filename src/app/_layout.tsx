@@ -1,19 +1,70 @@
+import {
+  Barlow_400Regular,
+  Barlow_500Medium,
+  Barlow_600SemiBold,
+  Barlow_700Bold,
+  Barlow_800ExtraBold,
+} from '@expo-google-fonts/barlow';
+import {
+  BarlowCondensed_500Medium,
+  BarlowCondensed_600SemiBold,
+  BarlowCondensed_700Bold,
+  BarlowCondensed_800ExtraBold,
+} from '@expo-google-fonts/barlow-condensed';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
+import { Button, Text } from '@/components/sirid';
 import { AuthProvider, useAuth } from '@/features/gymgo/auth-context';
 import EnrollmentNotifier from '@/features/gymgo/enrollment-notifier';
 import StaffInvitationNotifier from '@/features/gymgo/staff-invitation-notifier';
-import { palette } from '@/features/gymgo/theme';
+import { makeStyles } from '@/theme/make-styles';
+import { ThemeProvider, useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
+
+void SplashScreen.preventAutoHideAsync().catch(() => undefined);
+
+const useStyles = makeStyles(({ colors }) => ({
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, padding: space.xxl, gap: space.lg },
+  icon: { width: 72, height: 72, borderRadius: radius.xl, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.dangerSoft },
+  text: { textAlign: 'center', maxWidth: 360 },
+}));
+
+function StatusScreen({ icon, label, title, message, action, onAction }: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  label?: string;
+  title: string;
+  message: string;
+  action: string;
+  onAction: () => void;
+}) {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <View style={styles.center}>
+      <View style={styles.icon}><MaterialIcons name={icon} size={34} color={colors.danger} /></View>
+      {label ? <Text variant="label" tone="danger">{label}</Text> : null}
+      <Text variant="title" style={styles.text} accessibilityRole="header">{title}</Text>
+      <Text variant="body" tone="secondary" style={styles.text}>{message}</Text>
+      <Button onPress={onAction} style={{ alignSelf: 'stretch', maxWidth: 360, width: '100%', alignItems: 'center' }}>{action}</Button>
+    </View>
+  );
+}
 
 function RootNavigator() {
   const { user, isLoading, sessionError, retrySession, suspendedOrganization, dismissSuspension } = useAuth();
+  const { colors, scheme } = useTheme();
+  const styles = useStyles();
 
   if (isLoading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator color={palette.green} size="large" />
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.accent} size="large" />
       </View>
     );
   }
@@ -21,55 +72,67 @@ function RootNavigator() {
   // Clients and staff never see SIRID's reason, only this message.
   if (suspendedOrganization) {
     return (
-      <View style={styles.loading}>
-        <StatusBar style="dark" />
-        <Text style={styles.noticeLabel}>Gimnasio suspendido</Text>
-        <Text style={styles.noticeTitle}>{suspendedOrganization.name}</Text>
-        <Text style={styles.errorText}>
-          Este gimnasio está suspendido temporalmente. Acude a recepción para más información.
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => { void dismissSuspension(); }}
-          style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}>
-          <Text style={styles.retryText}>Cerrar sesión</Text>
-        </Pressable>
-      </View>
+      <StatusScreen
+        icon="block"
+        label="Gimnasio suspendido"
+        title={suspendedOrganization.name}
+        message="Este gimnasio está suspendido temporalmente. Acude a recepción para más información."
+        action="Cerrar sesión"
+        onAction={() => { void dismissSuspension(); }}
+      />
     );
   }
 
   if (sessionError) {
     return (
-      <View style={styles.loading}>
-        <Text style={styles.errorText}>{sessionError}</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={retrySession}
-          style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}>
-          <Text style={styles.retryText}>Reintentar</Text>
-        </Pressable>
-      </View>
+      <StatusScreen icon="cloud-off" title="Sin conexión" message={sessionError} action="Reintentar" onAction={retrySession} />
     );
   }
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {/* Here rather than in (main), so an account that has not joined any gym hears about invitations too. */}
       {user ? <StaffInvitationNotifier key={`staff-${user.id}`} /> : null}
       {user ? <EnrollmentNotifier key={`enrollment-${user.id}`} /> : null}
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: palette.paper } }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade_from_bottom',
+          contentStyle: { backgroundColor: colors.background },
+        }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(main)" />
         <Stack.Screen name="join-gym" />
-        <Stack.Screen name="staff-invitations" />
+        <Stack.Screen name="staff-invitations" options={{ animation: 'slide_from_right' }} />
       </Stack>
     </>
   );
 }
 
-export default function RootLayout() {
+function ThemedRoot() {
+  const { ready, colors } = useTheme();
+  const [fontsLoaded, fontError] = useFonts({
+    Barlow_400Regular,
+    Barlow_500Medium,
+    Barlow_600SemiBold,
+    Barlow_700Bold,
+    Barlow_800ExtraBold,
+    BarlowCondensed_500Medium,
+    BarlowCondensed_600SemiBold,
+    BarlowCondensed_700Bold,
+    BarlowCondensed_800ExtraBold,
+  });
+  // A font failure must not lock the user out: fall back to the system face.
+  const appReady = ready && (fontsLoaded || Boolean(fontError));
+
+  useEffect(() => {
+    if (appReady) void SplashScreen.hideAsync().catch(() => undefined);
+  }, [appReady]);
+
+  if (!appReady) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+
   return (
     <AuthProvider>
       <RootNavigator />
@@ -77,19 +140,10 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: palette.paper,
-    padding: 24,
-    gap: 16,
-  },
-  errorText: { color: palette.ink, fontSize: 15, textAlign: 'center' },
-  noticeLabel: { color: palette.danger, fontSize: 13, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
-  noticeTitle: { color: palette.ink, fontSize: 24, fontWeight: '800', textAlign: 'center' },
-  retryButton: { backgroundColor: palette.green, borderRadius: 12, paddingHorizontal: 24, paddingVertical: 12 },
-  retryButtonPressed: { opacity: 0.82 },
-  retryText: { color: palette.white, fontSize: 15, fontWeight: '700' },
-});
+export default function RootLayout() {
+  return (
+    <ThemeProvider>
+      <ThemedRoot />
+    </ThemeProvider>
+  );
+}

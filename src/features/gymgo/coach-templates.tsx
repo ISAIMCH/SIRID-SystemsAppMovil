@@ -1,18 +1,21 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native';
 
 import { api, getApiErrorMessage } from './api';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard, IconBadge } from './fit-ui';
 import { routineEditorHref } from './routine-links';
 import { SelectField } from './select-field';
-import { palette } from './theme';
 import type { RoutineTemplate } from './types';
 import { ActionButton, Notice, SectionTitle } from './ui';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
 
 export default function CoachTemplates({ onAssigned }: { onAssigned: () => void }) {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const [templates, setTemplates] = useState<RoutineTemplate[]>([]);
   const [clients, setClients] = useState<DirectoryClient[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -79,17 +82,17 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
     <View style={styles.wrapper}>
       <SectionTitle>Mis plantillas</SectionTitle>
       <View style={styles.searchBox}>
-        <MaterialIcons name="search" size={19} color={palette.muted} />
+        <MaterialIcons name="search" size={19} color={colors.textSecondary} />
         <TextInput
           value={search}
           onChangeText={setSearch}
           placeholder="Buscar plantilla por nombre"
-          placeholderTextColor={palette.muted}
+          placeholderTextColor={colors.textSecondary}
           style={styles.searchInput}
           autoCorrect={false}
         />
       </View>
-      {isLoading ? <ActivityIndicator color={palette.green} /> : null}
+      {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
       {error ? <Notice error>{error}</Notice> : null}
       {success ? <Notice>{success}</Notice> : null}
       {!isLoading && !error && templates.length === 0 ? (
@@ -108,7 +111,7 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
       {visibleTemplates.map((template) => (
         <FloatingCard key={template._id} style={styles.card}>
           <View style={styles.top}>
-            <IconBadge name="content-copy" color={palette.violet} />
+            <IconBadge name="content-copy" color={colors.info} />
             <View style={styles.info}>
               <Text style={styles.title}>{template.title}</Text>
               <Text style={styles.meta}>
@@ -118,16 +121,16 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
           </View>
           <View style={styles.actions}>
             <Pressable accessibilityRole="button" onPress={() => router.push(routineEditorHref({ mode: 'template', templateId: template._id }))} style={styles.action}>
-              <MaterialIcons name="edit" size={16} color={palette.cyan} />
-              <Text style={[styles.actionText, { color: palette.cyan }]}>Editar</Text>
+              <MaterialIcons name="edit" size={16} color={colors.info} />
+              <Text style={[styles.actionText, { color: colors.info }]}>Editar</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => { setAssigningId(assigningId === template._id ? null : template._id); setClientId(''); setError(''); }} style={styles.action}>
-              <MaterialIcons name="person-add" size={16} color={palette.green} />
-              <Text style={[styles.actionText, { color: palette.green }]}>Asignar</Text>
+              <MaterialIcons name="person-add" size={16} color={colors.accent} />
+              <Text style={[styles.actionText, { color: colors.accent }]}>Asignar</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => void remove(template)} style={styles.action}>
-              <MaterialIcons name="delete" size={16} color={palette.danger} />
-              <Text style={[styles.actionText, { color: palette.danger }]}>Eliminar</Text>
+              <MaterialIcons name="delete" size={16} color={colors.danger} />
+              <Text style={[styles.actionText, { color: colors.danger }]}>Eliminar</Text>
             </Pressable>
           </View>
           {assigningId === template._id ? (
@@ -141,7 +144,7 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
                 onChange={setClientId}
               />
               <ActionButton onPress={() => void assign(template)} disabled={isBusy}>
-                {isBusy ? <ActivityIndicator color={palette.white} /> : 'Crear copia para el cliente'}
+                {isBusy ? <ActivityIndicator color={colors.text} /> : 'Crear copia para el cliente'}
               </ActionButton>
             </View>
           ) : null}
@@ -151,20 +154,20 @@ export default function CoachTemplates({ onAssigned }: { onAssigned: () => void 
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(({ colors }) => ({
   wrapper: { gap: 14 },
   card: { gap: 12 },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   info: { flex: 1, gap: 3 },
-  title: { color: '#F4F8F5', fontSize: 16, fontWeight: '800' },
-  meta: { color: '#91A098', fontSize: 12, textTransform: 'capitalize' },
+  title: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  meta: { color: colors.textSecondary, fontSize: 12, textTransform: 'capitalize' },
   actions: { flexDirection: 'row', gap: 18 },
   action: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 4 },
   actionText: { fontSize: 13, fontWeight: '800' },
-  assign: { gap: 12, borderTopWidth: 1, borderTopColor: palette.line, paddingTop: 12 },
-  searchBox: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, borderWidth: 1, borderColor: '#27272A', backgroundColor: '#18181B', paddingHorizontal: 12 },
-  searchInput: { flex: 1, color: '#FFFFFF', fontSize: 14 },
+  assign: { gap: 12, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 },
+  searchBox: { minHeight: 46, flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 12 },
+  searchInput: { flex: 1, color: colors.text, fontSize: 14 },
   emptyState: { alignItems: 'center', gap: 4, paddingVertical: 18 },
-  emptyStateText: { color: '#A1A1AA', fontSize: 14, fontWeight: '700' },
-  emptyStateDetail: { color: '#71717A', fontSize: 12, textAlign: 'center' },
-});
+  emptyStateText: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  emptyStateDetail: { color: colors.textSecondary, fontSize: 12, textAlign: 'center' },
+}));

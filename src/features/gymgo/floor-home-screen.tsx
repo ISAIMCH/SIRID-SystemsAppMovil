@@ -1,19 +1,35 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Text as RNText, View } from 'react-native';
 
 import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 import type { AccessResult } from './client-live-updates';
-import { FloatingCard } from './fit-ui';
 import GymSwitcher from './gym-switcher';
 import { usePendingStaffInvitations } from './staff-invitation-notifier';
-import { palette } from './theme';
-import { ActionButton, AppHeader, Notice, Page, SectionTitle } from './ui';
 import { useMaintenanceAlerts } from './use-maintenance-alerts';
+import {
+  Badge,
+  Card,
+  EmptyState,
+  ErrorBanner,
+  FadeIn,
+  IconTile,
+  ListGroup,
+  ListRow,
+  ProgressRing,
+  Screen,
+  SectionHeader,
+  Skeleton,
+  StatTile,
+  Text,
+} from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 type Occupancy = {
   gyms: { id: string; name: string; capacity: number | null; count: number; people: { id: string; name: string; since: string }[] }[];
@@ -29,6 +45,8 @@ const formatTime = (value: string) => new Date(value).toLocaleTimeString('es-MX'
 // "Modo piso" home for Admin and Recepcion: who is inside, what is waiting at the desk, and one tap to the
 // scanner, the register or a quick signup. Catalogs and settings live in the web dashboard.
 export default function FloorHomeScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
   const pendingInvitations = usePendingStaffInvitations();
@@ -98,128 +116,155 @@ export default function FloorHomeScreen() {
 
   const gym = occupancy?.gyms[0];
   const isFull = gym?.capacity ? gym.count >= gym.capacity : false;
+  const ratio = gym?.capacity ? gym.count / gym.capacity : 0;
+  const firstName = user?.name?.split(' ')[0] ?? 'equipo';
 
   return (
-    <Page admin>
-      <AppHeader title={`Hola, ${user?.name?.split(' ')[0] ?? 'equipo'}`} detail="Operación de piso" />
-      <GymSwitcher />
+    <Screen onRefresh={() => { setOccupancyKey((value) => value + 1); setCountersKey((value) => value + 1); }} refreshing={false}>
+      <FadeIn style={styles.header}>
+        <Text variant="label" tone="accent">{isAdmin ? 'Administración' : 'Recepción'} · Operación de piso</Text>
+        <Text variant="display" accessibilityRole="header">Hola, {firstName}</Text>
+        <GymSwitcher />
+      </FadeIn>
+
       {pendingInvitations > 0 ? (
-        <ActionButton secondary onPress={() => router.push('/staff-invitations' as Href)}>
-          {pendingInvitations === 1 ? 'Tienes 1 invitación al staff' : `Tienes ${pendingInvitations} invitaciones al staff`}
-        </ActionButton>
+        <Card onPress={() => router.push('/staff-invitations' as Href)} style={styles.inlineCard}>
+          <IconTile name="badge" tone="info" />
+          <Text variant="bodyStrong" style={styles.flex}>
+            {pendingInvitations === 1 ? 'Tienes 1 invitación al staff' : `Tienes ${pendingInvitations} invitaciones al staff`}
+          </Text>
+          <MaterialIcons name="chevron-right" size={22} color={colors.textTertiary} />
+        </Card>
       ) : null}
 
-      <View style={styles.actions}>
-        <QuickAction icon="qr-code-scanner" label="Escanear QR" primary onPress={() => router.push('/(main)/scanner')} />
-        <QuickAction icon="point-of-sale" label="Caja" onPress={() => router.push('/(main)/billing')} />
-        <QuickAction icon="person-add" label="Alta rápida" onPress={() => router.push('/(main)/enroll' as Href)} />
-      </View>
-
-      <SectionTitle>Aforo en vivo</SectionTitle>
-      {error ? <Notice error>{error}</Notice> : null}
-      <FloatingCard style={styles.occupancy}>
-        {gym ? (
-          <>
-            <View style={styles.occupancyTop}>
-              <Text style={[styles.occupancyCount, isFull && styles.full]}>{gym.count}</Text>
-              <Text style={styles.occupancyCapacity}>{gym.capacity ? `de ${gym.capacity} personas` : 'personas dentro'}</Text>
+      <FadeIn index={1}>
+        <View style={styles.hero}>
+          <View style={styles.heroHead}>
+            <View style={styles.liveDot} />
+            <Text style={styles.heroLabel}>Aforo en vivo</Text>
+            {gym ? <Text style={[styles.heroStatus, isFull && styles.heroStatusFull]}>{isFull ? 'Lleno' : 'Disponible'}</Text> : null}
+          </View>
+          {gym ? (
+            <View style={styles.heroBody}>
+              <View style={styles.flex}>
+                <View style={styles.countRow}>
+                  <RNText style={styles.heroCount}>{gym.count}</RNText>
+                  {gym.capacity ? <RNText style={styles.heroCapacity}>/ {gym.capacity}</RNText> : null}
+                </View>
+                <Text variant="callout" tone="heroSecondary">{gym.count === 1 ? 'persona dentro' : 'personas dentro'}</Text>
+              </View>
+              {gym.capacity ? (
+                <ProgressRing value={ratio} size={92} stroke={9} color={isFull ? colors.danger : '#10FF85'} track="rgba(255,255,255,0.1)">
+                  <RNText style={styles.ringText}>{Math.round(ratio * 100)}%</RNText>
+                </ProgressRing>
+              ) : null}
             </View>
-            {gym.capacity ? (
-              <View style={styles.bar}>
-                <View style={[styles.barFill, isFull && styles.barFull, { width: `${Math.min(100, Math.round((gym.count / gym.capacity) * 100))}%` }]} />
-              </View>
-            ) : null}
-            {gym.people.slice(0, 8).map((person) => (
-              <View key={person.id} style={styles.personRow}>
-                <Text style={styles.personName}>{person.name}</Text>
-                <Text style={styles.meta}>desde {formatTime(person.since)}</Text>
-              </View>
+          ) : error ? null : (
+            <Skeleton height={72} radius={12} style={styles.heroSkeleton} />
+          )}
+        </View>
+      </FadeIn>
+      {error ? <ErrorBanner message={error} onRetry={() => setOccupancyKey((value) => value + 1)} /> : null}
+
+      <FadeIn index={2} style={styles.section}>
+        <SectionHeader title="Pendientes en mostrador" subtitle="Toca para atender en Caja" />
+        <View style={styles.row}>
+          <StatTile
+            icon="payments"
+            tone="warning"
+            label="Pagos por cobrar"
+            value={counters?.payments ?? '—'}
+            loading={counters === null}
+            onPress={() => router.push('/(main)/billing')}
+          />
+          <StatTile
+            icon="shopping-bag"
+            tone="info"
+            label="Pedidos por entregar"
+            value={counters?.orders ?? '—'}
+            loading={counters === null}
+            onPress={() => router.push('/(main)/billing')}
+          />
+        </View>
+        {isAdmin && maintenanceAlerts?.length ? (
+          <Card onPress={() => router.push('/(main)/maintenance')} style={[styles.inlineCard, styles.alertCard]}>
+            <IconTile name="build" tone="danger" />
+            <View style={styles.flex}>
+              <Text variant="bodyStrong">{maintenanceAlerts.length} {maintenanceAlerts.length === 1 ? 'alerta de mantenimiento' : 'alertas de mantenimiento'}</Text>
+              <Text variant="caption" tone="secondary">Equipos reportados sin resolver</Text>
+            </View>
+            <MaterialIcons name="chevron-right" size={22} color={colors.textTertiary} />
+          </Card>
+        ) : null}
+      </FadeIn>
+
+      <FadeIn index={3} style={styles.section}>
+        <SectionHeader title="Dentro ahora" subtitle={gym ? `${gym.count} ${gym.count === 1 ? 'persona' : 'personas'}` : undefined} />
+        {gym && gym.people.length ? (
+          <ListGroup>
+            {gym.people.slice(0, 8).map((person, index, list) => (
+              <ListRow
+                key={person.id}
+                leading={<Avatar name={person.name} />}
+                title={person.name}
+                subtitle={`Entró a las ${formatTime(person.since)}`}
+                divider={index < list.length - 1 || gym.people.length > 8}
+              />
             ))}
-            {gym.people.length > 8 ? <Text style={styles.meta}>y {gym.people.length - 8} más</Text> : null}
-          </>
-        ) : !error ? <ActivityIndicator color={palette.green} /> : null}
-      </FloatingCard>
+            {gym.people.length > 8 ? <ListRow title={`y ${gym.people.length - 8} más`} divider={false} /> : null}
+          </ListGroup>
+        ) : gym ? (
+          <Card variant="sunken"><EmptyState icon="sensor-door" title="Gimnasio vacío" message="Nadie ha registrado entrada todavía." /></Card>
+        ) : null}
+      </FadeIn>
 
       {recentScans.length ? (
-        <>
-          <SectionTitle>Últimos accesos</SectionTitle>
-          <FloatingCard style={styles.list}>
-            {recentScans.map((scan) => (
-              <View key={scan.id} style={styles.personRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.personName}>{scan.userName ?? 'Cliente'}</Text>
-                  {scan.reason ? <Text style={styles.meta}>{scan.reason.message}</Text> : null}
-                </View>
-                <Text style={[styles.eventLabel, scan.event === 'denied' && styles.denied]}>{eventLabel[scan.event]} · {formatTime(scan.occurredAt)}</Text>
-              </View>
+        <FadeIn index={4} style={styles.section}>
+          <SectionHeader title="Últimos accesos" subtitle="En tiempo real" />
+          <ListGroup>
+            {recentScans.map((scan, index) => (
+              <ListRow
+                key={scan.id}
+                icon={scan.event === 'denied' ? 'block' : scan.event === 'check-in' ? 'login' : 'logout'}
+                iconTone={scan.event === 'denied' ? 'danger' : scan.event === 'check-in' ? 'success' : 'neutral'}
+                title={scan.userName ?? 'Cliente'}
+                subtitle={scan.reason?.message ?? formatTime(scan.occurredAt)}
+                trailing={<Badge tone={scan.event === 'denied' ? 'danger' : scan.event === 'check-in' ? 'success' : 'neutral'}>{eventLabel[scan.event]}</Badge>}
+                divider={index < recentScans.length - 1}
+              />
             ))}
-          </FloatingCard>
-        </>
+          </ListGroup>
+        </FadeIn>
       ) : null}
-
-      <SectionTitle>Pendientes en mostrador</SectionTitle>
-      <View style={styles.counters}>
-        <Counter label="Pagos por cobrar" value={counters?.payments} onPress={() => router.push('/(main)/billing')} />
-        <Counter label="Pedidos por entregar" value={counters?.orders} onPress={() => router.push('/(main)/billing')} />
-      </View>
-      {isAdmin && maintenanceAlerts?.length ? (
-        <Pressable accessibilityRole="button" onPress={() => router.push('/(main)/maintenance')}>
-          <Notice error>{`${maintenanceAlerts.length} ${maintenanceAlerts.length === 1 ? 'alerta' : 'alertas'} de mantenimiento abiertas. Toca para atenderlas.`}</Notice>
-        </Pressable>
-      ) : null}
-    </Page>
+    </Screen>
   );
 }
 
-function QuickAction({ icon, label, primary = false, onPress }: {
-  icon: keyof typeof MaterialIcons.glyphMap;
-  label: string;
-  primary?: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.action, primary && styles.actionPrimary, pressed && styles.pressed]}>
-      <MaterialIcons name={icon} size={28} color={primary ? palette.white : palette.deepGreen} />
-      <Text style={[styles.actionLabel, primary && styles.actionLabelPrimary]}>{label}</Text>
-    </Pressable>
-  );
+function Avatar({ name }: { name: string }) {
+  const styles = useStyles();
+  const initials = name.split(' ').filter(Boolean).map((part) => part[0]).slice(0, 2).join('').toUpperCase();
+  return <View style={styles.avatar}><RNText style={styles.avatarText}>{initials || '·'}</RNText></View>;
 }
 
-function Counter({ label, value, onPress }: { label: string; value?: number; onPress: () => void }) {
-  return (
-    <Pressable accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.counterWrap, pressed && styles.pressed]}>
-      <FloatingCard style={styles.counter}>
-        <Text style={styles.counterValue}>{value ?? '—'}</Text>
-        <Text style={styles.meta}>{label}</Text>
-      </FloatingCard>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  flex: { flex: 1, gap: 2 },
-  actions: { flexDirection: 'row', gap: 10 },
-  action: { flex: 1, minHeight: 96, alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 16, backgroundColor: palette.white, borderWidth: 1, borderColor: '#E4E4E7', padding: 10 },
-  actionPrimary: { backgroundColor: palette.deepGreen, borderColor: palette.deepGreen },
-  actionLabel: { color: palette.ink, fontSize: 13, fontWeight: '800', textAlign: 'center' },
-  actionLabelPrimary: { color: palette.white },
-  pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
-  occupancy: { gap: 10, padding: 18 },
-  occupancyTop: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  occupancyCount: { color: palette.green, fontSize: 44, fontWeight: '900' },
-  full: { color: palette.danger },
-  occupancyCapacity: { color: palette.muted, fontSize: 15, fontWeight: '700' },
-  bar: { height: 8, borderRadius: 4, backgroundColor: '#E4E4E7', overflow: 'hidden' },
-  barFill: { height: 8, borderRadius: 4, backgroundColor: palette.green },
-  barFull: { backgroundColor: palette.danger },
-  list: { gap: 2, paddingVertical: 6 },
-  personRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 8, borderTopWidth: 1, borderTopColor: palette.line },
-  personName: { color: palette.ink, fontSize: 14, fontWeight: '700' },
-  meta: { color: palette.muted, fontSize: 12 },
-  eventLabel: { color: palette.green, fontSize: 12, fontWeight: '800' },
-  denied: { color: palette.danger },
-  counters: { flexDirection: 'row', gap: 10 },
-  counterWrap: { flex: 1 },
-  counter: { gap: 4, padding: 16 },
-  counterValue: { color: palette.ink, fontSize: 30, fontWeight: '900' },
-});
+const useStyles = makeStyles(({ colors }) => ({
+  flex: { flex: 1 },
+  header: { gap: space.xs },
+  section: { gap: space.md },
+  row: { flexDirection: 'row', gap: space.md },
+  inlineCard: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  alertCard: { borderColor: colors.danger },
+  hero: { borderRadius: radius.xl, backgroundColor: colors.hero, padding: space.xl, gap: space.lg },
+  heroHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10FF85' },
+  heroLabel: { flex: 1, color: colors.heroTextSecondary, fontSize: 12, fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase' },
+  heroStatus: { color: '#10FF85', fontSize: 13, fontWeight: '700' },
+  heroStatusFull: { color: '#FF6B5E' },
+  heroBody: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
+  countRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.sm },
+  heroCount: { color: colors.heroText, fontSize: 72, lineHeight: 76, fontWeight: '800', fontFamily: 'display' },
+  heroCapacity: { color: colors.heroTextSecondary, fontSize: 28, fontWeight: '600', fontFamily: 'display' },
+  ringText: { color: colors.heroText, fontSize: 20, fontWeight: '700', fontFamily: 'display' },
+  heroSkeleton: { opacity: 0.25 },
+  avatar: { width: 38, height: 38, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceSunken },
+  avatarText: { color: colors.text, fontSize: 14, fontWeight: '700' },
+}));

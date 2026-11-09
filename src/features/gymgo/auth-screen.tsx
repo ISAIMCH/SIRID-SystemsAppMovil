@@ -1,52 +1,50 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as Haptics from '@/hooks/haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, type Href } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Easing,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    type TextInputInstance,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  type TextInputInstance,
+  View,
 } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withTiming } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { Button } from '@/components/sirid';
+import { makeStyles } from '@/theme/make-styles';
+import { useTheme } from '@/theme/theme-provider';
+import { radius, space } from '@/theme/tokens';
 
 import { getApiErrorCode, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
 
-const neon = '#9BFF63';
-const background = '#080B09';
-const primaryText = '#F4F8F5';
-const mutedText = '#888F8A';
 const particles = [
-  { left: '13%', top: '28%', size: 3, delay: 0, duration: 2500 },
-  { left: '25%', top: '18%', size: 2, delay: 500, duration: 3000 },
-  { left: '77%', top: '25%', size: 3, delay: 800, duration: 2800 },
-  { left: '86%', top: '49%', size: 2, delay: 300, duration: 2200 },
-  { left: '19%', top: '57%', size: 2, delay: 1100, duration: 3200 },
-  { left: '70%', top: '65%', size: 3, delay: 650, duration: 2600 },
+  { left: '13%', top: '30%', size: 4, delay: 0, duration: 2500 },
+  { left: '27%', top: '18%', size: 3, delay: 500, duration: 3000 },
+  { left: '78%', top: '24%', size: 4, delay: 800, duration: 2800 },
+  { left: '88%', top: '55%', size: 3, delay: 300, duration: 2200 },
+  { left: '62%', top: '70%', size: 3, delay: 650, duration: 2600 },
 ] as const;
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 export default function AuthScreen() {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [emailFocused, setEmailFocused] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
   // Reception opened this account; it needs the activation code instead of a password.
   const [needsActivation, setNeedsActivation] = useState(false);
-  const buttonScale = useState(() => new Animated.Value(1))[0];
 
   function openActivation() {
     const typedEmail = email.trim();
@@ -71,6 +69,7 @@ export default function AuthScreen() {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace('/(main)');
     } catch (requestError) {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       setNeedsActivation(getApiErrorCode(requestError) === 'account_pending_activation');
       setError(getApiErrorMessage(requestError, 'No se pudo conectar con GymGo. Intenta de nuevo.'));
     } finally {
@@ -78,132 +77,175 @@ export default function AuthScreen() {
     }
   }
 
-  function pressIn() {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.spring(buttonScale, { toValue: 0.96, friction: 5, tension: 100, useNativeDriver: true }).start();
-  }
-
-  function pressOut() {
-    Animated.spring(buttonScale, { toValue: 1, friction: 5, tension: 100, useNativeDriver: true }).start();
-  }
-
   return (
-    // <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#0a0f0d' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#0a0f0d' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} enabled={Platform.OS === 'ios'}>
-      <View style={styles.backgroundLayer} pointerEvents="none">
-        <View style={styles.hero} pointerEvents="none">
-          <LinearGradient pointerEvents="none" colors={['#142316', '#080B09']} style={StyleSheet.absoluteFill} />
-          {particles.map((particle, index) => <Particle key={index} {...particle} />)}
-          <EnergyTrails />
-          <View style={styles.brandOverlay}>
-            <View style={styles.brandMark}><Text style={styles.brandMarkText}>G</Text></View>
-            <Text style={styles.brand}>GYMGO</Text>
-          </View>
-          <View style={styles.athleteGlow}>
-            <MaterialIcons name="fitness-center" size={112} color={neon} />
-          </View>
-          <Text style={styles.heroCaption}>ENTRENA CON INTENCIÓN</Text>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      {/* The brand panel is dark in both themes. */}
+      <StatusBar style="light" />
+      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="always" bounces={false}>
+        <View style={styles.hero}>
+          <SafeAreaView edges={['top']} style={styles.heroInner}>
+            {particles.map((particle, index) => <Particle key={index} {...particle} />)}
+            <EnergyTrails />
+            <View style={styles.brandRow}>
+              <View style={styles.brandMark}><Text style={styles.brandMarkText}>G</Text></View>
+              <View>
+                <Text style={styles.brand}>GymGo</Text>
+                <Text style={styles.brandBy}>by SIRID Systems</Text>
+              </View>
+            </View>
+            <View style={styles.heroCopy}>
+              <Text style={styles.heroTitle}>Vuelve a tu{'\n'}mejor versión.</Text>
+              <Text style={styles.heroSubtitle}>Tus rutinas, tu progreso y tu acceso al gimnasio en un solo lugar.</Text>
+            </View>
+          </SafeAreaView>
         </View>
-      </View>
 
-      {/* <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} keyboardShouldPersistTaps="handled" bounces={false}> */}
-        <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 20 }} keyboardShouldPersistTaps="always" bounces={false}>
-        <View style={styles.card}>
-          <Text style={styles.title}>VUELVE A TU MEJOR VERSIÓN</Text>
-          <Text style={styles.subtitle}>Accede a tus rutinas y a tu espacio en el gimnasio.</Text>
+        <View style={styles.sheet}>
+          <View style={styles.sheetHead}>
+            <Text style={styles.title} accessibilityRole="header">Iniciar sesión</Text>
+            <Text style={styles.subtitle}>Usa el correo con el que te registró tu gimnasio.</Text>
+          </View>
 
           <View style={styles.form}>
             <LoginInput
-              icon="fitness-center"
+              icon="alternate-email"
               label="Correo electrónico"
+              placeholder="tu@correo.com"
               value={email}
               onChangeText={setEmail}
               onFocus={() => setEmailFocused(true)}
+              onBlur={() => setEmailFocused(false)}
               focused={emailFocused}
               autoCapitalize="none"
               autoComplete="email"
               keyboardType="email-address"
+              textContentType="emailAddress"
               returnKeyType="next"
             />
             <LoginInput
-              icon="vpn-key"
+              icon="lock-outline"
               label="Contraseña"
+              placeholder="Mínimo 10 caracteres"
               value={password}
               onChangeText={setPassword}
               onFocus={() => setPasswordFocused(true)}
+              onBlur={() => setPasswordFocused(false)}
               focused={passwordFocused}
               autoCapitalize="none"
               autoComplete="password"
-              secureTextEntry
+              textContentType="password"
+              secureTextEntry={!showPassword}
               onSubmitEditing={() => void submit()}
               returnKeyType="done"
+              trailing={(
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                  onPress={() => setShowPassword((value) => !value)}
+                  hitSlop={10}
+                  style={styles.eye}>
+                  <MaterialIcons name={showPassword ? 'visibility-off' : 'visibility'} size={20} color={colors.textSecondary} />
+                </Pressable>
+              )}
             />
           </View>
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <View accessibilityRole="alert" style={styles.errorBox}>
+              <MaterialIcons name="error-outline" size={18} color={colors.danger} />
+              <Text style={styles.error}>{error}</Text>
+            </View>
+          ) : null}
 
-          <AnimatedPressable
-            accessibilityRole="button"
-            disabled={isSubmitting}
-            onPress={() => void submit()}
-            onPressIn={pressIn}
-            onPressOut={pressOut}
-            style={[styles.submitButton, { transform: [{ scale: buttonScale }] }, isSubmitting && styles.disabled]}>
-            {isSubmitting ? <ActivityIndicator color="#071007" /> : <Text style={styles.submitText}>INICIAR SESIÓN</Text>}
-          </AnimatedPressable>
-          <Pressable accessibilityRole="link" onPress={openActivation} style={[styles.activationLink, needsActivation && styles.activationLinkHighlighted]}>
+          <Button size="large" loading={isSubmitting} disabled={isSubmitting} onPress={() => void submit()} icon="arrow-forward">
+            Entrar
+          </Button>
+
+          <Pressable
+            accessibilityRole="link"
+            onPress={openActivation}
+            style={({ pressed }) => [styles.activationLink, needsActivation && styles.activationLinkHighlighted, pressed && styles.pressed]}>
+            <MaterialIcons name="key" size={18} color={colors.accent} />
             <Text style={[styles.activationText, needsActivation && styles.activationTextHighlighted]}>
-              {needsActivation ? 'ACTIVAR MI CUENTA' : '¿Te registraron en recepción? Activa tu cuenta'}
+              {needsActivation ? 'Activar mi cuenta ahora' : '¿Te registraron en recepción? Activa tu cuenta'}
             </Text>
           </Pressable>
-          <Text style={styles.secureNote}>Acceso seguro para miembros GymGo</Text>
+
+          <View style={styles.secureRow}>
+            <MaterialIcons name="verified-user" size={14} color={colors.textTertiary} />
+            <Text style={styles.secureNote}>Conexión cifrada · Acceso para miembros GymGo</Text>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
-export function LoginInput({ icon, label, focused, inputRef, ...props }: { icon: keyof typeof MaterialIcons.glyphMap; label: string; focused: boolean; inputRef?: React.Ref<TextInputInstance> } & React.ComponentProps<typeof TextInput>) {
+export function LoginInput({ icon, label, focused, inputRef, trailing, placeholder, ...props }: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  label: string;
+  focused: boolean;
+  inputRef?: React.Ref<TextInputInstance>;
+  trailing?: React.ReactNode;
+} & React.ComponentProps<typeof TextInput>) {
+  const { colors } = useTheme();
+  const styles = useStyles();
   return (
-    <View style={[styles.inputShell, focused && styles.inputFocused]}>
-      <MaterialIcons name={icon} size={18} color={focused ? neon : mutedText} />
-      <TextInput {...props} ref={inputRef} placeholder={label} placeholderTextColor={mutedText} style={styles.input} />
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.inputShell, focused && styles.inputFocused]}>
+        <MaterialIcons name={icon} size={20} color={focused ? colors.accent : colors.textTertiary} />
+        <TextInput
+          {...props}
+          ref={inputRef}
+          accessibilityLabel={label}
+          placeholder={placeholder ?? label}
+          placeholderTextColor={colors.textTertiary}
+          selectionColor={colors.accent}
+          cursorColor={colors.accent}
+          style={styles.input}
+        />
+        {trailing}
+      </View>
     </View>
   );
 }
 
 function Particle({ left, top, size, delay, duration }: { left: `${number}%`; top: `${number}%`; size: number; delay: number; duration: number }) {
-  const progress = useState(() => new Animated.Value(0))[0];
+  const styles = useStyles();
+  const reduceMotion = useReducedMotion();
+  const progress = useSharedValue(0);
 
   useEffect(() => {
-    const animation = Animated.loop(Animated.sequence([
-      Animated.delay(delay),
-      Animated.timing(progress, { toValue: 1, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(progress, { toValue: 0, duration, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ]));
-    animation.start();
-    return () => animation.stop();
-  }, [delay, duration, progress]);
+    if (reduceMotion) return;
+    progress.set(withDelay(delay, withRepeat(withTiming(1, { duration, easing: Easing.inOut(Easing.ease) }), -1, true)));
+  }, [delay, duration, progress, reduceMotion]);
 
-  return (
-    <Animated.View style={[styles.particle, { left, top, width: size, height: size, opacity: progress.interpolate({ inputRange: [0, 1], outputRange: [0.15, 0.9] }), transform: [{ translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, -12] }) }] }]} />
-  );
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.15 + progress.value * 0.75,
+    transform: [{ translateY: 8 - progress.value * 20 }],
+  }));
+
+  return <Animated.View pointerEvents="none" style={[styles.particle, { left, top, width: size, height: size }, animatedStyle]} />;
 }
 
 function EnergyTrails() {
-  const pulse = useState(() => new Animated.Value(0))[0];
+  const styles = useStyles();
+  const reduceMotion = useReducedMotion();
+  const pulse = useSharedValue(0);
 
   useEffect(() => {
-    const animation = Animated.loop(Animated.sequence([
-      Animated.timing(pulse, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      Animated.timing(pulse, { toValue: 0, duration: 1400, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-    ]));
-    animation.start();
-    return () => animation.stop();
-  }, [pulse]);
+    if (reduceMotion) return;
+    pulse.set(withRepeat(withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.ease) }), -1, true));
+  }, [pulse, reduceMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    opacity: 0.45 + pulse.value * 0.45,
+    transform: [{ rotate: '-14deg' }, { scale: 0.96 + pulse.value * 0.08 }],
+  }));
 
   return (
-    <Animated.View style={[styles.trails, { opacity: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.48, 0.92] }), transform: [{ rotate: '-12deg' }, { scale: pulse.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1.04] }) }] }]}>
+    <Animated.View pointerEvents="none" style={[styles.trails, animatedStyle]}>
       <View style={styles.trailOne} />
       <View style={styles.trailTwo} />
       <View style={styles.trailThree} />
@@ -211,38 +253,47 @@ function EnergyTrails() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: background },
-  backgroundLayer: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, alignItems: 'center', justifyContent: 'center' },
-  hero: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  brandOverlay: { position: 'absolute', top: 28, left: 24, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  brandMark: { width: 38, height: 38, borderRadius: 12, backgroundColor: neon, alignItems: 'center', justifyContent: 'center' },
-  brandMarkText: { color: '#071007', fontSize: 23, fontWeight: '900' },
-  brand: { color: primaryText, fontSize: 16, fontWeight: '900', letterSpacing: 2 },
-  athleteGlow: { width: 190, height: 190, borderRadius: 95, alignItems: 'center', justifyContent: 'center', backgroundColor: '#9BFF6315', shadowColor: neon, shadowOpacity: 0.55, shadowRadius: 44, shadowOffset: { width: 0, height: 0 }, elevation: 12 },
-  heroCaption: { position: 'absolute', bottom: 26, color: '#B8C5B9', fontSize: 10, fontWeight: '900', letterSpacing: 2 },
-  trails: { position: 'absolute', width: 320, height: 220, alignItems: 'center', justifyContent: 'center' },
-  trailOne: { position: 'absolute', width: 260, height: 2, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.9, shadowRadius: 10, shadowOffset: { width: 0, height: 0 } },
-  trailTwo: { position: 'absolute', width: 220, height: 2, marginTop: 34, marginLeft: 18, backgroundColor: '#55D6D0', opacity: 0.65 },
-  trailThree: { position: 'absolute', width: 180, height: 1, marginTop: -48, marginLeft: -18, backgroundColor: neon, opacity: 0.7 },
-  particle: { position: 'absolute', borderRadius: 9, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.8, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
-  card: { gap: 16, zIndex: 10, elevation: 10, borderRadius: 24, padding: 24, borderWidth: 1, borderColor: 'rgba(155, 255, 99, 0.15)', backgroundColor: 'rgba(20, 25, 22, 0.75)', overflow: 'hidden' },
-  title: { color: primaryText, fontSize: 25, lineHeight: 30, fontWeight: '900', letterSpacing: 0.5 },
-  subtitle: { color: mutedText, fontSize: 14, lineHeight: 21, maxWidth: 330 },
-  form: { gap: 12, marginTop: 4 },
-  inputShell: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#1E1E1E', borderRadius: 14, backgroundColor: 'rgba(13, 16, 14, 0.8)', paddingHorizontal: 16 },
+const VOLT = '#10FF85';
+
+const useStyles = makeStyles(({ colors }) => ({
+  screen: { flex: 1, backgroundColor: colors.hero },
+  scroll: { flexGrow: 1 },
+  pressed: { opacity: 0.7 },
+  hero: { minHeight: 300, backgroundColor: colors.hero, overflow: 'hidden' },
+  heroInner: { flex: 1, paddingHorizontal: space.xxl, paddingBottom: space.xxxl + space.lg, justifyContent: 'space-between' },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: space.md, paddingTop: space.lg },
+  brandMark: { width: 44, height: 44, borderRadius: 14, backgroundColor: VOLT, alignItems: 'center', justifyContent: 'center' },
+  brandMarkText: { color: '#04120A', fontSize: 26, fontWeight: '800', fontFamily: 'display' },
+  brand: { color: colors.heroText, fontSize: 22, lineHeight: 24, fontWeight: '800', fontFamily: 'display', letterSpacing: 0.5 },
+  brandBy: { color: colors.heroTextSecondary, fontSize: 12, fontWeight: '600', letterSpacing: 0.6 },
+  heroCopy: { gap: space.sm, marginTop: space.xxxl },
+  heroTitle: { color: colors.heroText, fontSize: 44, lineHeight: 46, fontWeight: '800', fontFamily: 'display' },
+  heroSubtitle: { color: colors.heroTextSecondary, fontSize: 15, lineHeight: 22, maxWidth: 320 },
+  trails: { position: 'absolute', right: -60, top: 70, width: 320, height: 220, alignItems: 'center', justifyContent: 'center' },
+  trailOne: { position: 'absolute', width: 260, height: 2, borderRadius: 1, backgroundColor: VOLT },
+  trailTwo: { position: 'absolute', width: 210, height: 2, borderRadius: 1, marginTop: 34, marginLeft: 18, backgroundColor: '#5CC8FF', opacity: 0.6 },
+  trailThree: { position: 'absolute', width: 170, height: 1, marginTop: -46, marginLeft: -18, backgroundColor: VOLT, opacity: 0.6 },
+  particle: { position: 'absolute', borderRadius: 9, backgroundColor: VOLT },
+  sheet: { flexGrow: 1, marginTop: -space.xxl, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, backgroundColor: colors.background, paddingHorizontal: space.xxl, paddingTop: space.xxl, paddingBottom: space.xxxl, gap: space.lg },
+  sheetHead: { gap: 4 },
+  title: { color: colors.text, fontSize: 30, lineHeight: 34, fontWeight: '800', fontFamily: 'display' },
+  subtitle: { color: colors.textSecondary, fontSize: 15, lineHeight: 22 },
+  form: { gap: space.md },
+  field: { gap: 6 },
+  fieldLabel: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  inputShell: { minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: space.md, borderWidth: 1.5, borderColor: colors.border, borderRadius: radius.md, backgroundColor: colors.surfaceRaised, paddingHorizontal: space.lg },
   // Only the border color may change on focus. A shadowColor turns the shell into a native "stacking context", so
   // toggling it re-parents the TextInput's native view on Android; the input loses focus, Android hands it to
   // another input, that one re-parents too... an endless focus loop between the fields.
-  inputFocused: { borderColor: neon },
-  input: { flex: 1, color: primaryText, fontSize: 15, minHeight: 54 },
-  error: { color: '#FF8A80', fontSize: 12, lineHeight: 18 },
-  submitButton: { minHeight: 56, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: neon, shadowColor: neon, shadowOpacity: 0.35, shadowRadius: 18, shadowOffset: { width: 0, height: 5 }, elevation: 8 },
-  submitText: { color: '#071007', fontSize: 14, fontWeight: '900', letterSpacing: 1 },
-  disabled: { opacity: 0.6 },
-  activationLink: { minHeight: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
-  activationLinkHighlighted: { borderWidth: 1, borderColor: neon },
-  activationText: { color: neon, fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  activationTextHighlighted: { letterSpacing: 1, fontWeight: '900' },
-  secureNote: { color: '#626A64', fontSize: 11, textAlign: 'center' },
-});
+  inputFocused: { borderColor: colors.accent },
+  input: { flex: 1, color: colors.text, fontSize: 16, minHeight: 54 },
+  eye: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  errorBox: { flexDirection: 'row', alignItems: 'flex-start', gap: space.sm, borderRadius: radius.md, backgroundColor: colors.dangerSoft, padding: space.md },
+  error: { flex: 1, color: colors.text, fontSize: 14, lineHeight: 20 },
+  activationLink: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.sm, borderRadius: radius.md, paddingHorizontal: space.md },
+  activationLinkHighlighted: { borderWidth: 1.5, borderColor: colors.accent, backgroundColor: colors.accentSoft },
+  activationText: { color: colors.accent, fontSize: 14, fontWeight: '700', textAlign: 'center', flexShrink: 1 },
+  activationTextHighlighted: { fontWeight: '800' },
+  secureRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  secureNote: { color: colors.textTertiary, fontSize: 12, textAlign: 'center' },
+}));
