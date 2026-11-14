@@ -57,7 +57,7 @@ function formatSets(entry: ExerciseEntry) {
     if (set.durationMinutes !== undefined || set.distanceKm !== undefined || set.level !== undefined) {
       return `S${set.setNumber} ${[set.durationMinutes ? `${set.durationMinutes} min` : '', set.distanceKm ? `${formatNumber(set.distanceKm, 2)} km` : '', set.level ? `nivel ${set.level}` : ''].filter(Boolean).join(' ')}`;
     }
-    return `S${set.setNumber} ${set.reps ?? '—'}×${formatNumber(set.weightKg ?? 0, 1)}`;
+    return `S${set.setNumber} ${set.weightKg ? `${formatNumber(set.weightKg, 1)} kg × ` : ''}${set.reps ?? '—'}${set.weightKg ? '' : ' reps'}`;
   }).join(' · ');
 }
 
@@ -152,8 +152,11 @@ export default function ExerciseDetailScreen() {
   const rangeVolume = inRange.reduce((sum, entry) => sum + (entry.stats.volumeKg ?? 0), 0);
   const skippedInRange = inRange.filter((entry) => entry.skipped).length;
 
-  const chartWidth = Math.min(width, 720) - space.xl * 2 - space.lg * 2 - 44;
-  const spacing = points.length > 1 ? Math.max(18, chartWidth / (points.length - 1)) : chartWidth;
+  // Card padding on both sides plus the y-axis labels (yAxisLabelWidth) and a margin for the rules.
+  const chartWidth = Math.min(width, 720) - space.xl * 2 - space.lg * 2 - 40 - 16;
+  // Room at both ends so the first and last date labels (centered on their points) are not clipped.
+  const chartEdge = 22;
+  const spacing = points.length > 1 ? Math.max(18, (chartWidth - chartEdge * 2) / (points.length - 1)) : chartWidth;
   const labelEvery = Math.max(1, Math.ceil(points.length / 5));
   const chartData = points.map((point, index) => ({
     value: point.value,
@@ -186,9 +189,9 @@ export default function ExerciseDetailScreen() {
       </View>
 
       <View style={styles.gap}>
-        <Segmented value={range} options={RANGES} onChange={setRange} />
+        <Segmented value={range} options={RANGES} onChange={setRange} fitLabels />
         {options.length > 1 ? (
-          <Segmented value={activeMetric} options={options.map((option) => ({ value: option, label: METRIC_NAMES[option] }))} onChange={setMetric} />
+          <Segmented value={activeMetric} options={options.map((option) => ({ value: option, label: METRIC_NAMES[option] }))} onChange={setMetric} fitLabels />
         ) : null}
       </View>
 
@@ -198,6 +201,7 @@ export default function ExerciseDetailScreen() {
             <Text variant="bodyStrong">{METRIC_NAMES[activeMetric]}</Text>
             <Text variant="caption" tone="secondary">
               {points.length} {points.length === 1 ? 'registro' : 'registros'} {days ? `en ${days} días` : 'en total'}
+              {change ? ' · cambio desde el primero' : ''}
             </Text>
           </View>
           {change ? <DeltaPill {...change} /> : null}
@@ -209,8 +213,8 @@ export default function ExerciseDetailScreen() {
             width={chartWidth}
             height={170}
             spacing={spacing}
-            initialSpacing={8}
-            endSpacing={8}
+            initialSpacing={chartEdge}
+            endSpacing={chartEdge}
             color={colors.accentFill}
             thickness={2.5}
             dataPointsRadius={4}

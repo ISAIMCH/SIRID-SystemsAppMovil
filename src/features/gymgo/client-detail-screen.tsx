@@ -130,6 +130,8 @@ export default function ClientDetailScreen() {
       <ClientWorkspace
         person={person}
         routines={routines}
+        routinesError={routinesError}
+        onRetryRoutines={() => { setRoutinesError(''); setRoutinesReload((value) => value + 1); }}
         profile={(
           <>
             <ProfileSections person={person} />
@@ -160,7 +162,7 @@ export default function ClientDetailScreen() {
       {error ? (
         <View style={styles.gap}>
           <Notice error>{error}</Notice>
-          <ActionButton secondary onPress={() => { setError(''); setIsLoading(true); setRetryNumber((value) => value + 1); }}>Reintentar</ActionButton>
+          <ActionButton secondary onPress={() => { setError(''); setIsLoading(true); setRetryNumber((value) => value + 1); setRoutinesError(''); setRoutinesReload((value) => value + 1); }}>Reintentar</ActionButton>
         </View>
       ) : null}
 

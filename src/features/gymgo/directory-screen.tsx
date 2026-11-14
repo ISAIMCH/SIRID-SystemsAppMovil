@@ -20,7 +20,8 @@ type ClientActivity = { clientId: string; lastSessionAt: string | null; lastRpe:
 
 // The training activity line of a client in the Coach's list, with the same thresholds as the client's alerts.
 function activityLine(activity: ClientActivity | undefined, now: number) {
-  if (!activity?.lastSessionAt) return { text: 'Sin sesiones registradas', tone: 'muted' as const };
+  // No session yet is worth a look: the client's summary raises it as soon as they have an active routine.
+  if (!activity?.lastSessionAt) return { text: 'Sin sesiones registradas', tone: 'warning' as const };
   const days = daysSince(activity.lastSessionAt, now);
   const tone = days >= INACTIVE_CRITICAL_DAYS ? 'danger' as const : days >= INACTIVE_ATTENTION_DAYS ? 'warning' as const : 'ok' as const;
   const parts = [`Última sesión ${relativeDays(activity.lastSessionAt, now)}`];
@@ -182,7 +183,6 @@ const useStyles = makeStyles(({ colors }) => ({
   dot_ok: { backgroundColor: colors.success },
   dot_warning: { backgroundColor: colors.warning },
   dot_danger: { backgroundColor: colors.danger },
-  dot_muted: { backgroundColor: colors.textTertiary },
   textDanger: { color: colors.danger },
   textWarning: { color: colors.warning },
   attention: { color: colors.warning, fontSize: 13, fontWeight: '600' },

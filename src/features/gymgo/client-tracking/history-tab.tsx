@@ -191,7 +191,7 @@ function SessionRow({ session, first, last, onPress }: { session: WorkoutSession
   const recovered = isRecovered(session);
   const flags = [
     session.clientNotes?.trim() ? { icon: 'chat-bubble-outline' as const, label: 'Con nota', color: colors.info } : null,
-    skips.sets ? { icon: 'skip-next' as const, label: `${skips.sets} omitidas`, color: colors.warning } : null,
+    skips.sets ? { icon: 'skip-next' as const, label: `${skips.sets} ${skips.sets === 1 ? 'omitida' : 'omitidas'}`, color: colors.warning } : null,
     recovered ? { icon: 'history' as const, label: 'Recuperada', color: colors.warning } : null,
   ].filter((flag): flag is NonNullable<typeof flag> => Boolean(flag));
   const metrics = [

@@ -332,11 +332,13 @@ const useSegmentStyles = makeStyles(({ colors, scheme }) => ({
   labelActive: { color: colors.text, fontWeight: '700' },
 }));
 
-export function Segmented<T extends string>({ value, options, onChange, style }: {
+export function Segmented<T extends string>({ value, options, onChange, style, fitLabels = false }: {
   value: T;
   options: { value: T; label: string }[];
   onChange: (value: T) => void;
   style?: StyleProp<ViewStyle>;
+  /** Shrink a label that would be cut off (small screens, large text) instead of truncating it. */
+  fitLabels?: boolean;
 }) {
   const styles = useSegmentStyles();
   const reduceMotion = useReducedMotion();
@@ -364,7 +366,7 @@ export function Segmented<T extends string>({ value, options, onChange, style }:
             accessibilityState={{ selected: active }}
             onPress={() => { if (!active) { void Haptics.selectionAsync(); onChange(option.value); } }}
             style={styles.option}>
-            <RNText numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.label, active && styles.labelActive]}>{option.label}</RNText>
+            <RNText numberOfLines={1} maxFontSizeMultiplier={1.3} adjustsFontSizeToFit={fitLabels} minimumFontScale={fitLabels ? 0.7 : undefined} style={[styles.label, active && styles.labelActive]}>{option.label}</RNText>
           </Pressable>
         );
       })}

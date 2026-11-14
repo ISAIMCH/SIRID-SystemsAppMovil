@@ -23,7 +23,7 @@ function formatSet(exercise: LoggedExercise) {
       exercise.level ? `nivel ${exercise.level}` : '',
     ].filter(Boolean).join(' · ') || '—';
   }
-  return `${exercise.reps ?? '—'} × ${formatNumber(exercise.weightKg ?? 0, 1)} kg`;
+  return exercise.weightKg ? `${formatNumber(exercise.weightKg, 1)} kg × ${exercise.reps ?? '—'}` : `${exercise.reps ?? '—'} reps`;
 }
 
 function formatTarget(exercise: LoggedExercise) {
@@ -98,7 +98,7 @@ export default function SessionDetailScreen() {
     { label: 'Duración', value: `${formatNumber(session.durationMinutes)} min`, hint: session.activeDurationMinutes !== undefined ? `${formatNumber(session.activeDurationMinutes)} min activos` : undefined },
     { label: 'Volumen', value: formatVolume(session.totalVolumeKg) },
     { label: 'RPE', value: session.perceivedExertion ? `${session.perceivedExertion} de 5` : '—', hint: session.perceivedExertion ? undefined : 'No registrado' },
-    { label: 'Descanso total', value: `${formatNumber((session.totalRestSeconds ?? 0) / 60, 1)} min` },
+    { label: 'Descanso total', value: (session.totalRestSeconds ?? 0) < 60 ? `${Math.round(session.totalRestSeconds ?? 0)} s` : `${formatNumber((session.totalRestSeconds ?? 0) / 60, 1)} min` },
     { label: 'Rondas', value: session.targetSetsTotal ? `${completedSets} de ${session.targetSetsTotal}` : formatNumber(completedSets) },
     { label: 'Calorías', value: `${formatNumber(session.caloriesBurned)} kcal`, hint: 'Estimadas' },
   ];
@@ -136,7 +136,7 @@ export default function SessionDetailScreen() {
       ) : null}
 
       <View style={styles.gap}>
-        <SectionHeader title="Ejercicios" subtitle="Repeticiones × peso por serie, frente al objetivo de la rutina" />
+        <SectionHeader title="Ejercicios" subtitle="Peso × repeticiones por serie, frente al objetivo de la rutina" />
         {(session.blocks ?? []).map((block, blockIndex) => (
           <Card key={`${block.routineBlockId}-${blockIndex}`} variant="raised">
             <View>

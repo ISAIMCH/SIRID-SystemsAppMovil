@@ -87,7 +87,7 @@ export function ProgressTab({ tracking, activeRoutine, onOpenExercise }: {
       {tracking.exercises !== null ? (
         <>
           <Text variant="caption" tone="secondary">
-            Toca un ejercicio para ver su historial completo, récords y comparación con el objetivo. La línea muestra sus últimos registros.
+            Toca un ejercicio para ver su historial completo, récords y comparación con el objetivo. La línea muestra sus últimos registros y el porcentaje compara el último con sus registros anteriores.
           </Text>
           {groups.length || previous.length ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>

@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 
-import { Badge, IconButton, Screen, Segmented, Skeleton, Text } from '@/components/sirid';
+import { Badge, ErrorBanner, IconButton, Screen, Segmented, Skeleton, Text } from '@/components/sirid';
 import { makeStyles } from '@/theme/make-styles';
 import { space } from '@/theme/tokens';
 
@@ -28,9 +28,12 @@ const TABS: { value: ClientTab; label: string }[] = [
  * how the client is (Resumen), how they evolve (Progreso), what they did (Historial) and who they are (Perfil).
  * Tabs stay mounted once opened so their scroll position and loaded pages survive switching.
  */
-export function ClientWorkspace({ person, routines, profile }: {
+export function ClientWorkspace({ person, routines, routinesError, onRetryRoutines, profile }: {
   person: DirectoryClient;
+  /** null while loading or after a failed request: never read as "no routines". */
   routines: Routine[] | null;
+  routinesError: string;
+  onRetryRoutines: () => void;
   /** Perfil content: personal data, membership, observations and routine management. */
   profile: ReactNode;
 }) {
@@ -39,7 +42,10 @@ export function ClientWorkspace({ person, routines, profile }: {
   const [tab, setTab] = useState<ClientTab>('summary');
   const [visited, setVisited] = useState<Set<ClientTab>>(() => new Set(['summary']));
   const activeRoutine = routines?.find((routine) => routine.status === 'active') ?? null;
-  const alerts = tracking.overview
+  // Alerts, state and schedule depend on the active routine: without the routines they would wrongly read
+  // as "no routine" (no schedule, everything in order), so they wait for them.
+  const routinesReady = routines !== null;
+  const alerts = tracking.overview && routinesReady
     ? buildAlerts({ now: tracking.loadedAt, overview: tracking.overview, recentSessions: tracking.recentSessions, exercises: tracking.exercises ?? [], activeRoutine })
     : [];
   const status = clientStatus(alerts, tracking.overview);
@@ -57,7 +63,14 @@ export function ClientWorkspace({ person, routines, profile }: {
     else if (alert.target?.type === 'history') open('history');
   };
 
+  const routinesPending = (
+    <View style={styles.pending}>
+      {routinesError ? <ErrorBanner message={routinesError} onRetry={onRetryRoutines} /> : <Skeleton height={160} />}
+    </View>
+  );
+
   const render = (key: ClientTab) => {
+    if (!routinesReady && (key === 'summary' || key === 'progress')) return routinesPending;
     switch (key) {
       case 'summary':
         return <SummaryTab clientId={person.id} tracking={tracking} alerts={alerts} activeRoutine={activeRoutine} now={tracking.loadedAt} onOpenTab={open} onAlertPress={onAlertPress} onOpenExercise={openExercise} />;
@@ -79,7 +92,7 @@ export function ClientWorkspace({ person, routines, profile }: {
             <Text variant="title" accessibilityRole="header">{fullName}</Text>
             {tracking.overview ? (
               <View style={styles.statusRow}>
-                <Badge tone={status.tone} dot>{status.label}</Badge>
+                {routinesReady ? <Badge tone={status.tone} dot>{status.label}</Badge> : null}
                 <Text variant="caption" tone="secondary">
                   {lastSession ? `Última sesión ${relativeDays(lastSession.completedAt, tracking.loadedAt)} · ${formatDayDate(lastSession.completedAt)}` : 'Sin sesiones registradas'}
                 </Text>
@@ -87,7 +100,7 @@ export function ClientWorkspace({ person, routines, profile }: {
             ) : tracking.isLoading ? <Skeleton width={220} height={20} /> : null}
           </View>
         </View>
-        <Segmented value={tab} options={TABS} onChange={open} />
+        <Segmented value={tab} options={TABS} onChange={open} fitLabels />
       </View>
       {TABS.map(({ value }) => (visited.has(value) ? (
         <View key={value} style={[styles.body, tab !== value && styles.hidden]} accessibilityElementsHidden={tab !== value} importantForAccessibility={tab === value ? 'auto' : 'no-hide-descendants'}>
@@ -106,5 +119,6 @@ const useStyles = makeStyles(({ colors }) => ({
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.sm, rowGap: space.xs },
   body: { flex: 1 },
   hidden: { display: 'none' },
+  pending: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: space.xl, paddingTop: space.lg },
   profile: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: space.xl, paddingTop: space.lg, paddingBottom: space.huge * 2, gap: space.xxl },
 }));

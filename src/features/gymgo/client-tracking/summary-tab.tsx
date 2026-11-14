@@ -209,6 +209,7 @@ function Indicators({ tracking, activeRoutine, onOpenExercise }: { tracking: Cli
         value={String(tracking.periodDays) as '7' | '30'}
         options={[{ value: '7', label: '7 días' }, { value: '30', label: '30 días' }]}
         onChange={(value) => tracking.setPeriodDays(Number(value) as 7 | 30)}
+        fitLabels
       />
       <View style={styles.grid}>
         <KpiTile
@@ -352,6 +353,7 @@ function RecentEvolution({ tracking, now }: { tracking: ClientTracking; now: num
           value={metric}
           options={[{ value: 'sessions', label: 'Sesiones' }, { value: 'volume', label: 'Volumen' }, { value: 'rpe', label: 'RPE' }]}
           onChange={setMetric}
+          fitLabels
         />
         <MiniBars data={data} format={format} />
         <Text variant="caption" tone="secondary">{caption}</Text>
