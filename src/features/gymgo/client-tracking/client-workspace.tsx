@@ -4,7 +4,7 @@ import { ScrollView, View } from 'react-native';
 
 import { Badge, ErrorBanner, IconButton, Screen, Segmented, Skeleton, Text } from '@/components/sirid';
 import { makeStyles } from '@/theme/make-styles';
-import { space } from '@/theme/tokens';
+import { DISPLAY, space } from '@/theme/tokens';
 
 import type { DirectoryClient } from '../directory-types';
 import type { Routine } from '../types';
@@ -51,6 +51,11 @@ export function ClientWorkspace({ person, routines, routinesError, onRetryRoutin
   const status = clientStatus(alerts, tracking.overview);
   const lastSession = tracking.overview?.totals.lastSession;
   const fullName = [person.name, person.lastName].filter(Boolean).join(' ');
+  // Short on screen so it fits beside the state at large text sizes; the date stays in Resumen and Historial.
+  const lastSessionText = lastSession ? `Entrenó ${relativeDays(lastSession.completedAt, tracking.loadedAt)}` : 'Sin sesiones registradas';
+  const lastSessionLabel = lastSession
+    ? `Última sesión ${relativeDays(lastSession.completedAt, tracking.loadedAt)}, ${formatDayDate(lastSession.completedAt)}`
+    : lastSessionText;
 
   const open = (next: ClientTab) => {
     setVisited((current) => (current.has(next) ? current : new Set([...current, next])));
@@ -88,18 +93,16 @@ export function ClientWorkspace({ person, routines, routinesError, onRetryRoutin
       <View style={styles.header}>
         <View style={styles.headerRow}>
           <IconButton icon="arrow-back" label="Volver a clientes" onPress={() => (router.canGoBack() ? router.back() : router.replace('/(main)/directory'))} />
-          <View style={styles.headerText}>
-            <Text variant="title" accessibilityRole="header">{fullName}</Text>
-            {tracking.overview ? (
-              <View style={styles.statusRow}>
-                {routinesReady ? <Badge tone={status.tone} dot>{status.label}</Badge> : null}
-                <Text variant="caption" tone="secondary">
-                  {lastSession ? `Última sesión ${relativeDays(lastSession.completedAt, tracking.loadedAt)} · ${formatDayDate(lastSession.completedAt)}` : 'Sin sesiones registradas'}
-                </Text>
-              </View>
-            ) : tracking.isLoading ? <Skeleton width={220} height={20} /> : null}
-          </View>
+          {/* One line so small screens and large text leave room for the tab content; the full name stays in
+              Perfil and for screen readers. */}
+          <Text variant="title" accessibilityRole="header" accessibilityLabel={fullName} numberOfLines={1} style={styles.name}>{fullName}</Text>
         </View>
+        {tracking.overview ? (
+          <View style={styles.statusRow} accessible accessibilityLabel={[routinesReady ? status.label : null, lastSessionLabel].filter(Boolean).join('. ')}>
+            {routinesReady ? <Badge tone={status.tone} dot>{status.label}</Badge> : null}
+            <Text variant="caption" tone="secondary" maxFontSizeMultiplier={1.3}>{lastSessionText}</Text>
+          </View>
+        ) : tracking.isLoading ? <Skeleton width={220} height={20} /> : null}
         <Segmented value={tab} options={TABS} onChange={open} fitLabels />
       </View>
       {TABS.map(({ value }) => (visited.has(value) ? (
@@ -113,10 +116,11 @@ export function ClientWorkspace({ person, routines, routinesError, onRetryRoutin
 
 const useStyles = makeStyles(({ colors }) => ({
   screen: { paddingHorizontal: 0, paddingTop: 0, paddingBottom: 0, gap: 0, maxWidth: undefined },
-  header: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: space.md, paddingHorizontal: space.xl, paddingTop: space.md, paddingBottom: space.md, borderBottomWidth: 1, borderBottomColor: colors.divider, backgroundColor: colors.background },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  headerText: { flex: 1, gap: space.xs },
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.sm, rowGap: space.xs },
+  header: { width: '100%', maxWidth: 720, alignSelf: 'center', gap: space.sm, paddingHorizontal: space.lg, paddingTop: space.sm, paddingBottom: space.sm, borderBottomWidth: 1, borderBottomColor: colors.divider, backgroundColor: colors.background },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  // fontFamily keeps the display face: withFonts gives the body face to any style with only a size.
+  name: { flex: 1, fontFamily: DISPLAY, fontWeight: '700', fontSize: 24, lineHeight: 28 },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: space.sm, rowGap: space.xxs },
   body: { flex: 1 },
   hidden: { display: 'none' },
   pending: { width: '100%', maxWidth: 720, alignSelf: 'center', paddingHorizontal: space.xl, paddingTop: space.lg },
