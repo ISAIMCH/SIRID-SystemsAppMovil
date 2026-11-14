@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 
 const exerciseLogSchema = new mongoose.Schema({
   routineExerciseId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  // Global catalog exercise, copied from the routine: progress follows it when routines change.
+  catalogExerciseId: { type: mongoose.Schema.Types.ObjectId, ref: 'ExerciseDictionary', default: null },
   exerciseName: { type: String, required: true, trim: true, maxlength: 120 },
   muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
   gifUrl: { type: String, trim: true, maxlength: 500 },
@@ -46,6 +48,8 @@ const workoutSessionSchema = new mongoose.Schema({
   routineTitle: { type: String, trim: true, maxlength: 120 },
   routineGoal: { type: String, trim: true, maxlength: 120 },
   trainingDay: { type: Number, required: true, min: 0, max: 6 },
+  // The routine's days per week when the session was logged, so later schedule changes never rewrite past weeks.
+  plannedSessionsPerWeek: { type: Number, min: 1, max: 7 },
   completedAt: { type: Date, required: true, default: Date.now, index: true },
   durationMinutes: { type: Number, required: true, min: 0, max: 600 },
   totalRestSeconds: { type: Number, default: 0, min: 0, max: 86400 },

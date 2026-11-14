@@ -6,7 +6,7 @@ import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
-import ClientProgress from './client-progress';
+import { ClientWorkspace } from './client-tracking/client-workspace';
 import { CoachRoutineList } from './coach-routine-list';
 import { CoachSelect } from './coach-select';
 import type { DirectoryClient } from './directory-types';
@@ -94,6 +94,54 @@ export default function ClientDetailScreen() {
 
   const isCoach = person?.role === 'Coach';
 
+  // Observations and routine management of a Coach's client. The active routine is shown once, in Resumen;
+  // here are the others, to activate or edit, and the history shared from other gyms.
+  const otherRoutines = routines?.filter((routine) => routine.status !== 'active') ?? null;
+  const coachSections = person ? (
+    <>
+      <SectionTitle>Observaciones médicas y técnicas</SectionTitle>
+      <FloatingCard style={styles.details}>
+        <Text style={[styles.observations, !person.observations && styles.observationsEmpty]}>
+          {person.observations || 'Sin observaciones registradas. Puedes agregarlas al crear o editar su rutina.'}
+        </Text>
+      </FloatingCard>
+
+      <SectionTitle>Rutinas</SectionTitle>
+      {routinesError ? <Notice error>{routinesError}</Notice> : null}
+      {routines === null && !routinesError ? <ActivityIndicator color={colors.accent} /> : null}
+      {routines?.some((routine) => routine.status === 'active') ? (
+        <Text style={styles.coachEmail}>La rutina activa se muestra en Resumen. Aquí están las demás para activarlas o editarlas.</Text>
+      ) : null}
+      {otherRoutines?.length ? (
+        <CoachRoutineList routines={otherRoutines} onChanged={() => setRoutinesReload((value) => value + 1)} />
+      ) : routines ? (
+        <Text style={styles.coachEmail}>{routines.length ? 'No tiene rutinas pausadas.' : 'Este cliente aún no tiene rutinas.'}</Text>
+      ) : null}
+      <ActionButton onPress={() => router.push(routineEditorHref({ clientId: person.id }))}>
+        {routines?.length ? 'Crear nueva rutina' : 'Crear rutina'}
+      </ActionButton>
+
+      <SharedHistorySection clientId={person.id} />
+    </>
+  ) : null;
+
+  if (isCoachViewer && person && !isCoach && !isLoading && !error) {
+    return (
+      <ClientWorkspace
+        person={person}
+        routines={routines}
+        routinesError={routinesError}
+        onRetryRoutines={() => { setRoutinesError(''); setRoutinesReload((value) => value + 1); }}
+        profile={(
+          <>
+            <ProfileSections person={person} />
+            {coachSections}
+          </>
+        )}
+      />
+    );
+  }
+
   return (
     <Page admin={isAdmin} dark={user?.role === 'Coach'}>
       <View style={styles.header}>
@@ -114,7 +162,7 @@ export default function ClientDetailScreen() {
       {error ? (
         <View style={styles.gap}>
           <Notice error>{error}</Notice>
-          <ActionButton secondary onPress={() => { setError(''); setIsLoading(true); setRetryNumber((value) => value + 1); }}>Reintentar</ActionButton>
+          <ActionButton secondary onPress={() => { setError(''); setIsLoading(true); setRetryNumber((value) => value + 1); setRoutinesError(''); setRoutinesReload((value) => value + 1); }}>Reintentar</ActionButton>
         </View>
       ) : null}
 
@@ -128,71 +176,7 @@ export default function ClientDetailScreen() {
             />
           ) : (
             <>
-              <SectionTitle>Información</SectionTitle>
-              <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
-                <DetailRow label="Correo" value={person.email} />
-                <DetailRow label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
-                <DetailRow label="Teléfono" value={person.phone || 'No registrado'} />
-                {isCoach ? (
-                  <DetailRow label="Dirección" value={person.address || 'No registrada'} last />
-                ) : (
-                  <>
-                    <DetailRow label="Objetivo" value={person.goal || 'No definido'} />
-                    <DetailRow label="Experiencia" value={person.experienceLevel ? experienceLabels[person.experienceLevel] : 'No definida'} last />
-                  </>
-                )}
-              </FloatingCard>
-
-              {!isCoach ? (
-                <>
-                  <SectionTitle>Membresía</SectionTitle>
-                  <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
-                    <DetailRow label="Estado" value={membershipLabel(person.membership)} accent={membershipDisplayStatus(person.membership) === 'active'} />
-                    <DetailRow label="Inicio" value={formatDate(person.membership?.startsAt)} />
-                    <DetailRow label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
-                  </FloatingCard>
-
-                  <SectionTitle>Coach asignado</SectionTitle>
-                  <FloatingCard style={[styles.coachCard, isAdmin && styles.adminSlateCard]}>
-                    {person.assignedCoach ? (
-                      <>
-                        <View style={styles.flex}>
-                          <Text style={styles.coachName}>{person.assignedCoach.name}</Text>
-                          <Text style={styles.coachEmail}>{person.assignedCoach.email}</Text>
-                        </View>
-                      </>
-                    ) : (
-                      <Text style={styles.coachEmail}>No tiene Coach asignado.</Text>
-                    )}
-                  </FloatingCard>
-                </>
-              ) : null}
-
-              {isCoachViewer && !isCoach ? (
-                <>
-                  <SectionTitle>Observaciones médicas y técnicas</SectionTitle>
-                  <FloatingCard style={styles.details}>
-                    <Text style={[styles.observations, !person.observations && styles.observationsEmpty]}>
-                      {person.observations || 'Sin observaciones registradas. Puedes agregarlas al crear o editar su rutina.'}
-                    </Text>
-                  </FloatingCard>
-
-                  <SectionTitle>Rutinas</SectionTitle>
-                  {routinesError ? <Notice error>{routinesError}</Notice> : null}
-                  {routines === null && !routinesError ? <ActivityIndicator color={colors.accent} /> : null}
-                  {routines?.length ? (
-                    <CoachRoutineList routines={routines} onChanged={() => setRoutinesReload((value) => value + 1)} />
-                  ) : routines ? (
-                    <Text style={styles.coachEmail}>Este cliente aún no tiene rutinas.</Text>
-                  ) : null}
-                  <ActionButton onPress={() => router.push(routineEditorHref({ clientId: person.id }))}>
-                    {routines?.length ? 'Crear nueva rutina' : 'Crear rutina'}
-                  </ActionButton>
-                </>
-              ) : null}
-
-              {isCoachViewer && !isCoach ? <ClientProgress clientId={person.id} /> : null}
-              {isCoachViewer && !isCoach ? <SharedHistorySection clientId={person.id} /> : null}
+              <ProfileSections person={person} />
 
               {isAdmin ? <ActionButton onPress={() => setIsEditing(true)}>Editar perfil</ActionButton> : null}
             </>
@@ -200,6 +184,57 @@ export default function ClientDetailScreen() {
         </>
       ) : null}
     </Page>
+  );
+}
+
+// Personal data, membership and assigned Coach.
+function ProfileSections({ person }: { person: DirectoryClient }) {
+  const styles = useStyles();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'Admin';
+  const isCoach = person.role === 'Coach';
+  return (
+    <>
+      <SectionTitle>Información</SectionTitle>
+      <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
+        <DetailRow label="Correo" value={person.email} />
+        <DetailRow label="Nombre" value={[person.name, person.lastName].filter(Boolean).join(' ')} />
+        <DetailRow label="Teléfono" value={person.phone || 'No registrado'} />
+        {isCoach ? (
+          <DetailRow label="Dirección" value={person.address || 'No registrada'} last />
+        ) : (
+          <>
+            <DetailRow label="Objetivo" value={person.goal || 'No definido'} />
+            <DetailRow label="Experiencia" value={person.experienceLevel ? experienceLabels[person.experienceLevel] : 'No definida'} last />
+          </>
+        )}
+      </FloatingCard>
+
+      {!isCoach ? (
+        <>
+          <SectionTitle>Membresía</SectionTitle>
+          <FloatingCard style={[styles.details, isAdmin && styles.adminSlateCard]}>
+            <DetailRow label="Estado" value={membershipLabel(person.membership)} accent={membershipDisplayStatus(person.membership) === 'active'} />
+            <DetailRow label="Inicio" value={formatDate(person.membership?.startsAt)} />
+            <DetailRow label="Vencimiento" value={formatDate(person.membership?.expiresAt)} last />
+          </FloatingCard>
+
+          <SectionTitle>Coach asignado</SectionTitle>
+          <FloatingCard style={[styles.coachCard, isAdmin && styles.adminSlateCard]}>
+            {person.assignedCoach ? (
+              <>
+                <View style={styles.flex}>
+                  <Text style={styles.coachName}>{person.assignedCoach.name}</Text>
+                  <Text style={styles.coachEmail}>{person.assignedCoach.email}</Text>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.coachEmail}>No tiene Coach asignado.</Text>
+            )}
+          </FloatingCard>
+        </>
+      ) : null}
+    </>
   );
 }
 

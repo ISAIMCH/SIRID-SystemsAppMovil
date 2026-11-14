@@ -20,6 +20,7 @@
     "migrate:documents": "node scripts/migrate-documents.js",
     "migrate:history": "node scripts/migrate-history-isolation.js",
     "migrate:equipment-categories": "node scripts/migrate-equipment-categories.js",
+    "migrate:workout-catalog": "node scripts/backfill-workout-catalog-ids.js",
     "platform:admin": "node scripts/set-platform-admin.js"
   },
   "dependencies": {

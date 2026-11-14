@@ -58,7 +58,7 @@ test("staff only read the sessions their organization's routines produced", asyn
   try {
     let body;
     await getClientWorkoutHistory(staffRequest(organizationId, clientId), { json: (value) => { body = value; } });
-    assert.deepEqual(body, { sessions: [] });
+    assert.deepEqual(body, { sessions: [], nextCursor: null });
     assert.equal(String(sessionFilter.organizationId), String(organizationId));
   } finally {
     restore.forEach((undo) => undo());

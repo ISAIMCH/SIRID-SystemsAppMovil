@@ -7,12 +7,28 @@ import { connectSocket } from '@/services/socket';
 
 import { api, getApiErrorMessage } from './api';
 import { useAuth } from './auth-context';
+import { INACTIVE_ATTENTION_DAYS, INACTIVE_CRITICAL_DAYS } from './client-tracking/alerts';
+import { daysSince, relativeDays } from './client-tracking/format';
 import type { DirectoryClient } from './directory-types';
 import { FloatingCard } from './fit-ui';
 import { membershipDisplayStatus, membershipLabel } from './membership-status';
 import { ActionButton, AppHeader, Field, Notice, Page, SectionTitle } from './ui';
 import { makeStyles } from '@/theme/make-styles';
 import { useTheme } from '@/theme/theme-provider';
+
+type ClientActivity = { clientId: string; lastSessionAt: string | null; lastRpe: number | null; sessionsLast7Days: number };
+
+// The training activity line of a client in the Coach's list, with the same thresholds as the client's alerts.
+function activityLine(activity: ClientActivity | undefined, now: number) {
+  // No session yet is worth a look: the client's summary raises it as soon as they have an active routine.
+  if (!activity?.lastSessionAt) return { text: 'Sin sesiones registradas', tone: 'warning' as const };
+  const days = daysSince(activity.lastSessionAt, now);
+  const tone = days >= INACTIVE_CRITICAL_DAYS ? 'danger' as const : days >= INACTIVE_ATTENTION_DAYS ? 'warning' as const : 'ok' as const;
+  const parts = [`Última sesión ${relativeDays(activity.lastSessionAt, now)}`];
+  if (activity.sessionsLast7Days) parts.push(`${activity.sessionsLast7Days} en 7 días`);
+  if (activity.lastRpe === 5) parts.push('RPE 5');
+  return { text: parts.join(' · '), tone: activity.lastRpe === 5 && tone === 'ok' ? 'warning' as const : tone };
+}
 
 // The Coach's assigned clients; staff directories live in the web dashboard.
 export default function DirectoryScreen() {
@@ -24,6 +40,9 @@ export default function DirectoryScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryNumber, setRetryNumber] = useState(0);
+  const [activity, setActivity] = useState<Map<string, ClientActivity>>(new Map());
+  const [now, setNow] = useState(() => Date.now());
+  const isCoach = user?.role === 'Coach';
 
   useFocusEffect(useCallback(() => {
     let isCurrent = true;
@@ -37,10 +56,20 @@ export default function DirectoryScreen() {
       .finally(() => {
         if (isCurrent) setIsLoading(false);
       });
+    // Training activity is a hint on top of the list: if it fails the list still works.
+    if (isCoach) {
+      api.get<{ clients: ClientActivity[] }>('/workouts/clients/activity')
+        .then((response) => {
+          if (!isCurrent) return;
+          setActivity(new Map(response.data.clients.map((entry) => [entry.clientId, entry])));
+          setNow(Date.now());
+        })
+        .catch(() => undefined);
+    }
     return () => { isCurrent = false; };
   // retryNumber is a manual "reintentar" trigger.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryNumber]));
+  }, [retryNumber, isCoach]));
 
   // Reception enrolls clients and managers assign coaches from the dashboard: reload when the directory changes.
   useEffect(() => {
@@ -56,6 +85,7 @@ export default function DirectoryScreen() {
     `${person.name} ${person.lastName ?? ''} ${person.email} ${person.phone ?? ''}`.toLocaleLowerCase().includes(normalizedSearch)
   ));
   const noun = 'clientes';
+  const needAttention = isCoach && activity.size ? people.filter((person) => activityLine(activity.get(person.id), now).tone !== 'ok').length : 0;
 
   return (
     <Page admin={user?.role === 'Admin'} dark={user?.role === 'Coach'}>
@@ -74,6 +104,9 @@ export default function DirectoryScreen() {
       />
 
       <SectionTitle>{isLoading ? `Cargando ${noun}` : `${filtered.length} ${noun}`}</SectionTitle>
+      {!isLoading && needAttention ? (
+        <Text style={styles.attention}>{needAttention} {needAttention === 1 ? 'cliente sin actividad reciente o con esfuerzo máximo' : 'clientes sin actividad reciente o con esfuerzo máximo'}: revisa su resumen.</Text>
+      ) : null}
       {isLoading ? <View style={styles.loading}><ActivityIndicator color={colors.accent} size="large" /></View> : null}
 
       {error ? (
@@ -102,7 +135,15 @@ export default function DirectoryScreen() {
             <View style={styles.info}>
               <Text style={[styles.name, user?.role === 'Coach' && styles.darkName]}>{[person.name, person.lastName].filter(Boolean).join(' ')}</Text>
               <Text style={[styles.email, user?.role === 'Coach' && styles.darkSecondary]}>{person.email}</Text>
-              {person.role === 'Cliente' ? (
+              {person.role === 'Cliente' && isCoach && activity.size ? (() => {
+                const line = activityLine(activity.get(person.id), now);
+                return (
+                  <View style={styles.activity}>
+                    <View style={[styles.activityDot, styles[`dot_${line.tone}`]]} />
+                    <Text style={[styles.coach, line.tone === 'danger' && styles.textDanger, line.tone === 'warning' && styles.textWarning]}>{line.text}</Text>
+                  </View>
+                );
+              })() : person.role === 'Cliente' ? (
                 <Text style={[styles.coach, user?.role === 'Coach' && styles.darkSecondary]}>{person.assignedCoach ? `Coach · ${person.assignedCoach.name}` : 'Sin Coach asignado'}</Text>
               ) : (
                 <Text style={[styles.coach, user?.role === 'Coach' && styles.darkSecondary]}>{person.phone || 'Sin teléfono'}</Text>
@@ -137,6 +178,14 @@ const useStyles = makeStyles(({ colors }) => ({
   email: { color: colors.textSecondary, fontSize: 12 },
   darkSecondary: { color: colors.textSecondary },
   coach: { color: colors.textSecondary, fontSize: 12, fontWeight: '700' },
+  activity: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  activityDot: { width: 8, height: 8, borderRadius: 4 },
+  dot_ok: { backgroundColor: colors.success },
+  dot_warning: { backgroundColor: colors.warning },
+  dot_danger: { backgroundColor: colors.danger },
+  textDanger: { color: colors.danger },
+  textWarning: { color: colors.warning },
+  attention: { color: colors.warning, fontSize: 13, fontWeight: '600' },
   chip: { borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
   chipActive: { backgroundColor: colors.surface, borderColor: colors.border },
   chipText: { color: colors.textSecondary, fontSize: 12, fontWeight: '800' },

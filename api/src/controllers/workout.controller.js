@@ -10,6 +10,15 @@ const { resolveTenant } = require('../utils/tenant');
 const { findClientMember, isAssignedCoach } = require('../utils/members');
 const { normalizeBlocks } = require('./routine.controller');
 const { normalizeMuscleGroup } = require('../constants/muscle-groups');
+const mongoose = require('mongoose');
+const {
+  HISTORY_FILTERS,
+  clampTzOffset,
+  cursorCondition,
+  decodeCursor,
+  encodeCursor,
+  historyFilterCondition,
+} = require('../utils/client-tracking');
 
 function toNumberOrNull(value) {
   const number = Number(value);
@@ -177,6 +186,8 @@ async function createWorkoutSession(req, res) {
         }
         return {
           routineExerciseId: exercise._id,
+          // The stable identity that keeps progress across routines (null for custom exercises).
+          catalogExerciseId: exercise.catalogExerciseId ?? null,
           exerciseName: exercise.name,
           muscleGroup: normalizeMuscleGroup(exercise.muscleGroup),
           gifUrl: exercise.gifUrl,
@@ -272,6 +283,7 @@ async function createWorkoutSession(req, res) {
     routineTitle: routine.title,
     routineGoal: routine.goal,
     trainingDay: input.trainingDay,
+    plannedSessionsPerWeek: routine.scheduleDays?.length || routine.daysPerWeek || undefined,
     completedAt: new Date(),
     durationMinutes: input.durationMinutes,
     totalRestSeconds,
@@ -296,18 +308,50 @@ async function getMyWorkoutHistory(req, res) {
   res.json({ sessions: sessions.map(sessionResponse) });
 }
 
-async function getClientWorkoutHistory(req, res) {
+// The sessions a Coach (only of their assigned clients) or an Admin may read for a client of the organization.
+async function clientSessionScope(req) {
   if (!/^[a-f\d]{24}$/i.test(req.params.clientId)) throw new HttpError(400, 'ID de cliente inválido.');
   const member = await findClientMember(req, req.params.clientId);
   if (resolveTenant(req).role === 'Coach' && !isAssignedCoach(member, req.user.id)) {
     throw new HttpError(404, 'Cliente no encontrado.');
   }
+  return { user: member.userId, organizationId: resolveTenant(req).organizationId };
+}
 
-  const sessions = await WorkoutSession.find({ user: member.userId, organizationId: resolveTenant(req).organizationId })
-    .sort({ completedAt: -1 })
-    .limit(100)
+const HISTORY_PAGE_SIZE = 20;
+const HISTORY_MAX_PAGE_SIZE = 50;
+// Without paging parameters the endpoint keeps its original answer (latest 100) for existing consumers.
+const LEGACY_HISTORY_LIMIT = 100;
+
+// Newest first. `limit`, `before` (the previous page's `nextCursor`) and `filter` page through the whole history.
+async function getClientWorkoutHistory(req, res) {
+  const scope = await clientSessionScope(req);
+  const query = req.query ?? {};
+  const paged = query.limit !== undefined || query.before !== undefined || query.filter !== undefined;
+  const limit = paged
+    ? Math.min(HISTORY_MAX_PAGE_SIZE, Math.max(1, Number.parseInt(query.limit, 10) || HISTORY_PAGE_SIZE))
+    : LEGACY_HISTORY_LIMIT;
+  if (query.filter !== undefined && !HISTORY_FILTERS.includes(query.filter)) throw new HttpError(400, 'Filtro de historial inválido.');
+  let cursor = {};
+  if (query.before !== undefined) {
+    const decoded = decodeCursor(query.before);
+    if (!decoded) throw new HttpError(400, 'Cursor de historial inválido.');
+    cursor = cursorCondition(decoded, (value) => new mongoose.Types.ObjectId(value));
+  }
+
+  const sessions = await WorkoutSession.find({
+    ...scope,
+    ...historyFilterCondition(query.filter ?? 'all', clampTzOffset(query.tzOffsetMinutes)),
+    ...cursor,
+  })
+    .sort({ completedAt: -1, _id: -1 })
+    .limit(limit + 1)
     .lean();
-  res.json({ sessions: sessions.map(sessionResponse) });
+  const page = sessions.slice(0, limit);
+  res.json({
+    sessions: page.map(sessionResponse),
+    nextCursor: sessions.length > limit ? encodeCursor(page[page.length - 1]) : null,
+  });
 }
 
 // Clients reach their own sessions; Admins the sessions their organization's clients trained with it.
@@ -423,6 +467,7 @@ module.exports = {
   getMyWorkoutHistory,
   getMyWorkoutStats,
   getClientWorkoutHistory,
+  clientSessionScope,
   updateWorkoutSession,
   deleteWorkoutSession,
   workoutSchema,
