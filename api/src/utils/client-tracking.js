@@ -356,6 +356,7 @@ function routineExerciseIndex(routines) {
 
 module.exports = {
   HISTORY_FILTERS,
+  sameName,
   PERIOD_DAYS,
   HIGH_RPE,
   clampTzOffset,

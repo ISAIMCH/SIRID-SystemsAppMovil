@@ -9,13 +9,23 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const WorkoutSession = require('../src/models/workout-session.model');
 const Routine = require('../src/models/routine.model');
-const { resolveCatalogId, routineExerciseIndex } = require('../src/utils/client-tracking');
+const { resolveCatalogId, routineExerciseIndex, sameName } = require('../src/utils/client-tracking');
 
 const DRY_RUN = process.argv.includes('--dry-run') || process.env.npm_config_dry_run === 'true';
 const BATCH = 200;
 
+// Why a log without catalog id is left as it is.
+function skipReason(log, index) {
+  const slot = index.get(String(log.routineExerciseId));
+  if (!slot) return 'La rutina o el ejercicio de la rutina ya no existe';
+  if (!slot.catalogExerciseId) return 'Ejercicio personalizado (sin catálogo)';
+  if (!sameName(slot.name, log.exerciseName)) return 'El hueco de la rutina ahora tiene otro ejercicio';
+  return 'Otro motivo';
+}
+
 // The session's blocks with catalog ids filled in, and how many logs changed.
-function fillCatalogIds(blocks, index) {
+// `skipped` (optional Map reason → Map name → count) collects the logs that stay without catalog id.
+function fillCatalogIds(blocks, index, skipped) {
   let changed = 0;
   const next = blocks.map((block) => ({
     ...block,
@@ -24,7 +34,15 @@ function fillCatalogIds(blocks, index) {
       exercises: (set.exercises ?? []).map((log) => {
         if (log.catalogExerciseId) return log;
         const catalogId = resolveCatalogId(log, index);
-        if (!catalogId) return log;
+        if (!catalogId) {
+          if (skipped) {
+            const reason = skipReason(log, index);
+            const names = skipped.get(reason) ?? new Map();
+            names.set(log.exerciseName, (names.get(log.exerciseName) ?? 0) + 1);
+            skipped.set(reason, names);
+          }
+          return log;
+        }
         changed += 1;
         return { ...log, catalogExerciseId: new mongoose.Types.ObjectId(catalogId) };
       }),
@@ -42,6 +60,7 @@ async function main() {
   let sessions = 0;
   let logs = 0;
   let lastId = null;
+  const skipped = new Map();
   for (;;) {
     const page = await WorkoutSession.collection
       .find({ ...filter, ...(lastId ? { _id: { $gt: lastId } } : {}) }, { projection: { routine: 1, blocks: 1 } })
@@ -56,7 +75,7 @@ async function main() {
       .toArray();
     const index = routineExerciseIndex(routines);
     for (const session of page) {
-      const { blocks, changed } = fillCatalogIds(session.blocks ?? [], index);
+      const { blocks, changed } = fillCatalogIds(session.blocks ?? [], index, skipped);
       if (!changed) continue;
       sessions += 1;
       logs += changed;
@@ -64,6 +83,12 @@ async function main() {
     }
   }
   console.log(`${DRY_RUN ? 'Se completarían' : 'Completados'} ${logs} registros de ejercicio en ${sessions} entrenamientos.`);
+  if (!skipped.size) return;
+  console.log('\nSe quedan sin catálogo (no se pueden relacionar con seguridad):');
+  for (const [reason, names] of skipped) {
+    const total = [...names.values()].reduce((sum, count) => sum + count, 0);
+    console.log(`- ${reason}: ${total} registros (${[...names].map(([name, count]) => `${name} ×${count}`).join(', ')})`);
+  }
 }
 
 if (require.main === module) {

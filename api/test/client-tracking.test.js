@@ -299,6 +299,23 @@ test('the backfill fills only logs it can resolve safely', () => {
   assert.equal(blocks[0].sets[0].exercises[1].catalogExerciseId, undefined);
 });
 
+test('the backfill reports why each log it leaves alone cannot be linked', () => {
+  const custom = id();
+  const renamed = id();
+  const index = new Map([
+    [String(custom), { catalogExerciseId: null, name: 'Press banca' }],
+    [String(renamed), { catalogExerciseId: id(), name: 'Sentadilla' }],
+  ]);
+  const skipped = new Map();
+  const { changed } = fillCatalogIds([{ sets: [{ exercises: [strength(custom, 8, 60), strength(renamed, 8, 60), strength(id(), 8, 60)] }] }], index, skipped);
+  assert.equal(changed, 0);
+  assert.deepEqual([...skipped.keys()].sort(), [
+    'Ejercicio personalizado (sin catálogo)',
+    'El hueco de la rutina ahora tiene otro ejercicio',
+    'La rutina o el ejercicio de la rutina ya no existe',
+  ]);
+});
+
 test("the clients' activity only aggregates the Coach's own clients", async () => {
   const organizationId = id();
   const coachId = id();
