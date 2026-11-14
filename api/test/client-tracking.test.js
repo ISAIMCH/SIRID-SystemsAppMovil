@@ -574,7 +574,7 @@ test('a new session stores the days per week its routine had when it was logged'
 test("the app builds the same custom exercise keys as the API", () => {
   // The app's digest, read from its source so the two can never drift apart silently.
   const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/features/gymgo/client-tracking/format.ts'), 'utf8');
-  const body = /export function nameDigest\([^)]*\) \{\n([\s\S]*?)\n\}/.exec(source)?.[1];
+  const body = /export function nameDigest\([^)]*\) \{\r?\n([\s\S]*?)\r?\n\}/.exec(source)?.[1];
   assert.ok(body, 'nameDigest not found in the app');
   const appDigest = new Function('value', body);
   for (const name of ['Remo en polea', '  Curl de BÍCEPS ', 'Sentadilla búlgara', '', 'Press   banca']) {
