@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 
 const exerciseLogSchema = new mongoose.Schema({
   routineExerciseId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  // Global catalog exercise, copied from the routine: progress follows it when routines change.
+  catalogExerciseId: { type: mongoose.Schema.Types.ObjectId, ref: 'ExerciseDictionary', default: null },
   exerciseName: { type: String, required: true, trim: true, maxlength: 120 },
   muscleGroup: { type: String, required: true, trim: true, maxlength: 80 },
   gifUrl: { type: String, trim: true, maxlength: 500 },
