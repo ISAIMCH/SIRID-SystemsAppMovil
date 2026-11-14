@@ -6,6 +6,7 @@ const { coachClientIds } = require('../utils/members');
 const { resolveTenant } = require('../utils/tenant');
 const { clientSessionScope, sessionResponse } = require('./workout.controller');
 const {
+  EXERCISE_KEY_PATTERN,
   PERIOD_DAYS,
   buildExerciseProgress,
   clampTzOffset,
@@ -39,11 +40,15 @@ function countSets(skipped) {
   } } }] };
 }
 
-// Scheduled days per week of each routine (deleted ones too: old weeks still refer to them).
+// Current scheduled days per week of each routine (deleted ones too: old weeks still refer to them) and when it
+// last changed, so summarizeSessions only applies it to weeks that began after that change.
 async function plannedSessionsByRoutine(routineIds) {
   if (!routineIds.length) return new Map();
-  const routines = await Routine.find({ _id: { $in: routineIds } }).select('scheduleDays daysPerWeek').lean();
-  return new Map(routines.map((routine) => [String(routine._id), routine.scheduleDays?.length || routine.daysPerWeek || null]));
+  const routines = await Routine.find({ _id: { $in: routineIds } }).select('scheduleDays daysPerWeek updatedAt').lean();
+  return new Map(routines.map((routine) => [String(routine._id), {
+    planned: routine.scheduleDays?.length || routine.daysPerWeek || null,
+    updatedAt: routine.updatedAt ?? null,
+  }]));
 }
 
 // Totals, the chosen period against the previous one of equal length, and a summary of every week.
@@ -58,6 +63,7 @@ async function getClientOverview(req, res) {
       perceivedExertion: 1,
       durationMinutes: 1,
       routine: 1,
+      plannedSessionsPerWeek: 1,
       completedSets: countSets(false),
       skippedSets: countSets(true),
     } },
@@ -93,7 +99,7 @@ async function getClientExercises(req, res) {
 }
 
 async function getClientExercise(req, res) {
-  if (!/^[cr]-[a-f\d]{24}-[sc]$/i.test(req.params.key)) throw new HttpError(400, 'Ejercicio inválido.');
+  if (!EXERCISE_KEY_PATTERN.test(req.params.key)) throw new HttpError(400, 'Ejercicio inválido.');
   const progress = await loadExerciseProgress(await clientSessionScope(req));
   const exercise = progress.get(req.params.key);
   if (!exercise) throw new HttpError(404, 'No hay registros de este ejercicio.');

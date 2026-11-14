@@ -9,7 +9,7 @@ import { radius, space } from '@/theme/tokens';
 
 import type { Exercise, Routine, RoutineBlock } from '../types';
 import { DeltaPill, Sparkline } from './charts';
-import { blockTypeLabel, DAY_NAMES, DAY_SHORT, formatCardio, formatTopSet, relativeDays } from './format';
+import { blockTypeLabel, DAY_NAMES, DAY_SHORT, formatCardio, formatTopSet, nameDigest, relativeDays } from './format';
 import type { ExerciseSummary } from './types';
 import type { ClientTracking } from './use-client-tracking';
 
@@ -37,7 +37,7 @@ function isCardio(exercise: Exercise) {
 export function routineExerciseKey(exercise: Exercise) {
   const metric = isCardio(exercise) ? 'c' : 's';
   if (exercise.catalogExerciseId) return `c-${exercise.catalogExerciseId}-${metric}`;
-  return exercise._id ? `r-${exercise._id}-${metric}` : null;
+  return exercise._id ? `r-${exercise._id}-${metric}-${nameDigest(exercise.name)}` : null;
 }
 
 type DayGroup = { day: number; items: { id: string; name: string; blockType: string; summary: ExerciseSummary | null; keyId: string | null }[] };

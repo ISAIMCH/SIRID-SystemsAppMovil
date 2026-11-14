@@ -48,6 +48,8 @@ const workoutSessionSchema = new mongoose.Schema({
   routineTitle: { type: String, trim: true, maxlength: 120 },
   routineGoal: { type: String, trim: true, maxlength: 120 },
   trainingDay: { type: Number, required: true, min: 0, max: 6 },
+  // The routine's days per week when the session was logged, so later schedule changes never rewrite past weeks.
+  plannedSessionsPerWeek: { type: Number, min: 1, max: 7 },
   completedAt: { type: Date, required: true, default: Date.now, index: true },
   durationMinutes: { type: Number, required: true, min: 0, max: 600 },
   totalRestSeconds: { type: Number, default: 0, min: 0, max: 86400 },

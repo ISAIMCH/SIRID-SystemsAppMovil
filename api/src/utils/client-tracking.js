@@ -100,8 +100,24 @@ function finishMetrics({ rpeSum, durationSum, ...metrics }) {
  * Totals, the last `periodDays` against the `periodDays` before them (same length, rolling, so a half-finished
  * calendar week is never compared with a full one), and one bucket per local week that has sessions.
  * `rows` are sessions reduced to { _id, completedAt, totalVolumeKg, perceivedExertion, durationMinutes, routine,
- * completedSets, skippedSets }; `plannedByRoutine` maps a routine id to its scheduled days per week.
+ * completedSets, skippedSets, plannedSessionsPerWeek? }; `plannedByRoutine` maps a routine id to
+ * { planned (its current days per week), updatedAt }.
  */
+// The instant a local week (YYYY-MM-DD Monday) begins.
+function weekStartInstant(weekKey, tzOffsetMinutes) {
+  return Date.parse(`${weekKey}T00:00:00Z`) - tzOffsetMinutes * 60 * 1000;
+}
+
+// Scheduled days per week that applied to one session, or null when it cannot be known. New sessions store it;
+// for older ones the routine's current schedule only counts when the routine was not modified after the week began
+// (every edit, status change or reassignment moves its updatedAt), so a later change is never applied backwards.
+function plannedForRow(row, weekStart, plannedByRoutine) {
+  if (typeof row.plannedSessionsPerWeek === 'number' && row.plannedSessionsPerWeek > 0) return row.plannedSessionsPerWeek;
+  const routine = row.routine ? plannedByRoutine.get(String(row.routine)) : undefined;
+  if (!routine?.planned || !routine.updatedAt) return null;
+  return new Date(routine.updatedAt).getTime() <= weekStart ? routine.planned : null;
+}
+
 function summarizeSessions(rows, { now = new Date(), tzOffsetMinutes = DEFAULT_TZ_OFFSET_MINUTES, periodDays = 7, plannedByRoutine = new Map() } = {}) {
   const nowMs = new Date(now).getTime();
   const currentStart = nowMs - periodDays * DAY_MS;
@@ -120,10 +136,11 @@ function summarizeSessions(rows, { now = new Date(), tzOffsetMinutes = DEFAULT_T
     else if (at >= previousStart && at < currentStart) addRow(previous, row);
 
     const key = localWeekKey(row.completedAt, tzOffsetMinutes);
-    const week = weeks.get(key) ?? { metrics: emptyMetrics(), planned: null };
+    const week = weeks.get(key) ?? { metrics: emptyMetrics(), plannedValues: new Set(), plannedUnknown: false };
     addRow(week.metrics, row);
-    const planned = row.routine ? plannedByRoutine.get(String(row.routine)) : undefined;
-    if (planned) week.planned = Math.max(week.planned ?? 0, planned);
+    const planned = plannedForRow(row, weekStartInstant(key, tzOffsetMinutes), plannedByRoutine);
+    if (planned === null) week.plannedUnknown = true;
+    else week.plannedValues.add(planned);
     weeks.set(key, week);
   }
 
@@ -142,22 +159,42 @@ function summarizeSessions(rows, { now = new Date(), tzOffsetMinutes = DEFAULT_T
     },
     weeks: [...weeks.entries()]
       .sort(([a], [b]) => (a < b ? 1 : -1))
-      .map(([weekStart, { metrics, planned }]) => ({ weekStart, plannedSessions: planned, ...finishMetrics(metrics) })),
+      // A week only shows its plan when every session agrees on it; unknown or mixed plans show none.
+      .map(([weekStart, { metrics, plannedValues, plannedUnknown }]) => ({
+        weekStart,
+        plannedSessions: !plannedUnknown && plannedValues.size === 1 ? [...plannedValues][0] : null,
+        ...finishMetrics(metrics),
+      })),
   };
 }
 
 /* ───────────── Per-exercise progress ───────────── */
 
-/**
- * A stable identity for an exercise across routines: the global catalog exercise when there is one, otherwise the
- * routine exercise itself (custom exercises are never merged by name). Strength and cardio logs never share a key.
- */
-function exerciseKey({ catalogExerciseId, routineExerciseId, metricType }) {
-  const metric = metricType === 'cardio' ? 'c' : 's';
-  return catalogExerciseId ? `c-${catalogExerciseId}-${metric}` : `r-${routineExerciseId}-${metric}`;
+const normalizeName = (value) => String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+const sameName = (a, b) => normalizeName(a) === normalizeName(b);
+
+// 8 hex chars (FNV-1a) of the normalized name. The app computes the same digest (client-tracking/format.ts).
+function nameDigest(value) {
+  const name = normalizeName(value);
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < name.length; index += 1) {
+    hash ^= name.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-const sameName = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+/**
+ * A stable identity for an exercise across routines: the global catalog exercise when there is one. Custom
+ * exercises are never merged by name across routines; they are the routine slot plus the name logged in it, since
+ * a Coach may reuse a slot for a different exercise (renaming one starts a new series, but no record is lost).
+ * Strength and cardio logs never share a key.
+ */
+function exerciseKey({ catalogExerciseId, routineExerciseId, metricType, name }) {
+  const metric = metricType === 'cardio' ? 'c' : 's';
+  return catalogExerciseId ? `c-${catalogExerciseId}-${metric}` : `r-${routineExerciseId}-${metric}-${nameDigest(name)}`;
+}
+const EXERCISE_KEY_PATTERN = /^(?:c-[a-f\d]{24}-[sc]|r-[a-f\d]{24}-[sc]-[a-f\d]{8})$/i;
 
 // The catalog exercise a log belongs to. Logs saved before the field existed are resolved through their routine,
 // but only while that routine slot still holds the same exercise (a slot edited to another exercise keeps its id).
@@ -297,7 +334,7 @@ function buildExerciseProgress(sessions, routineExercises = new Map()) {
         for (const log of set.exercises ?? []) {
           const metricType = log.metricType === 'cardio' ? 'cardio' : 'strength';
           const catalogExerciseId = resolveCatalogId(log, routineExercises);
-          const key = exerciseKey({ catalogExerciseId, routineExerciseId: log.routineExerciseId, metricType });
+          const key = exerciseKey({ catalogExerciseId, routineExerciseId: log.routineExerciseId, metricType, name: log.exerciseName });
           const entry = inSession.get(key) ?? {
             sessionId: String(session._id),
             completedAt: new Date(session.completedAt).toISOString(),
@@ -368,6 +405,9 @@ module.exports = {
   historyFilterCondition,
   summarizeSessions,
   exerciseKey,
+  EXERCISE_KEY_PATTERN,
+  nameDigest,
+  weekStartInstant,
   resolveCatalogId,
   estimatedOneRepMax,
   buildExerciseProgress,

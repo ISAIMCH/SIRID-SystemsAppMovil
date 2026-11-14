@@ -9,7 +9,8 @@ process.env.MONGO_URI ??= 'mongodb://localhost/test';
 const OrganizationMember = require('../src/models/organization-member.model');
 const WorkoutSession = require('../src/models/workout-session.model');
 const Routine = require('../src/models/routine.model');
-const { getClientWorkoutHistory } = require('../src/controllers/workout.controller');
+const User = require('../src/models/user.model');
+const { createWorkoutSession, getClientWorkoutHistory } = require('../src/controllers/workout.controller');
 const { getClientExercise, getClientExercises, getClientOverview, getClientSession, getCoachClientsActivity } = require('../src/controllers/client-tracking.controller');
 const tracking = require('../src/utils/client-tracking');
 const { fillCatalogIds } = require('../scripts/backfill-workout-catalog-ids');
@@ -169,7 +170,9 @@ test('periods compare equal rolling windows and weeks group by local Monday', ()
     { _id: id(), completedAt: new Date(now - 9 * DAY), totalVolumeKg: 1500, durationMinutes: 40, routine, completedSets: 9, skippedSets: 2 },
     { _id: id(), completedAt: new Date(now - 20 * DAY), totalVolumeKg: 900, perceivedExertion: 5, durationMinutes: 30, routine, completedSets: 6, skippedSets: 0 },
   ];
-  const result = tracking.summarizeSessions(rows, { now, tzOffsetMinutes: -360, periodDays: 7, plannedByRoutine: new Map([[String(routine), 4]]) });
+  // The routine has not changed since long before these weeks, so its schedule applies to all of them.
+  const plannedByRoutine = new Map([[String(routine), { planned: 4, updatedAt: new Date(now - 60 * DAY) }]]);
+  const result = tracking.summarizeSessions(rows, { now, tzOffsetMinutes: -360, periodDays: 7, plannedByRoutine });
   assert.equal(result.totals.sessions, 4);
   assert.equal(result.totals.lastSession._id, String(rows[0]._id));
   assert.deepEqual(
@@ -208,8 +211,8 @@ test('progress follows the catalog exercise across routines and never merges cus
   const progress = tracking.buildExerciseProgress(sessions, index);
   const bench = progress.get(`c-${catalog}-s`);
   assert.equal(bench.entries.length, 2);
-  assert.ok(progress.has(`r-${customA}-s`));
-  assert.ok(progress.has(`r-${customB}-s`));
+  assert.ok(progress.has(tracking.exerciseKey({ routineExerciseId: customA, metricType: 'strength', name: 'Remo' })));
+  assert.ok(progress.has(tracking.exerciseKey({ routineExerciseId: customB, metricType: 'strength', name: 'Remo' })));
   assert.equal(progress.size, 3);
 });
 
@@ -257,7 +260,7 @@ test('bodyweight work is tracked by reps and cardio by its logged measure', () =
   const bodyweight = progress.get(`c-${catalog}-s`).summary;
   assert.equal(bodyweight.primaryMetric, 'reps');
   assert.equal(bodyweight.pr.reps, 12);
-  const run = progress.get(`r-${cardio}-c`).summary;
+  const run = progress.get(tracking.exerciseKey({ routineExerciseId: cardio, metricType: 'cardio', name: 'Caminadora' })).summary;
   assert.equal(run.primaryMetric, 'distanceKm');
   assert.equal(run.last.value, 2.5);
 });
@@ -333,5 +336,248 @@ test("the clients' activity only aggregates the Coach's own clients", async () =
     assert.deepEqual(body.clients, [{ clientId: String(clientId), lastSessionAt: new Date('2026-11-10T18:00:00Z'), lastRpe: 5, sessionsLast7Days: 2 }]);
   } finally {
     restore.forEach((undo) => undo());
+  }
+});
+
+/* ───────────── Continuity when routines change ───────────── */
+
+test('a deleted or replaced routine keeps its sessions and the catalog series continues in the new one', async () => {
+  const organizationId = id();
+  const clientId = id();
+  const coachId = id();
+  const catalog = id();
+  const oldRoutine = id();
+  const newRoutine = id();
+  const oldSlot = id();
+  const newSlot = id();
+  const customSlot = id();
+  const rows = [
+    // Weeks on the old routine, logged before catalogExerciseId was stored.
+    session({ at: '2026-09-01T18:00:00Z', routine: oldRoutine, rounds: [[strength(oldSlot, 8, 60), strength(customSlot, 12, 15, { exerciseName: 'Remo en polea' })]] }),
+    session({ at: '2026-09-08T18:00:00Z', routine: oldRoutine, rounds: [[strength(oldSlot, 8, 62.5), strength(customSlot, 12, 17.5, { exerciseName: 'Remo en polea' })]] }),
+    // The Coach assigned a new routine; the same catalog exercise lives in a new slot.
+    session({ at: '2026-10-01T18:00:00Z', routine: newRoutine, rounds: [[strength(newSlot, 8, 65, { catalogExerciseId: catalog })]] }),
+  ];
+  let routineFilter;
+  const restore = [
+    stub(OrganizationMember, 'findOne', async () => clientMember(clientId, organizationId, coachId)),
+    stub(WorkoutSession, 'find', () => query(rows)),
+    stub(Routine, 'find', (filter) => {
+      routineFilter = filter;
+      return query([
+        // Soft-deleted: it is still read so its old logs resolve.
+        { _id: oldRoutine, isDeleted: true, blocks: [{ exercises: [{ _id: oldSlot, name: 'Press banca', catalogExerciseId: catalog }, { _id: customSlot, name: 'Remo en polea' }] }] },
+        { _id: newRoutine, blocks: [{ exercises: [{ _id: newSlot, name: 'Press banca', catalogExerciseId: catalog }] }] },
+      ]);
+    }),
+  ];
+  try {
+    let body;
+    await getClientExercises(coachRequest({ organizationId, clientId, coachId }), { json: (value) => { body = value; } });
+    assert.equal(routineFilter.isDeleted, undefined, 'deleted routines must still resolve old logs');
+    const bench = body.exercises.find((exercise) => exercise.key === `c-${catalog}-s`);
+    assert.equal(bench.sessions, 3);
+    assert.equal(bench.pr.weightKg, 65);
+    const row = body.exercises.find((exercise) => exercise.name === 'Remo en polea');
+    assert.equal(row.sessions, 2);
+    assert.equal(row.catalogExerciseId, null);
+    assert.equal(body.exercises.length, 2);
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+});
+
+test('renaming a catalog exercise keeps one series under its latest name', () => {
+  const catalog = id();
+  const slot = id();
+  const sessions = [
+    session({ at: '2026-10-01T18:00:00Z', rounds: [[strength(slot, 8, 60, { catalogExerciseId: catalog, exerciseName: 'Press de banca' })]] }),
+    session({ at: '2026-10-08T18:00:00Z', rounds: [[strength(slot, 8, 62.5, { catalogExerciseId: catalog, exerciseName: 'Press banca plano' })]] }),
+  ];
+  const progress = tracking.buildExerciseProgress(sessions);
+  assert.equal(progress.size, 1);
+  const { summary } = progress.get(`c-${catalog}-s`);
+  assert.equal(summary.sessions, 2);
+  assert.equal(summary.name, 'Press banca plano');
+});
+
+test('a custom slot reused for another exercise never mixes records or charts', () => {
+  const slot = id();
+  const sessions = [
+    session({ at: '2026-10-01T18:00:00Z', rounds: [[strength(slot, 10, 80, { exerciseName: 'Peso muerto rumano' })]] }),
+    session({ at: '2026-10-08T18:00:00Z', rounds: [[strength(slot, 12, 12, { exerciseName: 'Curl de bíceps' })]] }),
+  ];
+  const progress = tracking.buildExerciseProgress(sessions);
+  assert.equal(progress.size, 2);
+  const curl = progress.get(tracking.exerciseKey({ routineExerciseId: slot, metricType: 'strength', name: 'Curl de bíceps' })).summary;
+  assert.equal(curl.pr.weightKg, 12);
+  assert.equal(curl.recent.length, 1);
+  const deadlift = progress.get(tracking.exerciseKey({ routineExerciseId: slot, metricType: 'strength', name: 'Peso muerto rumano' })).summary;
+  assert.equal(deadlift.pr.weightKg, 80);
+});
+
+test('a custom exercise named like a catalog exercise is never linked to it', () => {
+  const catalog = id();
+  const sessions = [
+    session({ at: '2026-10-01T18:00:00Z', rounds: [[strength(id(), 8, 100, { exerciseName: 'Press banca' })]] }),
+    session({ at: '2026-10-08T18:00:00Z', rounds: [[strength(id(), 8, 60, { exerciseName: 'Press banca', catalogExerciseId: catalog })]] }),
+  ];
+  const progress = tracking.buildExerciseProgress(sessions);
+  assert.equal(progress.size, 2);
+  assert.equal(progress.get(`c-${catalog}-s`).summary.pr.weightKg, 60);
+});
+
+test('an old log whose slot now holds another exercise keeps its own series', () => {
+  const slot = id();
+  const catalog = id();
+  const sessions = [
+    // Logged as "Press banca" before catalog ids were stored; the slot now holds the catalog "Sentadilla".
+    session({ at: '2026-09-01T18:00:00Z', rounds: [[strength(slot, 8, 60, { exerciseName: 'Press banca' })]] }),
+    session({ at: '2026-10-01T18:00:00Z', rounds: [[strength(slot, 5, 100, { exerciseName: 'Sentadilla', catalogExerciseId: catalog })]] }),
+  ];
+  const index = new Map([[String(slot), { catalogExerciseId: catalog, name: 'Sentadilla' }]]);
+  const progress = tracking.buildExerciseProgress(sessions, index);
+  assert.equal(progress.size, 2);
+  assert.equal(progress.get(`c-${catalog}-s`).entries.length, 1);
+  const old = progress.get(tracking.exerciseKey({ routineExerciseId: slot, metricType: 'strength', name: 'Press banca' }));
+  assert.equal(old.entries.length, 1);
+  assert.equal(old.summary.catalogExerciseId, null);
+});
+
+test('exercise keys ignore case and spacing of custom names and are validated by the endpoint', () => {
+  const slot = id();
+  assert.equal(tracking.nameDigest('  Remo   en polea '), tracking.nameDigest('remo en polea'));
+  assert.notEqual(tracking.nameDigest('Remo'), tracking.nameDigest('Curl'));
+  // Same digest the app computes (src/features/gymgo/client-tracking/format.ts).
+  assert.equal(tracking.nameDigest('Remo en polea'), 'b4428252');
+  assert.equal(tracking.nameDigest('Curl de bíceps'), '7b97791e');
+  const key = tracking.exerciseKey({ routineExerciseId: slot, metricType: 'strength', name: 'Remo' });
+  assert.match(key, tracking.EXERCISE_KEY_PATTERN);
+  assert.match(`c-${slot}-c`, tracking.EXERCISE_KEY_PATTERN);
+  assert.doesNotMatch(`r-${slot}-s`, tracking.EXERCISE_KEY_PATTERN);
+  assert.doesNotMatch(`${key}x`, tracking.EXERCISE_KEY_PATTERN);
+});
+
+/* ───────────── Scheduled sessions of past weeks ───────────── */
+
+test("past weeks never take the plan from the routine's later schedule", () => {
+  const now = new Date('2026-11-13T18:00:00Z');
+  const routine = id();
+  const row = (at, extra = {}) => ({ _id: id(), completedAt: new Date(at), totalVolumeKg: 0, durationMinutes: 40, routine, completedSets: 0, skippedSets: 0, ...extra });
+  const rows = [
+    // This week: logged with the plan stored in the session.
+    row('2026-11-10T18:00:00Z', { plannedSessionsPerWeek: 5 }),
+    // Two weeks ago: old sessions without the stored plan, and the routine changed after that week began.
+    row('2026-10-27T18:00:00Z'),
+    // Three weeks ago: the plan changed mid-week, so the sessions disagree.
+    row('2026-10-20T18:00:00Z', { plannedSessionsPerWeek: 3 }),
+    row('2026-10-22T18:00:00Z', { plannedSessionsPerWeek: 4 }),
+    // Four weeks ago: one stored plan and one unknown.
+    row('2026-10-13T18:00:00Z', { plannedSessionsPerWeek: 3 }),
+    row('2026-10-15T18:00:00Z'),
+  ];
+  // The Coach edited the routine (now 5 days a week) on November 9th.
+  const plannedByRoutine = new Map([[String(routine), { planned: 5, updatedAt: new Date('2026-11-09T15:00:00Z') }]]);
+  const result = tracking.summarizeSessions(rows, { now, tzOffsetMinutes: -360, plannedByRoutine });
+  const planned = Object.fromEntries(result.weeks.map((week) => [week.weekStart, week.plannedSessions]));
+  assert.deepEqual(planned, { '2026-11-09': 5, '2026-10-26': null, '2026-10-19': null, '2026-10-12': null });
+});
+
+test("an unchanged routine's schedule applies to old weeks, in the client's local week", () => {
+  const routine = id();
+  const rows = [{ _id: id(), completedAt: new Date('2026-11-03T18:00:00Z'), totalVolumeKg: 0, durationMinutes: 40, routine, completedSets: 0, skippedSets: 0 }];
+  // The week began Monday Nov 2nd 00:00 in Mexico City (06:00 UTC); a change at 09:00 UTC came after it.
+  const plannedByRoutine = new Map([[String(routine), { planned: 3, updatedAt: new Date('2026-11-02T09:00:00Z') }]]);
+  const at = (tzOffsetMinutes) => tracking.summarizeSessions(rows, { now: new Date('2026-11-13T18:00:00Z'), tzOffsetMinutes, plannedByRoutine }).weeks[0].plannedSessions;
+  assert.equal(at(-360), null);
+  assert.equal(tracking.summarizeSessions(rows, { now: new Date('2026-11-13T18:00:00Z'), tzOffsetMinutes: -360, plannedByRoutine: new Map([[String(routine), { planned: 3, updatedAt: new Date('2026-11-02T05:00:00Z') }]]) }).weeks[0].plannedSessions, 3);
+  // A deleted routine is no longer found: its weeks show no plan rather than a guess.
+  assert.equal(tracking.summarizeSessions(rows, { now: new Date('2026-11-13T18:00:00Z'), tzOffsetMinutes: -360 }).weeks[0].plannedSessions, null);
+});
+
+test('a client without history gets empty totals and no weeks', () => {
+  const result = tracking.summarizeSessions([], { now: new Date('2026-11-13T18:00:00Z') });
+  assert.deepEqual(result.totals, { sessions: 0, firstSessionAt: null, lastSession: null });
+  assert.deepEqual(result.weeks, []);
+  assert.equal(result.period.current.sessions, 0);
+  assert.equal(result.period.current.avgRpe, null);
+});
+
+test('the overview endpoint reads the stored plan and when each routine last changed', async () => {
+  const organizationId = id();
+  const clientId = id();
+  const coachId = id();
+  const routine = id();
+  let pipeline;
+  let routineSelect;
+  const restore = [
+    stub(OrganizationMember, 'findOne', async () => clientMember(clientId, organizationId, coachId)),
+    stub(WorkoutSession, 'aggregate', async (value) => {
+      pipeline = value;
+      return [{ _id: id(), completedAt: new Date(), routine, totalVolumeKg: 0, durationMinutes: 30, completedSets: 0, skippedSets: 0, plannedSessionsPerWeek: 4 }];
+    }),
+    stub(Routine, 'find', () => {
+      const chain = query([{ _id: routine, scheduleDays: [1, 3], daysPerWeek: 2, updatedAt: new Date() }]);
+      chain.select = (value) => { routineSelect = value; return chain; };
+      return chain;
+    }),
+  ];
+  try {
+    let body;
+    await getClientOverview(coachRequest({ organizationId, clientId, coachId }), { json: (value) => { body = value; } });
+    assert.equal(pipeline[1].$project.plannedSessionsPerWeek, 1);
+    assert.match(routineSelect, /updatedAt/);
+    // The session's stored plan wins over the routine edited today.
+    assert.equal(body.weeks[0].plannedSessions, 4);
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+});
+
+test('a new session stores the days per week its routine had when it was logged', async () => {
+  const clientId = id();
+  const organizationId = id();
+  const routineId = id();
+  const blockId = id();
+  const slot = id();
+  const routineDoc = {
+    _id: routineId,
+    id: String(routineId),
+    organizationId,
+    title: 'Fuerza',
+    scheduleDays: [1, 3, 5],
+    daysPerWeek: 3,
+    toObject() {
+      return { scheduleDays: [1, 3, 5], blocks: [{ _id: blockId, day: 1, blockType: 'single', sets: 1, restSeconds: 60, order: 0, exercises: [{ _id: slot, name: 'Press banca', muscleGroup: 'Pecho', metricType: 'strength', order: 0 }] }] };
+    },
+  };
+  let created;
+  const restore = [
+    stub(Routine, 'findOne', async () => routineDoc),
+    stub(User, 'findById', () => query({ weightKg: 70 })),
+    stub(WorkoutSession, 'find', () => query([])),
+    stub(WorkoutSession, 'create', async ([doc]) => { created = doc; return [{ ...doc, _id: id() }]; }),
+  ];
+  try {
+    await createWorkoutSession({
+      body: { routineId: String(routineId), trainingDay: 1, durationMinutes: 30, blocks: [{ routineBlockId: String(blockId), sets: [{ setNumber: 1, exercises: [{ routineExerciseId: String(slot), reps: 8, weightKg: 60 }] }] }] },
+      user: { id: String(clientId), _id: clientId },
+      tenant: { organizationId, gymId: id(), role: 'Cliente', gymIds: [] },
+      tenantContext: { member: { roles: ['Cliente'], gyms: [] } },
+    }, { status: () => ({ json: () => {} }) });
+    assert.equal(created.plannedSessionsPerWeek, 3);
+  } finally {
+    restore.forEach((undo) => undo());
+  }
+});
+
+test("the app builds the same custom exercise keys as the API", () => {
+  // The app's digest, read from its source so the two can never drift apart silently.
+  const source = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/features/gymgo/client-tracking/format.ts'), 'utf8');
+  const body = /export function nameDigest\([^)]*\) \{\n([\s\S]*?)\n\}/.exec(source)?.[1];
+  assert.ok(body, 'nameDigest not found in the app');
+  const appDigest = new Function('value', body);
+  for (const name of ['Remo en polea', '  Curl de BÍCEPS ', 'Sentadilla búlgara', '', 'Press   banca']) {
+    assert.equal(appDigest(name), tracking.nameDigest(name), name);
   }
 });

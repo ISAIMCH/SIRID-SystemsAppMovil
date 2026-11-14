@@ -12,6 +12,30 @@ export const WEEK_INITIALS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 const BLOCK_LABELS: Record<string, string> = { single: 'Individual', superset: 'Superserie', circuit: 'Circuito' };
 export const blockTypeLabel = (type?: string) => BLOCK_LABELS[type ?? ''] ?? 'Bloque';
 
+/**
+ * 8 hex chars (FNV-1a) of a normalized exercise name: the same digest the API puts in a custom exercise's key
+ * (api/src/utils/client-tracking.js), so a reused routine slot never mixes two exercises.
+ */
+export function nameDigest(value: string | null | undefined) {
+  const name = String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < name.length; index += 1) {
+    hash ^= name.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+/**
+ * Whether a routine has kept its current schedule since `since`: every edit, status change or reassignment moves
+ * its updatedAt, so an older updatedAt proves the schedule then was the one it has now.
+ */
+export function scheduleUnchangedSince(routine: { updatedAt?: string } | null | undefined, since: Date | string) {
+  if (!routine?.updatedAt) return false;
+  const changed = new Date(routine.updatedAt).getTime();
+  return Number.isFinite(changed) && changed <= new Date(since).getTime();
+}
+
 /** Minutes east of UTC, as the API expects. */
 export const tzOffsetMinutes = () => -new Date().getTimezoneOffset();
 

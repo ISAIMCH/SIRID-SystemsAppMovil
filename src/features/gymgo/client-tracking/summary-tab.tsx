@@ -12,7 +12,7 @@ import { routineEditorHref } from '../routine-links';
 import type { Routine } from '../types';
 import { ALERT_LEVEL_LABEL, ALERT_TONE, prLabel, type ClientAlert } from './alerts';
 import { DeltaPill, describeChange, MiniBars, type Polarity } from './charts';
-import { DAY_SHORT, daysSince, formatDate, formatNumber, formatVolume, localWeekKey, WEEK_INITIALS, weekKeyToDate } from './format';
+import { DAY_SHORT, daysSince, formatDate, formatNumber, formatVolume, localWeekKey, scheduleUnchangedSince, WEEK_INITIALS, weekKeyToDate } from './format';
 import type { ClientTab, ExerciseSummary, PeriodMetrics } from './types';
 import type { ClientTracking } from './use-client-tracking';
 
@@ -193,7 +193,10 @@ function Indicators({ tracking, activeRoutine, onOpenExercise }: { tracking: Cli
   const [showTable, setShowTable] = useState(false);
   const { period } = tracking.overview!;
   const { current, previous } = period;
-  const expected = activeRoutine?.scheduleDays?.length ? Math.round((activeRoutine.scheduleDays.length * period.days) / 7) : null;
+  // Only when the active routine kept its schedule for the whole period; otherwise the target would be invented.
+  const expected = activeRoutine?.scheduleDays?.length && scheduleUnchangedSince(activeRoutine, period.currentStart)
+    ? Math.round((activeRoutine.scheduleDays.length * period.days) / 7)
+    : null;
   const volumeChange = describeChange(current.volumeKg, previous.sessions ? previous.volumeKg : null, 'neutral');
   const sharpVolumeRise = previous.volumeKg > 0 && current.volumeKg > previous.volumeKg * 1.3;
   const best = (tracking.exercises ?? [])

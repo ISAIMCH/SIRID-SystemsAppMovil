@@ -283,6 +283,7 @@ async function createWorkoutSession(req, res) {
     routineTitle: routine.title,
     routineGoal: routine.goal,
     trainingDay: input.trainingDay,
+    plannedSessionsPerWeek: routine.scheduleDays?.length || routine.daysPerWeek || undefined,
     completedAt: new Date(),
     durationMinutes: input.durationMinutes,
     totalRestSeconds,

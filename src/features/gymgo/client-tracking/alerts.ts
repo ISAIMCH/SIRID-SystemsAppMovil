@@ -1,7 +1,7 @@
 import type { IconName, Tone } from '@/components/sirid';
 
 import type { Routine, WorkoutSessionLog } from '../types';
-import { DAY_MS, DAY_NAMES, daysSince, formatDayDate, formatMetric, isRecovered, localWeekKey, sessionSkips, weekKeyToDate } from './format';
+import { DAY_MS, DAY_NAMES, daysSince, formatDayDate, formatMetric, isRecovered, localWeekKey, scheduleUnchangedSince, sessionSkips, weekKeyToDate } from './format';
 import type { ClientOverview, ExerciseSummary } from './types';
 
 /**
@@ -118,9 +118,11 @@ export function buildAlerts({ now, overview, recentSessions, exercises, activeRo
   const firstAt = overview.totals.firstSessionAt ? new Date(overview.totals.firstSessionAt) : null;
   if (!inactive && scheduled > 0 && firstAt && firstAt < previousWeekStart) {
     const week = overview.weeks.find((entry) => entry.weekStart === previousWeekKey);
-    const planned = week?.plannedSessions ?? scheduled;
+    // Last week's plan as the API knows it, or the active routine's only if it has not changed since that week
+    // began; an unknown plan raises no alert rather than one measured against a later schedule.
+    const planned = week?.plannedSessions ?? (scheduleUnchangedSince(activeRoutine, previousWeekStart) ? scheduled : null);
     const done = week?.sessions ?? 0;
-    if (done < planned) {
+    if (planned !== null && done < planned) {
       alerts.push({ id: 'adherence', level: 'attention', icon: 'event-note', title: `Semana pasada: ${done} de ${planned} sesiones`, detail: 'Entrenó menos días de los programados.', target: { type: 'history' } });
     }
   }
